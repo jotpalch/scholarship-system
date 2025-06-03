@@ -33,6 +33,19 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
+    - name: Setup ESLint configuration
+      run: |
+        # Create .eslintrc.json if it doesn't exist
+        if [ ! -f .eslintrc.json ]; then
+          echo '{
+            "extends": ["next/core-web-vitals", "next/typescript"],
+            "rules": {
+              "@typescript-eslint/no-unused-vars": "warn",
+              "@typescript-eslint/no-explicit-any": "warn"
+            }
+          }' > .eslintrc.json
+        fi
+
     - name: Run linting
       run: npm run lint
 
@@ -40,11 +53,12 @@ jobs:
       run: npm test -- --coverage --watchAll=false
 
     - name: Upload coverage reports
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         file: ./frontend/coverage/lcov.info
         flags: frontend
         name: frontend-coverage
+        token: ${{ secrets.CODECOV_TOKEN }}
 
   # Backend Tests
   backend-test:
@@ -94,11 +108,16 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install -r requirements-dev.txt
 
-    - name: Run linting
+    - name: Run linting with flake8
       run: |
         flake8 app --count --select=E9,F63,F7,F82 --show-source --statistics
         flake8 app --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Run type checking with mypy
+      run: |
+        mypy app --ignore-missing-imports
 
     - name: Run tests
       env:
@@ -111,11 +130,12 @@ jobs:
         pytest --cov=app --cov-report=xml --cov-report=html
 
     - name: Upload coverage reports
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         file: ./backend/coverage.xml
         flags: backend
         name: backend-coverage
+        token: ${{ secrets.CODECOV_TOKEN }}
 
   # E2E Tests
   e2e-test:
@@ -146,14 +166,19 @@ jobs:
       run: |
         chmod +x ./test-docker.sh
         ./test-docker.sh start
-        sleep 30  # Wait for services to be ready
+        sleep 60  # Wait for services to be ready
+
+    - name: Health check services
+      run: |
+        timeout 300 bash -c 'until curl -f http://localhost:8000/health; do sleep 5; done'
+        timeout 300 bash -c 'until curl -f http://localhost:3000; do sleep 5; done'
 
     - name: Run E2E tests
       working-directory: ./frontend
       run: npm run test:e2e
 
     - name: Upload E2E test results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: failure()
       with:
         name: playwright-report
@@ -168,6 +193,10 @@ jobs:
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
     
     steps:
     - name: Checkout code
@@ -181,16 +210,46 @@ jobs:
         format: 'sarif'
         output: 'trivy-results.sarif'
 
-    - name: Upload Trivy scan results
-      uses: github/codeql-action/upload-sarif@v2
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
       with:
         sarif_file: 'trivy-results.sarif'
+
+  # CodeQL Analysis
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'python', 'typescript' ]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{ matrix.language }}
+
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v3
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
 
   # Build and Deploy
   build-deploy:
     name: Build and Deploy
     runs-on: ubuntu-latest
-    needs: [frontend-test, backend-test, e2e-test]
+    needs: [frontend-test, backend-test, e2e-test, security-scan, codeql]
     if: github.ref == 'refs/heads/main'
     
     steps:
@@ -234,14 +293,13 @@ jobs:
       run: |
         echo "Deploying to staging environment..."
         # Add deployment commands here
-        # kubectl apply -f k8s/staging/
-        # or docker-compose up -d
+        # kubectl apply -f infra/k8s/staging/
         
     - name: Run smoke tests
       run: |
         echo "Running smoke tests..."
         # Add smoke test commands here
-        # curl -f http://staging.example.com/health
+        # curl -f http://staging.example.com/api/v1/health
 
   # Performance Tests
   performance-test:
@@ -269,15 +327,14 @@ jobs:
 
     - name: Run performance tests
       run: |
-        # Add k6 performance test scripts
         echo "Running performance tests..."
-        # k6 run tests/performance/load-test.js
+        # k6 run infra/scripts/load-test.js
 
   # Notification
   notify:
     name: Notify
     runs-on: ubuntu-latest
-    needs: [frontend-test, backend-test, e2e-test, security-scan]
+    needs: [frontend-test, backend-test, e2e-test, security-scan, codeql]
     if: always()
     
     steps:
