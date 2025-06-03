@@ -1,0 +1,122 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: scholarship_postgres_test
+    environment:
+      POSTGRES_DB: scholarship_db
+      POSTGRES_USER: scholarship_user
+      POSTGRES_PASSWORD: scholarship_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    networks:
+      - scholarship_test_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scholarship_user -d scholarship_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: scholarship_redis_test
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_test_data:/data
+    networks:
+      - scholarship_test_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: scholarship_minio_test
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    volumes:
+      - minio_test_data:/data
+    networks:
+      - scholarship_test_network
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # FastAPI Backend
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: scholarship_backend_test
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
+      DATABASE_URL_SYNC: postgresql://scholarship_user:scholarship_pass@postgres:5432/scholarship_db
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: test-secret-key-for-docker-testing-only
+      DEBUG: "true"
+      CORS_ORIGINS: '["*"]'
+      ENVIRONMENT: development
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      MINIO_BUCKET_NAME: scholarship-documents
+      MINIO_SECURE: "false"
+    volumes:
+      - ./backend/uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - scholarship_test_network
+    restart: unless-stopped
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: scholarship_frontend_test
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NODE_ENV: production
+    depends_on:
+      - backend
+    networks:
+      - scholarship_test_network
+    restart: unless-stopped
+
+volumes:
+  postgres_test_data:
+    driver: local
+  redis_test_data:
+    driver: local
+  minio_test_data:
+    driver: local
+
+networks:
+  scholarship_test_network:
+    driver: bridge 

@@ -1,0 +1,134 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    # Run every Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  update-dependencies:
+    name: Update Dependencies
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        directory: [frontend, backend]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup Node.js (for frontend)
+      if: matrix.directory == 'frontend'
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Setup Python (for backend)
+      if: matrix.directory == 'backend'
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Update frontend dependencies
+      if: matrix.directory == 'frontend'
+      working-directory: ./frontend
+      run: |
+        npm update
+        npm audit fix --audit-level moderate
+        
+    - name: Update backend dependencies
+      if: matrix.directory == 'backend'
+      working-directory: ./backend
+      run: |
+        pip install --upgrade pip
+        pip-review --auto
+        pip freeze > requirements.txt
+
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: 'chore: update ${{ matrix.directory }} dependencies'
+        title: 'chore: Update ${{ matrix.directory }} dependencies'
+        body: |
+          Automated dependency update for ${{ matrix.directory }}
+          
+          - Updated all dependencies to latest compatible versions
+          - Fixed security vulnerabilities where possible
+          
+          Please review the changes and run tests before merging.
+        branch: dependency-update-${{ matrix.directory }}
+        delete-branch: true
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install frontend dependencies
+      working-directory: ./frontend
+      run: npm ci
+
+    - name: Install backend dependencies
+      working-directory: ./backend
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install safety
+
+    - name: Run npm audit
+      working-directory: ./frontend
+      run: |
+        npm audit --audit-level moderate --json > npm-audit.json || true
+        
+    - name: Run Python safety check
+      working-directory: ./backend
+      run: |
+        safety check --json > safety-audit.json || true
+
+    - name: Upload audit results
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-audit-results
+        path: |
+          frontend/npm-audit.json
+          backend/safety-audit.json
+        retention-days: 30
+
+    - name: Create security issue
+      if: failure()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: '🚨 Security vulnerabilities detected',
+            body: `Security audit found vulnerabilities in dependencies.
+            
+            Please check the audit results and update dependencies accordingly.
+            
+            Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`,
+            labels: ['security', 'dependencies']
+          }) 

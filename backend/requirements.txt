@@ -1,0 +1,44 @@
+# FastAPI and web framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Database and ORM
+sqlalchemy==2.0.23
+alembic==1.12.1
+asyncpg==0.29.0
+psycopg2-binary==2.9.8
+
+# Authentication and Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-decouple==3.8
+
+# Data validation and serialization
+pydantic==2.4.2
+pydantic[email]==2.4.2
+email-validator==2.1.0
+
+# HTTP client and utilities
+httpx==0.25.2
+aiofiles==23.2.1
+python-dateutil==2.8.2
+
+# Caching
+redis==5.0.1
+aioredis==2.0.1
+
+# Email services
+fastapi-mail==1.4.1
+jinja2==3.1.2
+
+# File processing and OCR
+pillow==10.1.0
+opencv-python==4.8.1.78
+pytesseract==0.3.10
+
+# Logging and monitoring
+structlog==23.2.0
+prometheus-client==0.18.0
+
+# Development and testing dependencies moved to requirements-dev.txt 

@@ -1,0 +1,40 @@
+"""
+Database session management
+"""
+
+from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
+from app.core.config import settings
+
+# Async engine for async operations
+async_engine = create_async_engine(
+    settings.database_url,
+    echo=settings.debug,
+    pool_pre_ping=True,
+    pool_recycle=300,
+)
+
+# Sync engine for migrations and admin operations
+sync_engine = create_engine(
+    settings.database_url_sync,
+    echo=settings.debug,
+    pool_pre_ping=True,
+    pool_recycle=300,
+)
+
+# Async session maker
+AsyncSessionLocal = sessionmaker(
+    bind=async_engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autoflush=True,
+    autocommit=False,
+)
+
+# Sync session maker for migrations
+SessionLocal = sessionmaker(
+    bind=sync_engine,
+    autoflush=True,
+    autocommit=False,
+) 
