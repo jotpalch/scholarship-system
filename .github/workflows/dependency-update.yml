@@ -47,6 +47,7 @@ jobs:
       working-directory: ./backend
       run: |
         pip install --upgrade pip
+        pip install pip-review
         pip-review --auto
         pip freeze > requirements.txt
 

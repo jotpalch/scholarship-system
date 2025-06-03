@@ -33,19 +33,6 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
-    - name: Setup ESLint configuration
-      run: |
-        # Create .eslintrc.json if it doesn't exist
-        if [ ! -f .eslintrc.json ]; then
-          echo '{
-            "extends": ["next/core-web-vitals", "next/typescript"],
-            "rules": {
-              "@typescript-eslint/no-unused-vars": "warn",
-              "@typescript-eslint/no-explicit-any": "warn"
-            }
-          }' > .eslintrc.json
-        fi
-
     - name: Run linting
       run: npm run lint
 
@@ -117,7 +104,7 @@ jobs:
 
     - name: Run type checking with mypy
       run: |
-        mypy app --ignore-missing-imports
+        mypy app --config-file mypy.ini
 
     - name: Run tests
       env:

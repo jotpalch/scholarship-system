@@ -3,13 +3,17 @@ Application models for scholarship applications
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Numeric, Text, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
 
 from app.db.base_class import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
+    from app.models.student import Student
 
 
 class ApplicationStatus(enum.Enum):
