@@ -118,6 +118,29 @@ class ApplicationResponse(BaseModel):
     updated_at: datetime
     files: List[ApplicationFileResponse] = []
     reviews: List[ApplicationReviewResponse] = []
+    
+    # Computed properties
+    @property
+    def is_editable(self) -> bool:
+        """Check if application can be edited"""
+        from app.models.application import ApplicationStatus
+        return self.status in [ApplicationStatus.DRAFT.value, ApplicationStatus.RETURNED.value]
+    
+    @property
+    def is_submitted(self) -> bool:
+        """Check if application is submitted"""
+        from app.models.application import ApplicationStatus
+        return self.status != ApplicationStatus.DRAFT.value
+    
+    @property
+    def can_be_reviewed(self) -> bool:
+        """Check if application can be reviewed"""
+        from app.models.application import ApplicationStatus
+        return self.status in [
+            ApplicationStatus.SUBMITTED.value,
+            ApplicationStatus.UNDER_REVIEW.value,
+            ApplicationStatus.RECOMMENDED.value
+        ]
 
 
 class ApplicationReviewCreate(BaseModel):
@@ -143,6 +166,10 @@ class ApplicationListResponse(BaseModel):
     submitted_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime
+    
+    # Optional fields for staff view
+    student_name: Optional[str] = None
+    student_no: Optional[str] = None
 
 
 class ApplicationStatusUpdate(BaseModel):
@@ -150,6 +177,7 @@ class ApplicationStatusUpdate(BaseModel):
     status: str = Field(..., description="New status")
     comments: Optional[str] = Field(None, description="Review comments")
     score: Optional[Decimal] = Field(None, description="Review score")
+    rejection_reason: Optional[str] = Field(None, description="Reason for rejection")
 
 
 class DashboardStats(BaseModel):

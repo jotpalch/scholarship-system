@@ -198,7 +198,15 @@ class ApplicationService:
         update_data: ApplicationUpdate
     ) -> ApplicationResponse:
         """Update application"""
-        application = await self.get_application_by_id(application_id, user)
+        # Get the actual application model, not the response
+        stmt = select(Application).where(
+            and_(Application.id == application_id, Application.user_id == user.id)
+        )
+        result = await self.db.execute(stmt)
+        application = result.scalar_one_or_none()
+        
+        if not application:
+            raise NotFoundError("Application", str(application_id))
         
         if not application.is_editable:
             raise BusinessLogicError("Application cannot be edited in current status")
@@ -206,7 +214,8 @@ class ApplicationService:
         # Update fields
         update_dict = update_data.model_dump(exclude_unset=True)
         for field, value in update_dict.items():
-            setattr(application, field, value)
+            if hasattr(application, field):
+                setattr(application, field, value)
         
         await self.db.commit()
         await self.db.refresh(application)
@@ -299,18 +308,19 @@ class ApplicationService:
             raise NotFoundError("Application", str(application_id))
         
         # Update status
-        application.status = status_update.status.value
+        application.status = status_update.status
         application.reviewer_id = user.id
         
-        if status_update.status == ApplicationStatus.APPROVED:
+        if status_update.status == ApplicationStatus.APPROVED.value:
             application.approved_at = datetime.utcnow()
             application.status_name = "已核准"
-        elif status_update.status == ApplicationStatus.REJECTED:
+        elif status_update.status == ApplicationStatus.REJECTED.value:
             application.status_name = "已拒絕"
-            application.rejection_reason = status_update.rejection_reason
+            if hasattr(status_update, 'rejection_reason') and status_update.rejection_reason:
+                application.rejection_reason = status_update.rejection_reason
         
-        if status_update.review_comments:
-            application.review_comments = status_update.review_comments
+        if hasattr(status_update, 'comments') and status_update.comments:
+            application.review_comments = status_update.comments
         
         application.reviewed_at = datetime.utcnow()
         
