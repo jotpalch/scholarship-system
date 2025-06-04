@@ -1,11 +1,58 @@
-import { renderHook } from '@testing-library/react'
-import { ReactNode } from 'react'
+import { renderHook, render } from '@testing-library/react'
+import { ReactNode, Component, ErrorInfo } from 'react'
 import { AuthProvider, useAuth } from '../use-auth'
+
+// Mock the API client to avoid actual HTTP calls
+jest.mock('../../lib/api', () => ({
+  apiClient: {
+    auth: {
+      login: jest.fn(),
+      getCurrentUser: jest.fn(),
+    },
+    users: {
+      updateProfile: jest.fn(),
+    },
+    setToken: jest.fn(),
+    clearToken: jest.fn(),
+  },
+}))
 
 // Test wrapper with AuthProvider
 const wrapper = ({ children }: { children: ReactNode }) => (
   <AuthProvider>{children}</AuthProvider>
 )
+
+// Error boundary component for testing error cases
+class TestErrorBoundary extends Component<
+  { children: ReactNode; onError: (error: Error, errorInfo: ErrorInfo) => void },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: any) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    this.props.onError(error, errorInfo)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <div>Error caught</div>
+    }
+    return this.props.children
+  }
+}
+
+// Component that uses the hook (for error boundary testing)
+function TestComponent() {
+  useAuth()
+  return <div>Test</div>
+}
 
 describe('useAuth Hook', () => {
   it('should provide auth context', () => {
@@ -28,8 +75,25 @@ describe('useAuth Hook', () => {
   })
 
   it('should throw error when used outside provider', () => {
-    expect(() => {
-      renderHook(() => useAuth())
-    }).toThrow()
+    let caughtError: Error | null = null
+    
+    const handleError = (error: Error) => {
+      caughtError = error
+    }
+
+    // Suppress console.error for this test
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    render(
+      <TestErrorBoundary onError={handleError}>
+        <TestComponent />
+      </TestErrorBoundary>
+    )
+
+    expect(caughtError).not.toBeNull()
+    expect(caughtError!.message).toBe('useAuth must be used within AuthProvider')
+
+    // Restore console.error
+    consoleSpy.mockRestore()
   })
 }) 

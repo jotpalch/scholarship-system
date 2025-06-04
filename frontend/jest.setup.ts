@@ -45,9 +45,15 @@ beforeAll(() => {
         (args[0].includes('Warning: An update to') && args[0].includes('act(...)')) ||
         args[0].includes('@radix-ui') ||
         args[0].includes('not wrapped in act') ||
-        args[0].includes('API request failed') // Suppress intentional test API errors
+        args[0].includes('API request failed') || // Suppress intentional test API errors
+        args[0].includes('The above error occurred in the <TestComponent> component') ||
+        args[0].includes('Consider adding an error boundary')
       )
     ) {
+      return
+    }
+    // Don't suppress errors that are part of test assertions
+    if (args[0] && typeof args[0] === 'string' && args[0].includes('useAuth must be used within AuthProvider')) {
       return
     }
     originalError.call(console, ...args)
