@@ -58,8 +58,8 @@ class ApplicationService:
         if not scholarship.is_application_period:
             raise ValidationError("Application period has ended")
         
-        # Check student type eligibility
-        eligible_types = scholarship.eligible_student_types or []
+        # Check student type eligibility  
+        eligible_types: List[str] = scholarship.eligible_student_types or []
         student_type = student.get_student_type().value
         if eligible_types and student_type not in eligible_types:
             raise ValidationError(f"Student type {student_type} is not eligible for this scholarship")
@@ -167,6 +167,37 @@ class ApplicationService:
         applications = result.scalars().all()
         
         return [ApplicationListResponse.model_validate(app) for app in applications]
+    
+    async def get_student_dashboard_stats(self, user: User) -> Dict[str, Any]:
+        """Get dashboard statistics for student"""
+        # Count applications by status
+        stmt = select(
+            Application.status,
+            func.count(Application.id).label('count')
+        ).where(Application.user_id == user.id).group_by(Application.status)
+        
+        result = await self.db.execute(stmt)
+        status_counts = {}
+        total_applications = 0
+        
+        for row in result:
+            count_value = row[1]  # Access by index since count is the second column
+            status_counts[row[0]] = count_value  # status is the first column
+            total_applications += count_value
+        
+        # Get recent applications
+        stmt = select(Application).where(
+            Application.user_id == user.id
+        ).order_by(desc(Application.created_at)).limit(5)
+        
+        result = await self.db.execute(stmt)
+        recent_applications = result.scalars().all()
+        
+        return {
+            "total_applications": total_applications,
+            "status_counts": status_counts,
+            "recent_applications": [ApplicationListResponse.model_validate(app) for app in recent_applications]
+        }
     
     async def get_application_by_id(
         self, 
@@ -327,4 +358,34 @@ class ApplicationService:
         await self.db.commit()
         await self.db.refresh(application)
         
-        return ApplicationResponse.model_validate(application) 
+        return ApplicationResponse.model_validate(application)
+    
+    async def upload_application_file(
+        self, 
+        application_id: int, 
+        user: User, 
+        file, 
+        file_type: str
+    ) -> Dict[str, Any]:
+        """Upload file for application"""
+        # Get application
+        stmt = select(Application).where(
+            and_(Application.id == application_id, Application.user_id == user.id)
+        )
+        result = await self.db.execute(stmt)
+        application = result.scalar_one_or_none()
+        
+        if not application:
+            raise NotFoundError("Application", str(application_id))
+        
+        if not application.is_editable:
+            raise BusinessLogicError("Cannot upload files to application in current status")
+        
+        # For now, return a placeholder response
+        # In a real implementation, this would handle file storage
+        return {
+            "message": "File upload functionality not yet implemented",
+            "application_id": application_id,
+            "file_type": file_type,
+            "filename": getattr(file, 'filename', 'unknown')
+        } 

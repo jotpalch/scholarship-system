@@ -127,21 +127,21 @@ class Application(Base):
     @property
     def is_editable(self) -> bool:
         """Check if application can be edited"""
-        return self.status in [ApplicationStatus.DRAFT.value, ApplicationStatus.RETURNED.value]
+        return bool(self.status in [ApplicationStatus.DRAFT.value, ApplicationStatus.RETURNED.value])
     
     @property
     def is_submitted(self) -> bool:
         """Check if application is submitted"""
-        return self.status != ApplicationStatus.DRAFT.value
+        return bool(self.status != ApplicationStatus.DRAFT.value)
     
     @property
     def can_be_reviewed(self) -> bool:
         """Check if application can be reviewed"""
-        return self.status in [
+        return bool(self.status in [
             ApplicationStatus.SUBMITTED.value,
             ApplicationStatus.UNDER_REVIEW.value,
             ApplicationStatus.RECOMMENDED.value
-        ]
+        ])
 
 
 class ApplicationFile(Base):

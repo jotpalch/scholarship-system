@@ -92,7 +92,8 @@
       "<rootDir>/jest.setup.ts"
     ],
     "moduleNameMapper": {
-      "^@/(.*)$": "<rootDir>/$1"
+      "^@/(.*)$": "<rootDir>/$1",
+      "^~/(.*)$": "<rootDir>/$1"
     },
     "transform": {
       "^.+\\.(ts|tsx)$": [
@@ -101,7 +102,14 @@
           "tsconfig": {
             "jsx": "react-jsx",
             "esModuleInterop": true,
-            "allowSyntheticDefaultImports": true
+            "allowSyntheticDefaultImports": true,
+            "moduleResolution": "node",
+            "baseUrl": ".",
+            "paths": {
+              "@/*": [
+                "./*"
+              ]
+            }
           }
         }
       ]

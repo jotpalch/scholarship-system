@@ -5,7 +5,7 @@ User model for authentication and role management
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.sql import func
 import enum
 
@@ -35,7 +35,7 @@ class User(Base):
     english_name = Column(String(100))
     
     # Role and status
-    role = Column(Enum(UserRole), nullable=False, default=UserRole.STUDENT)
+    role: Mapped[UserRole] = Column(Enum(UserRole), nullable=False, default=UserRole.STUDENT)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
     
@@ -62,7 +62,7 @@ class User(Base):
     @property
     def display_name(self) -> str:
         """Get display name based on locale preference"""
-        return self.chinese_name or self.full_name or self.username
+        return str(self.chinese_name or self.full_name or self.username)
     
     def has_role(self, role: UserRole) -> bool:
         """Check if user has specific role"""
@@ -70,16 +70,16 @@ class User(Base):
     
     def is_admin(self) -> bool:
         """Check if user is admin"""
-        return self.role == UserRole.ADMIN
+        return bool(self.role == UserRole.ADMIN)
     
     def is_student(self) -> bool:
         """Check if user is student"""
-        return self.role == UserRole.STUDENT
+        return bool(self.role == UserRole.STUDENT)
     
     def is_professor(self) -> bool:
         """Check if user is professor"""
-        return self.role == UserRole.PROFESSOR
+        return bool(self.role == UserRole.PROFESSOR)
     
     def is_reviewer(self) -> bool:
         """Check if user is reviewer"""
-        return self.role == UserRole.REVIEWER 
+        return bool(self.role == UserRole.REVIEWER) 

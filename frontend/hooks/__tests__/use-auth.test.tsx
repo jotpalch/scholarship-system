@@ -3,7 +3,7 @@ import { ReactNode } from 'react'
 import { AuthProvider, useAuth } from '../use-auth'
 
 // Mock the API client module completely
-jest.mock('../../lib/api', () => ({
+jest.mock('@/lib/api', () => ({
   apiClient: {
     auth: {
       getCurrentUser: jest.fn(),
@@ -19,7 +19,7 @@ jest.mock('../../lib/api', () => ({
 }))
 
 // Import after mocking
-import { apiClient } from '../../lib/api'
+import { apiClient } from '@/lib/api'
 
 // Create a properly typed mock with explicit Jest mock methods
 const mockedApiClient = {

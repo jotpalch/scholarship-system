@@ -91,8 +91,8 @@ class Student(Base):
     def display_name(self) -> str:
         """Get student display name"""
         if self.user:
-            return self.user.display_name
-        return self.student_no
+            return str(self.user.display_name)
+        return str(self.student_no or "")
     
     def get_student_type(self) -> StudentType:
         """Determine student type based on degree level and enrollment"""

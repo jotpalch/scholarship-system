@@ -63,7 +63,7 @@ class AuthService:
         if not user:
             raise AuthenticationError("Invalid username or password")
         
-        if not verify_password(login_data.password, user.hashed_password):
+        if not verify_password(login_data.password, str(user.hashed_password)):
             raise AuthenticationError("Invalid username or password")
         
         if not user.is_active:

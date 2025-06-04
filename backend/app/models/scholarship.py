@@ -71,14 +71,14 @@ class ScholarshipType(Base):
     @property
     def is_active(self) -> bool:
         """Check if scholarship type is active"""
-        return self.status == ScholarshipStatus.ACTIVE.value
+        return bool(self.status == ScholarshipStatus.ACTIVE.value)
     
     @property
     def is_application_period(self) -> bool:
         """Check if within application period"""
         now = datetime.now()
         if self.application_start_date and self.application_end_date:
-            return self.application_start_date <= now <= self.application_end_date
+            return bool(self.application_start_date <= now <= self.application_end_date)
         return True
 
 

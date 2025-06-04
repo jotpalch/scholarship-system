@@ -3,7 +3,7 @@ Database session management
 """
 
 from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 
@@ -23,8 +23,8 @@ sync_engine = create_engine(
     pool_recycle=300,
 )
 
-# Async session maker
-AsyncSessionLocal = sessionmaker(
+# Async session maker (SQLAlchemy 2.0 style)
+AsyncSessionLocal = async_sessionmaker(
     bind=async_engine,
     class_=AsyncSession,
     expire_on_commit=False,

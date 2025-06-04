@@ -82,13 +82,13 @@ class Notification(Base):
     def is_expired(self) -> bool:
         """Check if notification is expired"""
         if self.expires_at:
-            return datetime.now() > self.expires_at
+            return bool(datetime.now() > self.expires_at)
         return False
     
     @property
     def is_urgent(self) -> bool:
         """Check if notification is urgent"""
-        return self.priority == NotificationPriority.URGENT.value
+        return bool(self.priority == NotificationPriority.URGENT.value)
     
     def mark_as_read(self):
         """Mark notification as read"""
