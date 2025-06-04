@@ -11,11 +11,13 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
+    curl \
     gcc \
     postgresql-client \
     tesseract-ocr \
     tesseract-ocr-eng \
     libpq-dev \
+    libmagic-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
