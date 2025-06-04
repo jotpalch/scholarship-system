@@ -45,14 +45,39 @@ def test_user_model_creation():
 
 def test_application_response_properties():
     """Test ApplicationResponse has required computed properties"""
-    # Create a mock application response
+    # Create a mock application response with all required fields
     app_response = ApplicationResponse(
         id=1,
         app_id="APP-2025-123456",
         user_id=1,
         student_id=1,
         scholarship_type="academic_excellence",
+        scholarship_name="Academic Excellence Scholarship",
+        amount=5000.00,
         status=ApplicationStatus.DRAFT.value,
+        status_name="Draft",
+        academic_year="2024",
+        semester="Fall",
+        gpa=3.8,
+        class_ranking_percent=10.5,
+        dept_ranking_percent=8.2,
+        completed_terms=6,
+        contact_phone="1234567890",
+        contact_email="test@example.com",
+        contact_address="123 Test St",
+        bank_account="123456789",
+        research_proposal="Test research proposal",
+        budget_plan="Test budget plan",
+        milestone_plan="Test milestone plan",
+        agree_terms=True,
+        professor_id=1,
+        reviewer_id=1,
+        review_score=85.5,
+        review_comments="Good application",
+        rejection_reason=None,
+        submitted_at="2024-01-02T00:00:00",
+        reviewed_at="2024-01-03T00:00:00",
+        approved_at=None,
         created_at="2024-01-01T00:00:00",
         updated_at="2024-01-01T00:00:00"
     )
@@ -74,7 +99,11 @@ def test_application_list_response_optional_fields():
         id=1,
         app_id="APP-2025-123456",
         scholarship_type="academic_excellence",
+        scholarship_name="Academic Excellence Scholarship",
+        amount=5000.00,
         status=ApplicationStatus.SUBMITTED.value,
+        status_name="Submitted",
+        submitted_at="2024-01-02T00:00:00",
         created_at="2024-01-01T00:00:00",
         updated_at="2024-01-01T00:00:00"
     )

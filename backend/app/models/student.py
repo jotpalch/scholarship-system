@@ -82,7 +82,7 @@ class Student(Base):
     # 關聯
     user = relationship("User", back_populates="student_profile")
     term_records = relationship("StudentTermRecord", back_populates="student")
-    applications = relationship("Application", back_populates="student")
+    applications = relationship("Application", back_populates="student_profile")
 
     def __repr__(self):
         return f"<Student(id={self.id}, student_no={self.student_no}, user_id={self.user_id})>"

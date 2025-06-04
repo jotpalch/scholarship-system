@@ -113,7 +113,7 @@ class Application(Base):
     
     # 關聯
     student = relationship("User", foreign_keys=[user_id], back_populates="applications")
-    student_profile = relationship("Student", back_populates="applications")
+    student_profile = relationship("Student", foreign_keys=[student_id], back_populates="applications")
     professor = relationship("User", foreign_keys=[professor_id])
     reviewer = relationship("User", foreign_keys=[reviewer_id])
     final_approver = relationship("User", foreign_keys=[final_approver_id])

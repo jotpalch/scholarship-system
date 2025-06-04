@@ -5,7 +5,7 @@ Handles all environment variables and application settings.
 
 import os
 from typing import List, Optional
-from pydantic import validator
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from decouple import config
 
@@ -63,14 +63,16 @@ class Settings(BaseSettings):
     log_level: str = config("LOG_LEVEL", default="INFO")
     log_format: str = config("LOG_FORMAT", default="json")
     
-    @validator("database_url", pre=True)
+    @field_validator("database_url", mode="before")
+    @classmethod
     def assemble_db_connection(cls, v: str) -> str:
         """Validate database URL format"""
         if not v.startswith("postgresql"):
             raise ValueError("Database URL must be PostgreSQL")
         return v
     
-    @validator("secret_key", pre=True)
+    @field_validator("secret_key", mode="before")
+    @classmethod
     def validate_secret_key(cls, v: str) -> str:
         """Validate secret key is not empty and has minimum length"""
         if not v:
@@ -84,7 +86,8 @@ class Settings(BaseSettings):
                 raise ValueError("SECRET_KEY must be at least 32 characters long")
         return v
     
-    @validator("upload_dir", pre=True)
+    @field_validator("upload_dir", mode="before")
+    @classmethod
     def create_upload_directory(cls, v: str) -> str:
         """Ensure upload directory exists"""
         os.makedirs(v, exist_ok=True)

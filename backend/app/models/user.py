@@ -51,7 +51,7 @@ class User(Base):
     
     # Relationships
     student_profile = relationship("Student", back_populates="user", uselist=False)
-    applications = relationship("Application", back_populates="student")
+    applications = relationship("Application", foreign_keys="[Application.user_id]", back_populates="student")
     reviews = relationship("ApplicationReview", back_populates="reviewer")
     notifications = relationship("Notification", back_populates="user")
     audit_logs = relationship("AuditLog", back_populates="user")
