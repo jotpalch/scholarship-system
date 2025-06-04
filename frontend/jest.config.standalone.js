@@ -15,9 +15,9 @@ module.exports = {
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
     '\\.(jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$': 'jest-transform-stub',
 
-    // Hyper-specific manual maps for diagnostics
-    '^@/lib/api$': '<rootDir>/lib/api.ts',
-    '^@/lib/utils$': '<rootDir>/lib/utils.ts',
+    // Hyper-specific manual maps for diagnostics (without .ts extension)
+    '^@/lib/api$': '<rootDir>/lib/api',
+    '^@/lib/utils$': '<rootDir>/lib/utils',
 
     // Path aliases derived from tsconfig.json
     ...pathsToModuleNameMapper(compilerOptions.paths, { prefix: '<rootDir>/' })
