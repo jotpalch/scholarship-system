@@ -5,7 +5,6 @@ const { pathsToModuleNameMapper } = require('ts-jest');
 const { compilerOptions } = require('./tsconfig.json');
 
 module.exports = {
-  preset: 'ts-jest',
   testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   
@@ -43,12 +42,7 @@ module.exports = {
 
   // Transform configuration
   transform: {
-    '^.+\\.(ts|tsx)$': ['ts-jest', {
-      tsconfig: '<rootDir>/tsconfig.json'
-    }],
-    '^.+\\.(js|jsx)$': ['babel-jest', {
-      presets: ['next/babel']
-    }]
+    '^.+\\.(ts|tsx|js|jsx)$': 'babel-jest',
   },
 
   // Coverage configuration
