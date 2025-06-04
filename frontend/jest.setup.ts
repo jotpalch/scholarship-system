@@ -1,15 +1,52 @@
 import '@testing-library/jest-dom'
 
+// Load environment setup
+require('./jest.env.js')
+
+// Global API mock setup
+jest.mock('@/lib/api', () => ({
+  apiClient: {
+    auth: {
+      getCurrentUser: jest.fn(),
+      login: jest.fn(),
+      logout: jest.fn(),
+      register: jest.fn(),
+      refreshToken: jest.fn(),
+    },
+    users: {
+      updateProfile: jest.fn(),
+      getProfile: jest.fn(),
+    },
+    applications: {
+      getAll: jest.fn(),
+      getById: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      submit: jest.fn(),
+      delete: jest.fn(),
+    },
+    scholarships: {
+      getAll: jest.fn(),
+      getById: jest.fn(),
+    },
+    setToken: jest.fn(),
+    clearToken: jest.fn(),
+  },
+}))
+
 // Suppress React act warnings and test API errors from test scenarios
 const originalError = console.error
 beforeAll(() => {
   console.error = (...args: any[]) => {
     if (
+      args[0] && 
       typeof args[0] === 'string' &&
-      (args[0].includes('Warning: An update to') && args[0].includes('act(...)')) ||
-      args[0].includes('@radix-ui') ||
-      args[0].includes('not wrapped in act') ||
-      args[0].includes('API request failed') // Suppress intentional test API errors
+      (
+        (args[0].includes('Warning: An update to') && args[0].includes('act(...)')) ||
+        args[0].includes('@radix-ui') ||
+        args[0].includes('not wrapped in act') ||
+        args[0].includes('API request failed') // Suppress intentional test API errors
+      )
     ) {
       return
     }
