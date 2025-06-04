@@ -6,33 +6,30 @@
 
 module.exports = {
   testEnvironment: 'jsdom',
-  setupFilesAfterEnv: ['<rootDir>/frontend/jest.setup.ts'],
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   
-  // Module name mapping - Using /frontend/ path as suggested for CI compatibility
+  // Module name mapping - Only specific literal mappings, no generic fallback
   moduleNameMapper: {
     // CSS and static assets
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
     '\\.(jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$': 'jest-transform-stub',
 
-    // Specific literal mappings with /frontend/ path for CI
-    '^@/lib/api$': '<rootDir>/frontend/lib/api',
-    '^@/lib/utils$': '<rootDir>/frontend/lib/utils',
-    '^@/lib/validation$': '<rootDir>/frontend/lib/validation',
-    '^@/lib/i18n$': '<rootDir>/frontend/lib/i18n',
+    // Specific literal mappings only
+    '^@/lib/api$': '<rootDir>/lib/api',
+    '^@/lib/utils$': '<rootDir>/lib/utils',
+    '^@/lib/validation$': '<rootDir>/lib/validation',
+    '^@/lib/i18n$': '<rootDir>/lib/i18n',
     
     // Common component paths
-    '^@/components/ui/card$': '<rootDir>/frontend/components/ui/card',
-    '^@/components/ui/button$': '<rootDir>/frontend/components/ui/button',
-    '^@/components/ui/input$': '<rootDir>/frontend/components/ui/input',
-    '^@/components/ui/form$': '<rootDir>/frontend/components/ui/form',
+    '^@/components/ui/card$': '<rootDir>/components/ui/card',
+    '^@/components/ui/button$': '<rootDir>/components/ui/button',
+    '^@/components/ui/input$': '<rootDir>/components/ui/input',
+    '^@/components/ui/form$': '<rootDir>/components/ui/form',
     
     // Common hook paths  
-    '^@/hooks/use-auth$': '<rootDir>/frontend/hooks/use-auth',
-    '^@/hooks/use-applications$': '<rootDir>/frontend/hooks/use-applications',
-    '^@/hooks/use-toast$': '<rootDir>/frontend/hooks/use-toast',
-    
-    // Generic fallback with /frontend/ path
-    '^@/(.*)$': '<rootDir>/frontend/$1'
+    '^@/hooks/use-auth$': '<rootDir>/hooks/use-auth',
+    '^@/hooks/use-applications$': '<rootDir>/hooks/use-applications',
+    '^@/hooks/use-toast$': '<rootDir>/hooks/use-toast'
   },
 
   // Module directories
