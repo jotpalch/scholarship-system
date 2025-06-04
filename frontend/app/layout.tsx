@@ -1,5 +1,5 @@
 import type React from "react"
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import "./globals.css"
 import { AuthProvider } from "@/hooks/use-auth"
 
@@ -8,9 +8,13 @@ export const metadata: Metadata = {
   description: "國立陽明交通大學獎學金申請與簽核作業管理系統，提供學生獎學金申請、教師推薦、行政審核等完整流程管理",
   keywords: "獎學金, 申請, 審核, 陽明交通大學, NYCU, 教務處",
   authors: [{ name: "國立陽明交通大學教務處" }],
-  viewport: "width=device-width, initial-scale=1",
   robots: "noindex, nofollow", // 系統內部使用
-    generator: 'v0.dev'
+  generator: 'v0.dev'
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1
 }
 
 export default function RootLayout({
