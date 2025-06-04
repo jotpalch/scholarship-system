@@ -1,16 +1,12 @@
-const nextJest = require('next/jest')
+// Standalone Jest configuration for CI compatibility
+// Use this if the Next.js Jest configuration fails in CI
 
-// Create the Next.js Jest configuration
-const createJestConfig = nextJest({
-  // Provide the path to your Next.js app to load next.config.js and .env files
-  dir: './',
-})
-
-// Add any custom config to be passed to Jest
-const customJestConfig = {
-  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+module.exports = {
+  preset: 'ts-jest',
   testEnvironment: 'jsdom',
-  // More explicit module name mapping to ensure CI compatibility
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+  
+  // Module name mapping
   moduleNameMapper: {
     // CSS and static assets
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
@@ -27,20 +23,40 @@ const customJestConfig = {
     '^@/(.*)$': '<rootDir>/$1',
     '^~/(.*)$': '<rootDir>/$1',
   },
+
+  // Module directories
   moduleDirectories: ['node_modules', '<rootDir>/'],
-  // Explicit module file extensions
+  
+  // Module file extensions
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
-  // Resolver configuration
-  resolver: undefined, // Let Jest use default resolver with our mappings
+  
+  // Test configuration
   testMatch: [
     '<rootDir>/**/__tests__/**/*.{js,jsx,ts,tsx}',
     '<rootDir>/**/*.(test|spec).{js,jsx,ts,tsx}'
   ],
+  
   testPathIgnorePatterns: [
     '<rootDir>/.next/',
     '<rootDir>/node_modules/',
     '<rootDir>/e2e/'
   ],
+
+  // Transform configuration
+  transform: {
+    '^.+\\.(ts|tsx)$': ['ts-jest', {
+      tsconfig: {
+        jsx: 'react-jsx',
+        esModuleInterop: true,
+        allowSyntheticDefaultImports: true,
+      }
+    }],
+    '^.+\\.(js|jsx)$': ['babel-jest', {
+      presets: ['next/babel']
+    }]
+  },
+
+  // Coverage configuration
   collectCoverageFrom: [
     '**/*.{js,jsx,ts,tsx}',
     '!**/*.d.ts',
@@ -53,24 +69,13 @@ const customJestConfig = {
     '!<rootDir>/*.config.*',
     '!<rootDir>/next.config.js',
   ],
-  // Add transform ignore patterns for better ES module handling
+
+  // Other settings
+  clearMocks: true,
+  automock: false,
+  
+  // Transform ignore patterns
   transformIgnorePatterns: [
     'node_modules/(?!(.*\\.mjs$))',
   ],
-  // Explicitly clear mocks between tests
-  clearMocks: true,
-  // Enable automatic mocking from __mocks__ directories
-  automock: false,
-  // Disable coverage thresholds for now
-  // coverageThreshold: {
-  //   global: {
-  //     branches: 5,
-  //     functions: 5,
-  //     lines: 5,
-  //     statements: 5,
-  //   },
-  // },
-}
-
-// createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async
-module.exports = createJestConfig(customJestConfig) 
+} 
