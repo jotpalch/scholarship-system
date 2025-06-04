@@ -44,11 +44,7 @@ module.exports = {
   // Transform configuration
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest', {
-      tsconfig: {
-        jsx: 'react-jsx',
-        esModuleInterop: true,
-        allowSyntheticDefaultImports: true,
-      }
+      tsconfig: '<rootDir>/tsconfig.json'
     }],
     '^.+\\.(js|jsx)$': ['babel-jest', {
       presets: ['next/babel']
