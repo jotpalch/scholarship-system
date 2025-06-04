@@ -3,71 +3,8 @@ import '@testing-library/jest-dom'
 // Load environment setup
 require('./jest.env.js')
 
-// Global API mock setup - Fix export structure to match actual api.ts
-jest.mock('@/lib/api', () => ({
-  apiClient: {
-    auth: {
-      getCurrentUser: jest.fn(),
-      login: jest.fn(),
-      logout: jest.fn(),
-      register: jest.fn(),
-      refreshToken: jest.fn(),
-    },
-    users: {
-      updateProfile: jest.fn(),
-      getProfile: jest.fn(),
-      getStudentInfo: jest.fn(),
-      updateStudentInfo: jest.fn(),
-    },
-    applications: {
-      getMyApplications: jest.fn(),
-      createApplication: jest.fn(),
-      getApplication: jest.fn(),
-      updateApplication: jest.fn(),
-      submitApplication: jest.fn(),
-      withdrawApplication: jest.fn(),
-      uploadDocument: jest.fn(),
-    },
-    admin: {
-      getDashboardStats: jest.fn(),
-      getAllApplications: jest.fn(),
-      updateApplicationStatus: jest.fn(),
-    },
-    setToken: jest.fn(),
-    clearToken: jest.fn(),
-  },
-  default: {
-    auth: {
-      getCurrentUser: jest.fn(),
-      login: jest.fn(),
-      logout: jest.fn(),
-      register: jest.fn(),
-      refreshToken: jest.fn(),
-    },
-    users: {
-      updateProfile: jest.fn(),
-      getProfile: jest.fn(),
-      getStudentInfo: jest.fn(),
-      updateStudentInfo: jest.fn(),
-    },
-    applications: {
-      getMyApplications: jest.fn(),
-      createApplication: jest.fn(),
-      getApplication: jest.fn(),
-      updateApplication: jest.fn(),
-      submitApplication: jest.fn(),
-      withdrawApplication: jest.fn(),
-      uploadDocument: jest.fn(),
-    },
-    admin: {
-      getDashboardStats: jest.fn(),
-      getAllApplications: jest.fn(),
-      updateApplicationStatus: jest.fn(),
-    },
-    setToken: jest.fn(),
-    clearToken: jest.fn(),
-  },
-}))
+// API mocking is handled by __mocks__ directory structure
+// Individual test files can override specific mocks as needed
 
 // Suppress React act warnings and test API errors from test scenarios
 const originalError = console.error

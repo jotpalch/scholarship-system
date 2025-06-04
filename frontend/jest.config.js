@@ -13,6 +13,11 @@ const customJestConfig = {
     // Handle module aliases (these will be automatically configured for you based on your tsconfig.json paths)
     '^@/(.*)$': '<rootDir>/$1',
     '^~/(.*)$': '<rootDir>/$1',
+    // Explicit mapping for lib directory in case Next.js config doesn't handle it properly
+    '^@/lib/(.*)$': '<rootDir>/lib/$1',
+    '^@/components/(.*)$': '<rootDir>/components/$1',
+    '^@/hooks/(.*)$': '<rootDir>/hooks/$1',
+    '^@/types/(.*)$': '<rootDir>/types/$1',
   },
   moduleDirectories: ['node_modules', '<rootDir>/'],
   testMatch: [
@@ -36,6 +41,14 @@ const customJestConfig = {
     '!<rootDir>/*.config.*',
     '!<rootDir>/next.config.js',
   ],
+  // Add transform ignore patterns for better ES module handling
+  transformIgnorePatterns: [
+    'node_modules/(?!(.*\\.mjs$))',
+  ],
+  // Explicitly clear mocks between tests
+  clearMocks: true,
+  // Enable automatic mocking from __mocks__ directories
+  automock: false,
   // Disable coverage thresholds for now
   // coverageThreshold: {
   //   global: {

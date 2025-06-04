@@ -2,20 +2,7 @@ import { renderHook, render } from '@testing-library/react'
 import { ReactNode, Component, ErrorInfo } from 'react'
 import { AuthProvider, useAuth } from '../use-auth'
 
-// Mock the API client to avoid actual HTTP calls
-jest.mock('../../lib/api', () => ({
-  apiClient: {
-    auth: {
-      login: jest.fn(),
-      getCurrentUser: jest.fn(),
-    },
-    users: {
-      updateProfile: jest.fn(),
-    },
-    setToken: jest.fn(),
-    clearToken: jest.fn(),
-  },
-}))
+// API client is automatically mocked by __mocks__ directory
 
 // Test wrapper with AuthProvider
 const wrapper = ({ children }: { children: ReactNode }) => (
