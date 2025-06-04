@@ -1,25 +1,21 @@
 // Standalone Jest configuration for CI compatibility
 // Use this if the Next.js Jest configuration fails in CI
 
-const { pathsToModuleNameMapper } = require('ts-jest');
-const { compilerOptions } = require('./tsconfig.json');
+// const { pathsToModuleNameMapper } = require('ts-jest'); // No longer using for this test
+// const { compilerOptions } = require('./tsconfig.json'); // No longer using for this test
 
 module.exports = {
   testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   
-  // Module name mapping
+  // Module name mapping - Simplified
   moduleNameMapper: {
     // CSS and static assets
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
     '\\.(jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$': 'jest-transform-stub',
 
-    // Hyper-specific manual maps for diagnostics (without .ts extension)
-    '^@/lib/api$': '<rootDir>/lib/api',
-    '^@/lib/utils$': '<rootDir>/lib/utils',
-
-    // Path aliases derived from tsconfig.json
-    ...pathsToModuleNameMapper(compilerOptions.paths, { prefix: '<rootDir>/' })
+    // Manually crafted generic alias for @/* based on tsconfig
+    '^@/(.*)$': '<rootDir>/$1'
   },
 
   // Module directories
