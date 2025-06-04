@@ -3,7 +3,7 @@ import '@testing-library/jest-dom'
 // Load environment setup
 require('./jest.env.js')
 
-// Global API mock setup
+// Global API mock setup - Fix export structure to match actual api.ts
 jest.mock('@/lib/api', () => ({
   apiClient: {
     auth: {
@@ -16,18 +16,53 @@ jest.mock('@/lib/api', () => ({
     users: {
       updateProfile: jest.fn(),
       getProfile: jest.fn(),
+      getStudentInfo: jest.fn(),
+      updateStudentInfo: jest.fn(),
     },
     applications: {
-      getAll: jest.fn(),
-      getById: jest.fn(),
-      create: jest.fn(),
-      update: jest.fn(),
-      submit: jest.fn(),
-      delete: jest.fn(),
+      getMyApplications: jest.fn(),
+      createApplication: jest.fn(),
+      getApplication: jest.fn(),
+      updateApplication: jest.fn(),
+      submitApplication: jest.fn(),
+      withdrawApplication: jest.fn(),
+      uploadDocument: jest.fn(),
     },
-    scholarships: {
-      getAll: jest.fn(),
-      getById: jest.fn(),
+    admin: {
+      getDashboardStats: jest.fn(),
+      getAllApplications: jest.fn(),
+      updateApplicationStatus: jest.fn(),
+    },
+    setToken: jest.fn(),
+    clearToken: jest.fn(),
+  },
+  default: {
+    auth: {
+      getCurrentUser: jest.fn(),
+      login: jest.fn(),
+      logout: jest.fn(),
+      register: jest.fn(),
+      refreshToken: jest.fn(),
+    },
+    users: {
+      updateProfile: jest.fn(),
+      getProfile: jest.fn(),
+      getStudentInfo: jest.fn(),
+      updateStudentInfo: jest.fn(),
+    },
+    applications: {
+      getMyApplications: jest.fn(),
+      createApplication: jest.fn(),
+      getApplication: jest.fn(),
+      updateApplication: jest.fn(),
+      submitApplication: jest.fn(),
+      withdrawApplication: jest.fn(),
+      uploadDocument: jest.fn(),
+    },
+    admin: {
+      getDashboardStats: jest.fn(),
+      getAllApplications: jest.fn(),
+      updateApplicationStatus: jest.fn(),
     },
     setToken: jest.fn(),
     clearToken: jest.fn(),
