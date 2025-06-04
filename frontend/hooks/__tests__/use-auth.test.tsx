@@ -1,3 +1,4 @@
+import React from 'react'
 import { renderHook, render } from '@testing-library/react'
 import { ReactNode, Component, ErrorInfo } from 'react'
 import { AuthProvider, useAuth } from '../use-auth'
