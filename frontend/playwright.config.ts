@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test'
 /**
  * @see https://playwright.dev/docs/test-configuration
  */
-export default defineConfig({
+const config = defineConfig({
   testDir: './e2e',
   /* Run tests in files in parallel */
   fullyParallel: true,
@@ -61,11 +61,17 @@ export default defineConfig({
     //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     // },
   ],
+});
 
-  /* Run your local dev server before starting the tests */
-  webServer: {
+// Only configure webServer for local development
+// In CI, the server is already running via Docker
+if (!process.env.CI) {
+  config.webServer = {
     command: 'npm run dev',
     url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-  },
-}) 
+    reuseExistingServer: !!process.env.PLAYWRIGHT_REUSE_SERVER,
+    timeout: 120 * 1000,
+  };
+}
+
+export default config; 
