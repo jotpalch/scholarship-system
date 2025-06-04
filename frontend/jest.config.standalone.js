@@ -8,14 +8,31 @@ module.exports = {
   testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   
-  // Module name mapping - Simplified
+  // Module name mapping - Literal mappings to avoid regex capture issues entirely
   moduleNameMapper: {
     // CSS and static assets
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
     '\\.(jpg|jpeg|png|gif|eot|otf|webp|svg|ttf|woff|woff2|mp4|webm|wav|mp3|m4a|aac|oga)$': 'jest-transform-stub',
 
-    // Manually crafted generic alias for @/* based on tsconfig
-    '^@/(.*)$': '<rootDir>/$1'
+    // Specific literal mappings for known failing imports
+    '^@/lib/api$': '<rootDir>/lib/api',
+    '^@/lib/utils$': '<rootDir>/lib/utils',
+    '^@/lib/validation$': '<rootDir>/lib/validation',
+    '^@/lib/i18n$': '<rootDir>/lib/i18n',
+    
+    // Common component paths
+    '^@/components/ui/card$': '<rootDir>/components/ui/card',
+    '^@/components/ui/button$': '<rootDir>/components/ui/button',
+    '^@/components/ui/input$': '<rootDir>/components/ui/input',
+    '^@/components/ui/form$': '<rootDir>/components/ui/form',
+    
+    // Common hook paths  
+    '^@/hooks/use-auth$': '<rootDir>/hooks/use-auth',
+    '^@/hooks/use-applications$': '<rootDir>/hooks/use-applications',
+    '^@/hooks/use-toast$': '<rootDir>/hooks/use-toast',
+    
+    // Types
+    '^@/types/(.*)$': '<rootDir>/types/$1'
   },
 
   // Module directories
