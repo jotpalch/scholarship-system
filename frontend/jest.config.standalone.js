@@ -25,6 +25,14 @@ module.exports = {
     '^@/components/ui/button$': '<rootDir>/components/ui/button',
     '^@/components/ui/input$': '<rootDir>/components/ui/input',
     '^@/components/ui/form$': '<rootDir>/components/ui/form',
+    '^@/components/ui/label$': '<rootDir>/components/ui/label',
+    '^@/components/ui/textarea$': '<rootDir>/components/ui/textarea',
+    '^@/components/ui/select$': '<rootDir>/components/ui/select',
+    '^@/components/ui/badge$': '<rootDir>/components/ui/badge',
+    '^@/components/ui/tabs$': '<rootDir>/components/ui/tabs',
+    '^@/components/ui/progress$': '<rootDir>/components/ui/progress',
+    '^@/components/progress-timeline$': '<rootDir>/components/progress-timeline',
+    '^@/components/file-upload$': '<rootDir>/components/file-upload',
     
     // Common hook paths  
     '^@/hooks/use-auth$': '<rootDir>/hooks/use-auth',
