@@ -31,7 +31,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Get user info after login
         const userResponse = await apiClient.auth.getCurrentUser()
         if (userResponse.success && userResponse.data) {
-          setUser(userResponse.data)
+          // Map full_name to name for component compatibility
+          const userData = { ...userResponse.data, name: userResponse.data.full_name }
+          setUser(userData)
         }
       } else {
         throw new Error(response.message || 'Login failed')
@@ -56,7 +58,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await apiClient.users.updateProfile(userData)
       
       if (response.success && response.data) {
-        setUser(response.data)
+        // Map full_name to name for component compatibility
+        const updatedUser = { ...response.data, name: response.data.full_name }
+        setUser(updatedUser)
       } else {
         throw new Error(response.message || 'Update failed')
       }
@@ -72,7 +76,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const response = await apiClient.auth.getCurrentUser()
         if (response.success && response.data) {
-          setUser(response.data)
+          // Map full_name to name for component compatibility  
+          const userData = { ...response.data, name: response.data.full_name }
+          setUser(userData)
         }
       } catch (err) {
         // User not authenticated or token expired

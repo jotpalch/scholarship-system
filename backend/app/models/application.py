@@ -25,6 +25,7 @@ class ApplicationStatus(enum.Enum):
     RECOMMENDED = "recommended"
     APPROVED = "approved"
     REJECTED = "rejected"
+    RETURNED = "returned"
     CANCELLED = "cancelled"
 
 

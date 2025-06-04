@@ -147,26 +147,58 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     return statusNames[locale][status as keyof typeof statusNames[typeof locale]] || status
   }
 
-  const getTimelineSteps = (status: string) => {
+  const getTimelineSteps = (status: string): Array<{
+    id: string;
+    title: string;
+    status: "completed" | "current" | "pending" | "rejected";
+    date: string;
+  }> => {
+    let step2Status: "completed" | "current" | "pending" | "rejected" = "pending"
+    if (["submitted", "under_review", "approved"].includes(status)) {
+      step2Status = "completed"
+    } else if (status === "rejected") {
+      step2Status = "rejected"
+    }
+
+    let step3Status: "completed" | "current" | "pending" | "rejected" = "pending"
+    if (status === "approved") {
+      step3Status = "completed"
+    } else if (status === "under_review") {
+      step3Status = "current"
+    } else if (status === "rejected") {
+      step3Status = "rejected"
+    }
+
+    let step4Status: "completed" | "current" | "pending" | "rejected" = "pending"
+    if (status === "approved") {
+      step4Status = "completed"
+    } else if (status === "rejected") {
+      step4Status = "rejected"
+    }
+
     const baseSteps = [
       {
+        id: "1",
         title: locale === "zh" ? "提交申請" : "Submit Application",
         status: "completed" as const,
         date: "2025-06-01",
       },
       {
-        title: locale === "zh" ? "初步審核" : "Initial Review", 
-        status: ["submitted", "under_review", "approved"].includes(status) ? "completed" : "pending" as const,
-        date: status === "under_review" || status === "approved" ? "2025-06-05" : "",
+        id: "2", 
+        title: locale === "zh" ? "初步審核" : "Initial Review",
+        status: step2Status,
+        date: (status === "under_review" || status === "approved") ? "2025-06-05" : "",
       },
       {
-        title: locale === "zh" ? "委員會審核" : "Committee Review",
-        status: status === "approved" ? "completed" : status === "under_review" ? "current" : "pending" as const,
+        id: "3",
+        title: locale === "zh" ? "委員會審核" : "Committee Review", 
+        status: step3Status,
         date: status === "approved" ? "2025-06-10" : "",
       },
       {
+        id: "4",
         title: locale === "zh" ? "核定結果" : "Final Decision",
-        status: status === "approved" ? "completed" : "pending" as const,
+        status: step4Status,
         date: status === "approved" ? "2025-06-15" : "",
       },
     ]

@@ -19,7 +19,7 @@ interface UserType {
   id: string
   name: string
   email: string
-  role: "student" | "reviewer" | "admin" | "sysadmin"
+  role: "student" | "faculty" | "admin" | "super_admin"
   studentId?: string
   nationality?: string
 }
@@ -37,9 +37,9 @@ export function Header({ user, locale, onLocaleChange, showLanguageSwitcher = fa
   const getRoleBadge = (role: string) => {
     const roleMap = {
       student: { label: user.role === "student" ? t("roles.student") : "學生", variant: "default" as const },
-      reviewer: { label: "審核者", variant: "secondary" as const },
+      faculty: { label: "教師", variant: "secondary" as const },
       admin: { label: "管理員", variant: "destructive" as const },
-      sysadmin: { label: "系統管理員", variant: "destructive" as const },
+      super_admin: { label: "系統管理員", variant: "destructive" as const },
     }
     return roleMap[role as keyof typeof roleMap] || { label: role, variant: "outline" as const }
   }

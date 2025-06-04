@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { EnhancedStudentPortal } from '../enhanced-student-portal'
 import { useApplications } from '../../hooks/use-applications'
@@ -17,6 +17,7 @@ const mockUser = {
   email: 'test@example.com',
   role: 'student' as const,
   full_name: 'Test User',
+  name: 'Test User', // Added for component compatibility
   is_active: true,
   created_at: '2025-01-01',
   updated_at: '2025-01-01',
@@ -63,63 +64,75 @@ describe('EnhancedStudentPortal', () => {
     mockUseApplications.mockReturnValue(defaultApplicationsHook)
   })
 
-  it('should render scholarship information', () => {
-    render(<EnhancedStudentPortal user={mockUser} locale="en" />)
+  it('should render scholarship information', async () => {
+    await act(async () => {
+      render(<EnhancedStudentPortal user={mockUser} locale="en" />)
+    })
     
     // Check for the actual displayed text
-    expect(screen.getByText('scholarships.academic_excellence')).toBeInTheDocument()
+    expect(screen.getByText('Academic Excellence Scholarship')).toBeInTheDocument()
     expect(screen.getByText('NT$ 50,000')).toBeInTheDocument()
     expect(screen.getByText('Eligibility')).toBeInTheDocument()
   })
 
-  it('should render scholarship information in Chinese', () => {
-    render(<EnhancedStudentPortal user={mockUser} locale="zh" />)
+  it('should render scholarship information in Chinese', async () => {
+    await act(async () => {
+      render(<EnhancedStudentPortal user={mockUser} locale="zh" />)
+    })
     
     // Check for Chinese text content
-    expect(screen.getByText('scholarships.academic_excellence')).toBeInTheDocument()
+    expect(screen.getByText('學術優秀獎學金')).toBeInTheDocument()
     expect(screen.getByText('申請資格')).toBeInTheDocument()
   })
 
-  it('should show empty state when no applications exist', () => {
-    render(<EnhancedStudentPortal user={mockUser} locale="en" />)
+  it('should show empty state when no applications exist', async () => {
+    await act(async () => {
+      render(<EnhancedStudentPortal user={mockUser} locale="en" />)
+    })
     
     expect(screen.getByText('No application records yet')).toBeInTheDocument()
     expect(screen.getByText("Click 'New Application' to start applying for scholarship")).toBeInTheDocument()
   })
 
-  it('should display applications when they exist', () => {
+  it('should display applications when they exist', async () => {
     mockUseApplications.mockReturnValue({
       ...defaultApplicationsHook,
       applications: [mockApplication],
     })
 
-    render(<EnhancedStudentPortal user={mockUser} locale="en" />)
+    await act(async () => {
+      render(<EnhancedStudentPortal user={mockUser} locale="en" />)
+    })
     
     expect(screen.getByText('academic_excellence')).toBeInTheDocument()
     expect(screen.getByText('Application ID: 1')).toBeInTheDocument()
     expect(screen.getByText('Submitted')).toBeInTheDocument()
   })
 
-  it('should show loading state', () => {
+  it('should show loading state', async () => {
     mockUseApplications.mockReturnValue({
       ...defaultApplicationsHook,
       isLoading: true,
     })
 
-    render(<EnhancedStudentPortal user={mockUser} locale="en" />)
+    await act(async () => {
+      render(<EnhancedStudentPortal user={mockUser} locale="en" />)
+    })
     
     // Look for loading spinner by test ID
     expect(screen.getByTestId('loading-spinner')).toBeInTheDocument()
   })
 
-  it('should show error state', () => {
+  it('should show error state', async () => {
     const errorMessage = 'Failed to fetch applications'
     mockUseApplications.mockReturnValue({
       ...defaultApplicationsHook,
       error: errorMessage,
     })
 
-    render(<EnhancedStudentPortal user={mockUser} locale="en" />)
+    await act(async () => {
+      render(<EnhancedStudentPortal user={mockUser} locale="en" />)
+    })
     
     expect(screen.getByText(errorMessage)).toBeInTheDocument()
   })
@@ -127,13 +140,17 @@ describe('EnhancedStudentPortal', () => {
   it('should allow switching to new application tab', async () => {
     const user = userEvent.setup()
     
-    render(<EnhancedStudentPortal user={mockUser} locale="en" />)
+    await act(async () => {
+      render(<EnhancedStudentPortal user={mockUser} locale="en" />)
+    })
     
     // Switch to new application tab
-    await user.click(screen.getByText('New Application'))
+    await act(async () => {
+      await user.click(screen.getByText('New Application'))
+    })
     
     // Should show the form elements
-    expect(screen.getByText('Apply for scholarships.academic_excellence')).toBeInTheDocument()
+    expect(screen.getByText('Apply for Academic Excellence Scholarship')).toBeInTheDocument()
     expect(screen.getByText('Form Completion')).toBeInTheDocument()
     expect(screen.getByText('0%')).toBeInTheDocument()
   })

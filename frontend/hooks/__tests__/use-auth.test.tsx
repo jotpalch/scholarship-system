@@ -1,24 +1,38 @@
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { ReactNode } from 'react'
 import { AuthProvider, useAuth } from '../use-auth'
-import { apiClient } from '../../lib/api'
 
-// Mock the API client
+// Mock the API client module completely
 jest.mock('../../lib/api', () => ({
   apiClient: {
     auth: {
-      login: jest.fn(),
       getCurrentUser: jest.fn(),
+      login: jest.fn(),
+      logout: jest.fn(),
     },
-    setToken: jest.fn(),
-    clearToken: jest.fn(),
     users: {
       updateProfile: jest.fn(),
     },
+    setToken: jest.fn(),
+    clearToken: jest.fn(),
   },
 }))
 
-const mockedApiClient = apiClient as jest.Mocked<typeof apiClient>
+// Import after mocking
+import { apiClient } from '../../lib/api'
+
+// Create a properly typed mock with explicit Jest mock methods
+const mockedApiClient = {
+  auth: {
+    getCurrentUser: apiClient.auth.getCurrentUser as jest.MockedFunction<any>,
+    login: apiClient.auth.login as jest.MockedFunction<any>,
+  },
+  users: {
+    updateProfile: apiClient.users.updateProfile as jest.MockedFunction<any>,
+  },
+  setToken: apiClient.setToken as jest.MockedFunction<any>,
+  clearToken: apiClient.clearToken as jest.MockedFunction<any>,
+}
 
 // Test wrapper with AuthProvider
 const wrapper = ({ children }: { children: ReactNode }) => (
@@ -49,6 +63,7 @@ describe('useAuth Hook', () => {
       email: 'test@example.com',
       role: 'student' as const,
       full_name: 'Test User',
+      name: 'Test User',
       is_active: true,
       created_at: '2025-01-01',
       updated_at: '2025-01-01',
@@ -126,6 +141,7 @@ describe('useAuth Hook', () => {
       email: 'test@example.com',
       role: 'student' as const,
       full_name: 'Test User',
+      name: 'Test User',
       is_active: true,
       created_at: '2025-01-01',
       updated_at: '2025-01-01',
@@ -163,6 +179,7 @@ describe('useAuth Hook', () => {
       email: 'test@example.com',
       role: 'student' as const,
       full_name: 'Test User',
+      name: 'Test User',
       is_active: true,
       created_at: '2025-01-01',
       updated_at: '2025-01-01',
@@ -211,6 +228,7 @@ describe('useAuth Hook', () => {
       email: 'test@example.com',
       role: 'student' as const,
       full_name: 'Test User',
+      name: 'Test User',
       is_active: true,
       created_at: '2025-01-01',
       updated_at: '2025-01-01',
@@ -251,6 +269,7 @@ describe('useAuth Hook', () => {
       email: 'test@example.com',
       role: 'student' as const,
       full_name: 'Test User',
+      name: 'Test User',
       is_active: true,
       created_at: '2025-01-01',
       updated_at: '2025-01-01',

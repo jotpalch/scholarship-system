@@ -127,7 +127,7 @@ export default function ScholarshipManagementSystem() {
   }
 
   // Set initial active tab based on user role
-  if (activeTab === "main" && (user.role === "admin" || user.role === "faculty")) {
+  if (activeTab === "main" && user && (user.role === "admin" || user.role === "faculty")) {
     setActiveTab("dashboard")
   }
 
@@ -259,6 +259,8 @@ export default function ScholarshipManagementSystem() {
 
   // 根據角色決定顯示的標籤頁
   const getTabsList = () => {
+    if (!user) return null;
+    
     if (user.role === "student") {
       return (
         <TabsList className="grid w-full grid-cols-1 bg-nycu-blue-50 border border-nycu-blue-200">
@@ -273,7 +275,7 @@ export default function ScholarshipManagementSystem() {
       )
     }
 
-    if (user.role === "professor") {
+    if (user.role === "faculty") {
       return (
         <TabsList className="grid w-full grid-cols-1 bg-nycu-blue-50 border border-nycu-blue-200">
           <TabsTrigger
@@ -287,7 +289,7 @@ export default function ScholarshipManagementSystem() {
       )
     }
 
-    if (user.role === "reviewer") {
+    if (user.role === "super_admin") {
       return (
         <TabsList className="grid w-full grid-cols-2 bg-nycu-blue-50 border border-nycu-blue-200">
           <TabsTrigger
@@ -339,6 +341,10 @@ export default function ScholarshipManagementSystem() {
     return null
   }
 
+  if (!user) {
+    return <div>Loading...</div>
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-nycu-blue-50 flex flex-col">
       <Header
@@ -373,8 +379,8 @@ export default function ScholarshipManagementSystem() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           {getTabsList()}
 
-          {/* 儀表板 - 只有 admin 和 reviewer 可見 */}
-          {(user.role === "admin" || user.role === "reviewer") && (
+          {/* 儀表板 - 只有 admin 和 faculty 可見 */}
+          {(user.role === "admin" || user.role === "faculty") && (
             <TabsContent value="dashboard" className="space-y-4">
               {renderDashboard()}
             </TabsContent>
@@ -383,8 +389,8 @@ export default function ScholarshipManagementSystem() {
           {/* 主要功能頁面 */}
           <TabsContent value="main" className="space-y-4">
             {user.role === "student" && <EnhancedStudentPortal user={user} locale={locale} />}
-            {user.role === "professor" && <ProfessorInterface user={user} />}
-            {(user.role === "reviewer" || user.role === "admin") && <ScholarshipSpecificDashboard user={user} />}
+            {user.role === "faculty" && <ProfessorInterface user={user} />}
+            {(user.role === "faculty" || user.role === "admin") && <ScholarshipSpecificDashboard user={user} />}
           </TabsContent>
 
           {/* 系統管理 - 只有 admin 可見 */}
