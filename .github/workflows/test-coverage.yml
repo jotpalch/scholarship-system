@@ -38,7 +38,7 @@ jobs:
     - name: Run unit tests with coverage
       working-directory: ./backend
       env:
-        DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+        DATABASE_URL: "postgresql+asyncpg://test_user:test_password@localhost:5432/test_db"
         SECRET_KEY: test-secret-key-for-unit-testing
         TESTING: true
       run: |
@@ -88,12 +88,12 @@ jobs:
         env:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin123
-        command: server /data --console-address ":9001"
         options: >-
           --health-cmd "curl -f http://localhost:9000/minio/health/live"
           --health-interval 30s
           --health-timeout 20s
-          --health-retries 3
+          --health-retries 3 \
+          minio server /data --console-address ":9001"
         ports:
           - 9000:9000
           - 9001:9001
