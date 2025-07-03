@@ -46,7 +46,7 @@ jobs:
     - name: Run backend smoke tests
       working-directory: ./backend
       env:
-        DATABASE_URL: sqlite+aiosqlite:///:memory:
+        DATABASE_URL: "sqlite+aiosqlite:///:memory:"
         SECRET_KEY: test-secret-key
         TESTING: true
       run: |

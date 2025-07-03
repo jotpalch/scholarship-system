@@ -37,4 +37,19 @@ SessionLocal = sessionmaker(
     bind=sync_engine,
     autoflush=True,
     autocommit=False,
-) 
+)
+
+# Lazy proxy to get_db to avoid circular import during module init
+async def get_db():
+    """Proxy to app.db.deps.get_db to maintain backward compatibility."""
+    from app.db.deps import get_db as _get_db  # local import to avoid circular dependency
+    async for session in _get_db():
+        yield session
+
+__all__ = [
+    'async_engine',
+    'sync_engine',
+    'AsyncSessionLocal',
+    'SessionLocal',
+    'get_db',
+] 

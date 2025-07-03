@@ -81,6 +81,10 @@ class Settings(BaseSettings):
     @classmethod
     def assemble_db_connection(cls, v: str) -> str:
         """Validate database URL format"""
+        # Allow SQLite URLs during testing (unit tests / CI) to avoid external DB dependency
+        if v.startswith("sqlite"):
+            return v
+
         if not v.startswith("postgresql"):
             raise ValueError("Database URL must be PostgreSQL")
         return v

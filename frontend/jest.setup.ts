@@ -1,3 +1,4 @@
+// @ts-nocheck
 import '@testing-library/jest-dom'
 import React from 'react'
 
@@ -87,4 +88,45 @@ const localStorageMock = {
   length: 0,
   key: jest.fn(),
 }
-global.localStorage = localStorageMock as any 
+global.localStorage = localStorageMock as any
+
+// Mock Next.js 13 App Router
+jest.mock('next/navigation', () => {
+  return {
+    useRouter: () => ({
+      push: jest.fn(),
+      replace: jest.fn(),
+      refresh: jest.fn(),
+      prefetch: jest.fn(),
+      back: jest.fn(),
+    }),
+  }
+})
+
+// Mock useAuth hook to avoid provider requirement in component tests
+jest.mock('@/hooks/use-auth', () => ({
+  useAuth: () => ({
+    user: null,
+    isLoading: false,
+    login: jest.fn(),
+    logout: jest.fn(),
+  }),
+  AuthProvider: ({ children }) => children,
+}))
+
+// Basic global fetch mock to return successful empty response when not overridden
+if (!global.fetch) {
+  global.fetch = jest.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    headers: {
+      get: () => null,
+      entries: () => ([] as any),
+    },
+    json: async () => ({}),
+    text: async () => '',
+  }) as any
+}
+
+// @ts-nocheck 

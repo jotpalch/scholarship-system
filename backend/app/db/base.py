@@ -9,26 +9,28 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
 
+# Helper to build engine kwargs depending on backend
+def _build_engine_kwargs(url: str):
+    base_kwargs = dict(
+        echo=False,
+        future=True,
+        pool_pre_ping=True,
+    )
+    # Use pooling options only for PostgreSQL connections
+    if url.startswith("postgresql"):
+        base_kwargs.update(pool_recycle=3600, pool_size=10, max_overflow=20)
+    return base_kwargs
+
 # Create async engine for async operations
 async_engine = create_async_engine(
     settings.database_url,
-    echo=False,  # 關閉詳細 SQL 日誌
-    future=True,
-    pool_pre_ping=True,
-    pool_recycle=3600,  # Recycle connections after 1 hour
-    pool_size=10,
-    max_overflow=20
+    **_build_engine_kwargs(settings.database_url)
 )
 
 # Create sync engine for Alembic migrations
 sync_engine = create_engine(
     settings.database_url_sync,
-    echo=False,  # 關閉詳細 SQL 日誌
-    future=True,
-    pool_pre_ping=True,
-    pool_recycle=3600,
-    pool_size=10,
-    max_overflow=20
+    **_build_engine_kwargs(settings.database_url_sync)
 )
 
 # Create async session factory

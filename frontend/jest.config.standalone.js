@@ -29,6 +29,8 @@ module.exports = {
     '^@/components/ui/textarea$': '<rootDir>/components/ui/textarea',
     '^@/components/ui/select$': '<rootDir>/components/ui/select',
     '^@/components/ui/badge$': '<rootDir>/components/ui/badge',
+    '^@/components/ui/alert$': '<rootDir>/components/ui/alert',
+    '^@/components/ui/dialog$': '<rootDir>/components/ui/dialog',
     '^@/components/ui/tabs$': '<rootDir>/components/ui/tabs',
     '^@/components/ui/progress$': '<rootDir>/components/ui/progress',
     '^@/components/progress-timeline$': '<rootDir>/components/progress-timeline',
@@ -37,7 +39,13 @@ module.exports = {
     // Common hook paths  
     '^@/hooks/use-auth$': '<rootDir>/hooks/use-auth',
     '^@/hooks/use-applications$': '<rootDir>/hooks/use-applications',
-    '^@/hooks/use-toast$': '<rootDir>/hooks/use-toast'
+    '^@/hooks/use-toast$': '<rootDir>/hooks/use-toast',
+
+    // Generic mapping for all ui components under components/ui
+    '^@/components/ui/(.*)$': '<rootDir>/components/ui/$1',
+    '^@/lib/(.*)$': '<rootDir>/lib/$1',
+    '^@/hooks/(.*)$': '<rootDir>/hooks/$1',
+    '^@/components/(.*)$': '<rootDir>/components/$1',
   },
 
   // Module directories
