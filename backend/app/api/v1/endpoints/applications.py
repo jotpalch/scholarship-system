@@ -63,7 +63,7 @@ async def save_application_draft(
     )
 
 
-@router.get("/", response_model=List[ApplicationListResponse])
+@router.get("/", response_model=ApiResponse[List[ApplicationListResponse]])
 async def get_my_applications(
     status: Optional[str] = Query(None, description="Filter by status"),
     current_user: User = Depends(require_student),
@@ -71,20 +71,26 @@ async def get_my_applications(
 ):
     """Get current user's applications"""
     service = ApplicationService(db)
-    return await service.get_user_applications(current_user, status)
+    applications = await service.get_user_applications(current_user, status)
+
+    from app.utils.response import api_response
+    return api_response(data=applications, message="Applications retrieved successfully")
 
 
-@router.get("/dashboard/stats", response_model=DashboardStats)
+@router.get("/dashboard/stats", response_model=ApiResponse[DashboardStats])
 async def get_dashboard_stats(
     current_user: User = Depends(require_student),
     db: AsyncSession = Depends(get_db)
 ):
     """Get dashboard statistics for student"""
     service = ApplicationService(db)
-    return await service.get_student_dashboard_stats(current_user)
+    stats = await service.get_student_dashboard_stats(current_user)
+
+    from app.utils.response import api_response
+    return api_response(data=stats, message="Dashboard stats retrieved successfully")
 
 
-@router.get("/{application_id}", response_model=ApplicationResponse)
+@router.get("/{application_id}", response_model=ApiResponse[ApplicationResponse])
 async def get_application(
     application_id: int = Path(..., description="Application ID"),
     current_user: User = Depends(get_current_user),
@@ -92,10 +98,13 @@ async def get_application(
 ):
     """Get application by ID"""
     service = ApplicationService(db)
-    return await service.get_application_by_id(application_id, current_user)
+    application = await service.get_application_by_id(application_id, current_user)
+
+    from app.utils.response import api_response
+    return api_response(data=application, message="Application retrieved successfully")
 
 
-@router.put("/{application_id}", response_model=ApplicationResponse)
+@router.put("/{application_id}", response_model=ApiResponse[ApplicationResponse])
 async def update_application(
     application_id: int = Path(..., description="Application ID"),
     update_data: ApplicationUpdate = ...,
@@ -104,10 +113,13 @@ async def update_application(
 ):
     """Update application"""
     service = ApplicationService(db)
-    return await service.update_application(application_id, current_user, update_data)
+    application = await service.update_application(application_id, current_user, update_data)
+
+    from app.utils.response import api_response
+    return api_response(data=application, message="Application updated successfully")
 
 
-@router.post("/{application_id}/submit", response_model=ApplicationResponse)
+@router.post("/{application_id}/submit", response_model=ApiResponse[ApplicationResponse])
 async def submit_application(
     application_id: int = Path(..., description="Application ID"),
     current_user: User = Depends(require_student),
@@ -115,10 +127,12 @@ async def submit_application(
 ):
     """Submit application for review"""
     service = ApplicationService(db)
-    return await service.submit_application(application_id, current_user)
+    application = await service.submit_application(application_id, current_user)
+    from app.utils.response import api_response
+    return api_response(data=application, message="Application submitted successfully")
 
 
-@router.get("/{application_id}/files")
+@router.get("/{application_id}/files", response_model=ApiResponse[List[dict]])
 async def get_application_files(
     application_id: int = Path(..., description="Application ID"),
     current_user: User = Depends(get_current_user),
@@ -165,14 +179,11 @@ async def get_application_files(
             
         files_with_urls.append(file_dict)
     
-    return {
-        "success": True,
-        "message": "Files retrieved successfully",
-        "data": files_with_urls
-    }
+    from app.utils.response import api_response
+    return api_response(data=files_with_urls, message="Files retrieved successfully")
 
 
-@router.post("/{application_id}/files/upload")
+@router.post("/{application_id}/files/upload", response_model=ApiResponse[dict])
 async def upload_file(
     application_id: int = Path(..., description="Application ID"),
     file: UploadFile = File(...),
@@ -182,13 +193,15 @@ async def upload_file(
 ):
     """Upload file for application using MinIO"""
     service = ApplicationService(db)
-    return await service.upload_application_file_minio(application_id, current_user, file, file_type)
+    result = await service.upload_application_file_minio(application_id, current_user, file, file_type)
+    from app.utils.response import api_response
+    return api_response(data=result, message="File uploaded successfully")
 
 
 
 
 # Staff/Admin endpoints
-@router.get("/review/list", response_model=List[ApplicationListResponse])
+@router.get("/review/list", response_model=ApiResponse[List[ApplicationListResponse]])
 async def get_applications_for_review(
     status: Optional[str] = Query(None, description="Filter by status"),
     scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type"),
@@ -197,10 +210,12 @@ async def get_applications_for_review(
 ):
     """Get applications for review (staff only)"""
     service = ApplicationService(db)
-    return await service.get_applications_for_review(current_user, status, scholarship_type)
+    applications = await service.get_applications_for_review(current_user, status, scholarship_type)
+    from app.utils.response import api_response
+    return api_response(data=applications, message="Applications for review retrieved successfully")
 
 
-@router.put("/{application_id}/status", response_model=ApplicationResponse)
+@router.put("/{application_id}/status", response_model=ApiResponse[ApplicationResponse])
 async def update_application_status(
     application_id: int = Path(..., description="Application ID"),
     status_update: ApplicationStatusUpdate = ...,
@@ -209,10 +224,12 @@ async def update_application_status(
 ):
     """Update application status (staff only)"""
     service = ApplicationService(db)
-    return await service.update_application_status(application_id, current_user, status_update)
+    application = await service.update_application_status(application_id, current_user, status_update)
+    from app.utils.response import api_response
+    return api_response(data=application, message="Application status updated successfully")
 
 
-@router.post("/{application_id}/review", response_model=ApplicationResponse)
+@router.post("/{application_id}/review", response_model=ApiResponse[ApplicationResponse])
 async def submit_professor_review(
     application_id: int = Path(..., description="Application ID"),
     review_data: ProfessorReviewCreate = ...,
@@ -224,10 +241,12 @@ async def submit_professor_review(
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Only professors can submit this review.")
     service = ApplicationService(db)
-    return await service.create_professor_review(application_id, current_user, review_data)
+    application = await service.create_professor_review(application_id, current_user, review_data)
+    from app.utils.response import api_response
+    return api_response(data=application, message="Professor review submitted successfully")
 
 
-@router.get("/college/review", response_model=List[ApplicationListResponse])
+@router.get("/college/review", response_model=ApiResponse[List[ApplicationListResponse]])
 async def get_college_applications_for_review(
     status: Optional[str] = Query(None, description="Filter by status"),
     scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type"),
@@ -246,8 +265,10 @@ async def get_college_applications_for_review(
     
     service = ApplicationService(db)
     # Get applications that are in submitted or under_review status for college review
-    return await service.get_applications_for_review(
+    applications = await service.get_applications_for_review(
         current_user, 
         status or 'submitted',  # Default to submitted for college review
         scholarship_type
-    ) 
+    )
+    from app.utils.response import api_response
+    return api_response(data=applications, message="College applications for review retrieved successfully") 
