@@ -131,7 +131,7 @@ async def update_my_profile(
 
 # ==================== 管理員專用API ====================
 
-@router.get("/")
+@router.get("/", response_model=ApiResponse[dict])
 async def get_all_users(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
@@ -182,20 +182,19 @@ async def get_all_users(
     # Convert to response format
     user_list = [convert_user_to_dict(user) for user in users]
     
-    return {
-        "success": True,
-        "message": "Users retrieved successfully",
-        "data": {
+    return api_response(
+        data={
             "items": user_list,
             "total": total,
             "page": page,
             "size": size,
-            "pages": (total + size - 1) // size
-        }
-    }
+            "pages": (total + size - 1) // size,
+        },
+        message="Users retrieved successfully",
+    )
 
 
-@router.get("/{user_id}")
+@router.get("/{user_id}", response_model=ApiResponse[UserResponse])
 async def get_user_by_id(
     user_id: int,
     current_user: User = Depends(require_admin),
@@ -208,14 +207,10 @@ async def get_user_by_id(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    return {
-        "success": True,
-        "message": "User retrieved successfully",
-        "data": convert_user_to_dict(user)
-    }
+    return api_response(data=convert_user_to_dict(user), message="User retrieved successfully")
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ApiResponse[UserResponse], status_code=status.HTTP_201_CREATED)
 async def create_user(
     user_data: UserCreate,
     current_user: User = Depends(require_admin),
@@ -236,14 +231,10 @@ async def create_user(
     # Create user
     user = await auth_service.create_user(user_data)
     
-    return {
-        "success": True,
-        "message": "User created successfully",
-        "data": convert_user_to_dict(user)
-    }
+    return api_response(data=convert_user_to_dict(user), message="User created successfully")
 
 
-@router.put("/{user_id}")
+@router.put("/{user_id}", response_model=ApiResponse[UserResponse])
 async def update_user(
     user_id: int,
     update_data: UserUpdate,
@@ -266,14 +257,10 @@ async def update_user(
     await db.commit()
     await db.refresh(user)
     
-    return {
-        "success": True,
-        "message": "User updated successfully",
-        "data": convert_user_to_dict(user)
-    }
+    return api_response(data=convert_user_to_dict(user), message="User updated successfully")
 
 
-@router.delete("/{user_id}")
+@router.delete("/{user_id}", response_model=ApiResponse[dict])
 async def delete_user(
     user_id: int,
     current_user: User = Depends(require_super_admin),
@@ -293,14 +280,10 @@ async def delete_user(
     user.is_active = False
     await db.commit()
     
-    return {
-        "success": True,
-        "message": "User deleted successfully",
-        "data": {"user_id": user_id}
-    }
+    return api_response(data={"user_id": user_id}, message="User deleted successfully")
 
 
-@router.post("/{user_id}/activate")
+@router.post("/{user_id}/activate", response_model=ApiResponse[dict])
 async def activate_user(
     user_id: int,
     current_user: User = Depends(require_admin),
@@ -316,14 +299,10 @@ async def activate_user(
     user.is_active = True
     await db.commit()
     
-    return {
-        "success": True,
-        "message": "User activated successfully",
-        "data": {"user_id": user_id}
-    }
+    return api_response(data={"user_id": user_id}, message="User activated successfully")
 
 
-@router.post("/{user_id}/deactivate")
+@router.post("/{user_id}/deactivate", response_model=ApiResponse[dict])
 async def deactivate_user(
     user_id: int,
     current_user: User = Depends(require_admin),
@@ -342,14 +321,10 @@ async def deactivate_user(
     user.is_active = False
     await db.commit()
     
-    return {
-        "success": True,
-        "message": "User deactivated successfully",
-        "data": {"user_id": user_id}
-    }
+    return api_response(data={"user_id": user_id}, message="User deactivated successfully")
 
 
-@router.post("/{user_id}/reset-password")
+@router.post("/{user_id}/reset-password", response_model=ApiResponse[dict])
 async def reset_user_password(
     user_id: int,
     current_user: User = Depends(require_admin),
@@ -372,17 +347,13 @@ async def reset_user_password(
     user.hashed_password = auth_service.get_password_hash(temp_password)
     await db.commit()
     
-    return {
-        "success": True,
-        "message": "Password reset successfully",
-        "data": {
-            "user_id": user_id,
-            "temporary_password": temp_password
-        }
-    }
+    return api_response(
+        data={"user_id": user_id, "temporary_password": temp_password},
+        message="Password reset successfully",
+    )
 
 
-@router.get("/stats/overview")
+@router.get("/stats/overview", response_model=ApiResponse[dict])
 async def get_user_stats(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -412,14 +383,13 @@ async def get_user_stats(
     recent_result = await db.execute(recent_stmt)
     recent_count = recent_result.scalar()
     
-    return {
-        "success": True,
-        "message": "User statistics retrieved successfully",
-        "data": {
+    return api_response(
+        data={
             "total_users": sum(role_stats.values()),
             "role_distribution": role_stats,
             "active_users": active_count,
             "inactive_users": inactive_count,
-            "recent_registrations": recent_count
-        }
-    } 
+            "recent_registrations": recent_count,
+        },
+        message="User statistics retrieved successfully",
+    ) 
