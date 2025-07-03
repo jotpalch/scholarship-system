@@ -45,7 +45,7 @@ export interface User {
   id: string
   email: string
   username: string
-  role: 'student' | 'faculty' | 'admin' | 'super_admin'
+  role: 'student' | 'professor' | 'college' | 'admin' | 'super_admin'
   full_name: string
   name: string
   is_active: boolean
