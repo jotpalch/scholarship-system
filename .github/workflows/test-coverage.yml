@@ -38,7 +38,7 @@ jobs:
     - name: Run unit tests with coverage
       working-directory: ./backend
       env:
-        DATABASE_URL: sqlite+aiosqlite:///:memory:
+        DATABASE_URL: "sqlite+aiosqlite:///:memory:"
         SECRET_KEY: test-secret-key-for-unit-testing
         TESTING: true
       run: |
