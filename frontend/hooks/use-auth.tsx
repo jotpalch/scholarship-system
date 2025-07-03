@@ -1,14 +1,15 @@
 'use client'
 
 import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
 import { apiClient, User } from '@/lib/api'
 
 interface AuthContextType {
   user: User | null
   isLoading: boolean
   isAuthenticated: boolean
-  login: (username: string, password: string) => Promise<void>
   logout: () => void
+  login: (token: string, userData: User) => void
   updateUser: (userData: Partial<User>) => Promise<void>
   error: string | null
 }
@@ -16,43 +17,85 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const login = useCallback(async (username: string, password: string) => {
-    try {
-      setIsLoading(true)
-      setError(null)
+  // Check for existing authentication on mount
+  useEffect(() => {
+    const checkExistingAuth = () => {
+      console.log('Checking existing authentication...')
+      // Check if user is already authenticated (from localStorage)
+      const token = localStorage.getItem('auth_token')
+      const userJson = localStorage.getItem('user') || localStorage.getItem('dev_user')
       
-      const response = await apiClient.auth.login(username, password)
+      console.log('Found token:', !!token, 'Found user data:', !!userJson)
       
-      if (response.success && response.data) {
-        apiClient.setToken(response.data.access_token)
-        
-        // Get user info after login
-        const userResponse = await apiClient.auth.getCurrentUser()
-        if (userResponse.success && userResponse.data) {
-          // Map full_name to name for component compatibility
-          const userData = { ...userResponse.data, name: userResponse.data.full_name }
-          setUser(userData)
+      if (token && userJson) {
+        try {
+          const userData = JSON.parse(userJson)
+          console.log('Parsed user data:', userData)
+          apiClient.setToken(token)
+          setUser({ ...userData, name: userData.full_name || userData.name })
+          console.log('Authentication restored from localStorage')
+        } catch (err) {
+          console.error('Failed to parse stored user data:', err)
+          localStorage.removeItem('auth_token')
+          localStorage.removeItem('user')
+          localStorage.removeItem('dev_user')
         }
       } else {
-        throw new Error(response.message || 'Login failed')
+        console.log('No existing authentication found')
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
-      throw err
-    } finally {
       setIsLoading(false)
     }
+
+    checkExistingAuth()
+  }, [])
+
+  const login = useCallback((token: string, userData: User) => {
+    console.log('Setting authentication:', { token: !!token, userData })
+    apiClient.setToken(token)
+    localStorage.setItem("auth_token", token)
+    localStorage.setItem("user", JSON.stringify(userData))
+    
+    // Also store as dev_user for backwards compatibility
+    const devUser = {
+      ...userData,
+      name: userData.full_name || userData.name,
+    }
+    localStorage.setItem('dev_user', JSON.stringify(devUser))
+    
+    setUser({ ...userData, name: userData.full_name || userData.name })
+    setError(null)
+    console.log('Authentication set successfully')
   }, [])
 
   const logout = useCallback(() => {
+    console.log('Logging out...')
     apiClient.clearToken()
+    localStorage.removeItem('auth_token')
+    localStorage.removeItem('user')
+    localStorage.removeItem('dev_user')
     setUser(null)
     setError(null)
-  }, [])
+    
+    // Redirect to dev-login in development mode
+    if (typeof window !== 'undefined') {
+      const isLocalhost = window.location.hostname === 'localhost' || 
+                         window.location.hostname === '127.0.0.1' ||
+                         window.location.hostname.startsWith('192.168.') ||
+                         window.location.hostname.includes('dev')
+      
+      if (isLocalhost) {
+        router.push('/dev-login')
+      } else {
+        // In production, redirect to home page or SSO login
+        router.push('/')
+      }
+    }
+  }, [router])
 
   const updateUser = useCallback(async (userData: Partial<User>) => {
     try {
@@ -72,33 +115,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // Check for existing auth on mount
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const response = await apiClient.auth.getCurrentUser()
-        if (response.success && response.data) {
-          // Map full_name to name for component compatibility  
-          const userData = { ...response.data, name: response.data.full_name }
-          setUser(userData)
-        }
-      } catch (err) {
-        // User not authenticated or token expired
-        apiClient.clearToken()
-      } finally {
-        setIsLoading(false)
-      }
-    }
 
-    checkAuth()
-  }, [])
 
   const value: AuthContextType = {
     user,
     isLoading,
     isAuthenticated: !!user,
-    login,
     logout,
+    login,
     updateUser,
     error,
   }

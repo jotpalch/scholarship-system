@@ -1,29 +1,39 @@
 import { useState, useEffect, useCallback } from 'react'
 import { apiClient, Application, ApplicationCreate } from '@/lib/api'
+import { useAuth } from './use-auth'
 
 export function useApplications() {
+  const { isAuthenticated } = useAuth()
   const [applications, setApplications] = useState<Application[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const fetchApplications = useCallback(async (status?: string) => {
+    if (!isAuthenticated) {
+      console.log('User not authenticated, skipping application fetch')
+      return
+    }
+
     try {
       setIsLoading(true)
       setError(null)
       
       const response = await apiClient.applications.getMyApplications(status)
       
-      if (response.success && response.data) {
+      if (Array.isArray(response)) {
+        setApplications(response)
+      } else if (response.success && response.data) {
         setApplications(response.data)
       } else {
         throw new Error(response.message || 'Failed to fetch applications')
       }
     } catch (err) {
+      console.error('Error fetching applications:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch applications')
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [isAuthenticated])
 
   const createApplication = useCallback(async (applicationData: ApplicationCreate) => {
     try {
@@ -85,7 +95,7 @@ export function useApplications() {
 
   const updateApplication = useCallback(async (
     applicationId: number, 
-    applicationData: Partial<Application>
+    applicationData: Partial<ApplicationCreate>
   ) => {
     try {
       setError(null)
@@ -106,11 +116,11 @@ export function useApplications() {
     }
   }, [])
 
-  const uploadDocument = useCallback(async (applicationId: number, file: File) => {
+  const uploadDocument = useCallback(async (applicationId: number, file: File, fileType: string = 'other') => {
     try {
       setError(null)
       
-      const response = await apiClient.applications.uploadDocument(applicationId, file)
+      const response = await apiClient.applications.uploadDocument(applicationId, file, fileType)
       
       if (response.success) {
         // Refresh applications to get updated document info
@@ -127,8 +137,28 @@ export function useApplications() {
 
   // Fetch applications on mount
   useEffect(() => {
-    fetchApplications()
-  }, [fetchApplications])
+    if (isAuthenticated) {
+      fetchApplications()
+    }
+  }, [fetchApplications, isAuthenticated])
+
+  const saveApplicationDraft = useCallback(async (applicationData: ApplicationCreate) => {
+    try {
+      setError(null)
+      
+      const response = await apiClient.applications.saveApplicationDraft(applicationData)
+      
+      if (response.success && response.data) {
+        setApplications(prev => [response.data!, ...prev])
+        return response.data
+      } else {
+        throw new Error(response.message || 'Failed to save draft')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save draft')
+      throw err
+    }
+  }, [])
 
   return {
     applications,
@@ -136,6 +166,7 @@ export function useApplications() {
     error,
     fetchApplications,
     createApplication,
+    saveApplicationDraft,
     submitApplication,
     withdrawApplication,
     updateApplication,

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, useMemo } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -14,6 +14,8 @@ interface FileUploadProps {
   acceptedTypes?: string[]
   maxSize?: number
   maxFiles?: number
+  initialFiles?: File[] // 支持初始文件
+  fileType?: string // 文件類型標識符
 }
 
 export function FileUpload({
@@ -21,11 +23,29 @@ export function FileUpload({
   acceptedTypes = [".pdf", ".jpg", ".jpeg", ".png"],
   maxSize = 10 * 1024 * 1024, // 10MB
   maxFiles = 5,
+  initialFiles = [],
+  fileType = "",
 }: FileUploadProps) {
   const [files, setFiles] = useState<File[]>([])
   const [dragActive, setDragActive] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({})
   const [uploadStatus, setUploadStatus] = useState<{ [key: string]: "uploading" | "success" | "error" }>({})
+  
+  // 為每個組件生成穩定的唯一 ID
+  const inputId = useMemo(() => 
+    `file-upload-${fileType || 'default'}-${Math.random().toString(36).substr(2, 9)}`, 
+    [fileType]
+  )
+
+  // 檢查文件是否為已上傳的文件
+  const isUploadedFile = (file: File) => {
+    return (file as any).isUploaded === true
+  }
+
+  // 初始化和同步外部文件
+  useEffect(() => {
+    setFiles([...initialFiles])
+  }, [initialFiles])
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -74,9 +94,12 @@ export function FileUpload({
     setFiles(updatedFiles)
     onFilesChange(updatedFiles)
 
-    // Simulate upload progress
+    // Simulate upload progress for new files only
     validFiles.forEach((file) => {
-      const fileName = file.name
+      // 跳過已上傳的文件
+      if (isUploadedFile(file)) return
+      
+      const fileName = `${fileType}_${file.name}` // Add fileType prefix to avoid conflicts
       setUploadStatus((prev) => ({ ...prev, [fileName]: "uploading" }))
 
       let progress = 0
@@ -93,9 +116,25 @@ export function FileUpload({
   }
 
   const removeFile = (index: number) => {
+    const fileToRemove = files[index]
     const updatedFiles = files.filter((_, i) => i !== index)
     setFiles(updatedFiles)
     onFilesChange(updatedFiles)
+    
+    // Clean up progress and status for removed file
+    if (fileToRemove) {
+      const fileName = `${fileType}_${fileToRemove.name}`
+      setUploadProgress(prev => {
+        const newProgress = { ...prev }
+        delete newProgress[fileName]
+        return newProgress
+      })
+      setUploadStatus(prev => {
+        const newStatus = { ...prev }
+        delete newStatus[fileName]
+        return newStatus
+      })
+    }
   }
 
   const formatFileSize = (bytes: number) => {
@@ -104,6 +143,15 @@ export function FileUpload({
     const sizes = ["Bytes", "KB", "MB", "GB"]
     const i = Math.floor(Math.log(bytes) / Math.log(k))
     return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+  }
+
+  // 獲取文件的顯示大小
+  const getFileDisplaySize = (file: File) => {
+    // 如果是已上傳的文件，優先使用 originalSize
+    if (isUploadedFile(file) && (file as any).originalSize) {
+      return formatFileSize((file as any).originalSize)
+    }
+    return formatFileSize(file.size)
   }
 
   return (
@@ -132,10 +180,10 @@ export function FileUpload({
             accept={acceptedTypes.join(",")}
             onChange={handleChange}
             className="hidden"
-            id="file-upload"
+            id={inputId}
           />
           <Button asChild className="mt-4">
-            <label htmlFor="file-upload" className="cursor-pointer">
+            <label htmlFor={inputId} className="cursor-pointer">
               選擇檔案
             </label>
           </Button>
@@ -145,7 +193,7 @@ export function FileUpload({
       {files.length > 0 && (
         <div className="space-y-2">
           <h4 className="text-sm font-medium">
-            已上傳檔案 ({files.length}/{maxFiles})
+            已上傳檔案 ({files.length}/{maxFiles}) - {fileType || '未指定類型'}
           </h4>
           {files.map((file, index) => (
             <Card key={index}>
@@ -154,33 +202,58 @@ export function FileUpload({
                   <File className="h-4 w-4 text-muted-foreground" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{file.name}</p>
-                    <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {getFileDisplaySize(file)}
+                      {isUploadedFile(file) && (
+                        <span className="ml-1 text-blue-600">已上傳</span>
+                      )}
+                    </p>
                   </div>
                 </div>
 
                 <div className="flex items-center space-x-2">
-                  {uploadStatus[file.name] === "uploading" && (
-                    <div className="flex items-center space-x-2">
-                      <Progress value={uploadProgress[file.name] || 0} className="w-20 h-2" />
-                      <span className="text-xs text-muted-foreground">
-                        {Math.round(uploadProgress[file.name] || 0)}%
-                      </span>
-                    </div>
-                  )}
+                  {(() => {
+                    const fileName = `${fileType}_${file.name}`
+                    const isUploaded = isUploadedFile(file)
+                    
+                    // 如果是已上傳的文件，顯示已上傳狀態
+                    if (isUploaded) {
+                      return (
+                        <Badge variant="outline" className="text-xs">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          已存在
+                        </Badge>
+                      )
+                    }
+                    
+                    // 新上傳文件的狀態顯示
+                    return (
+                      <>
+                        {uploadStatus[fileName] === "uploading" && (
+                          <div className="flex items-center space-x-2">
+                            <Progress value={uploadProgress[fileName] || 0} className="w-20 h-2" />
+                            <span className="text-xs text-muted-foreground">
+                              {Math.round(uploadProgress[fileName] || 0)}%
+                            </span>
+                          </div>
+                        )}
 
-                  {uploadStatus[file.name] === "success" && (
-                    <Badge variant="default" className="text-xs">
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      完成
-                    </Badge>
-                  )}
+                        {uploadStatus[fileName] === "success" && (
+                          <Badge variant="default" className="text-xs">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            完成
+                          </Badge>
+                        )}
 
-                  {uploadStatus[file.name] === "error" && (
-                    <Badge variant="destructive" className="text-xs">
-                      <AlertCircle className="h-3 w-3 mr-1" />
-                      失敗
-                    </Badge>
-                  )}
+                        {uploadStatus[fileName] === "error" && (
+                          <Badge variant="destructive" className="text-xs">
+                            <AlertCircle className="h-3 w-3 mr-1" />
+                            失敗
+                          </Badge>
+                        )}
+                      </>
+                    )
+                  })()}
 
                   <Button variant="ghost" size="sm" onClick={() => removeFile(index)}>
                     <X className="h-4 w-4" />

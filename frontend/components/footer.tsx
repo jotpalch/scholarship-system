@@ -45,8 +45,8 @@ export function Footer({ locale = "zh" }: FooterProps) {
             <div className="bg-white/60 rounded-lg p-4 nycu-border">
               <p className="text-nycu-navy-700 text-sm leading-relaxed">
                 {locale === "zh"
-                  ? "本系統由教務處開發維護，提供學生獎學金申請、教師推薦、行政審核等完整流程管理，致力於提升獎學金作業效率與透明度，落實學校「智慧校園」願景。"
-                  : "This system is developed and maintained by the Office of Academic Affairs, providing comprehensive management for student scholarship applications, faculty recommendations, and administrative reviews, committed to improving efficiency and transparency in scholarship operations."}
+                  ? "本系統由教務處開發維護，提供學生獎學金申請、教授推薦、行政審核等完整流程管理，致力於提升獎學金作業效率與透明度，落實學校「智慧校園」願景。"
+                  : "This system is developed and maintained by the Office of Academic Affairs, providing comprehensive management for student scholarship applications, professor recommendations, and administrative reviews, committed to improving efficiency and transparency in scholarship operations."}
               </p>
             </div>
           </div>

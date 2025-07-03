@@ -35,11 +35,9 @@ export const translations = {
     // 獎學金類型
     scholarships: {
       undergraduate_freshman: "學士班新生獎學金",
-      phd_research: "博士生研究獎學金",
-      direct_phd: "逕博獎學金",
+      phd_nstc: "國科會博士生獎學金",
       phd_moe: "教育部博士生獎學金",
-      phd_nsc: "國科會博士生研究獎學金",
-      academic_excellence: "學術優秀獎學金",
+      direct_phd: "逕博獎學金"
     },
 
     // 狀態
@@ -156,9 +154,9 @@ export const translations = {
     // Scholarship Types
     scholarships: {
       undergraduate_freshman: "Undergraduate Freshman Scholarship",
-      phd_research: "PhD Research Scholarship",
-      direct_phd: "Direct PhD Scholarship",
+      phd_nstc: "PhD Research Scholarship",
       phd_moe: "MOE PhD Scholarship",
+      direct_phd: "Direct PhD Scholarship",
       phd_nsc: "NSC PhD Research Scholarship",
       academic_excellence: "Academic Excellence Scholarship",
     },
@@ -248,13 +246,25 @@ export const translations = {
   },
 }
 
-export function getTranslation(locale: Locale, key: string): string {
-  const keys = key.split(".")
+export function getTranslation(locale: 'zh' | 'en', key: string): string {
+  const keys = key.split('.')
   let value: any = translations[locale]
-
+  
   for (const k of keys) {
     value = value?.[k]
   }
-
+  
   return value || key
+}
+
+// Utility function to get Chinese scholarship type name by code
+export function getScholarshipTypeZh(scholarshipType: string): string {
+  const scholarshipTypeMap: Record<string, string> = {
+    "undergraduate_freshman": "學士班新生獎學金",
+    "phd_nstc": "國科會博士生獎學金", 
+    "phd_moe": "教育部博士生獎學金",
+    "direct_phd": "逕博獎學金"
+  }
+  
+  return scholarshipTypeMap[scholarshipType] || scholarshipType
 }

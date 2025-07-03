@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -16,12 +16,13 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Search, Eye, Edit, CheckCircle, Users, FileText } from "lucide-react"
+import apiClient from "@/lib/api"
 
 interface User {
   id: string
   name: string
   email: string
-  role: "student" | "faculty" | "admin" | "super_admin"
+  role: "student" | "professor" | "college" | "admin" | "super_admin"
 }
 
 interface ProfessorInterfaceProps {
@@ -29,39 +30,33 @@ interface ProfessorInterfaceProps {
 }
 
 export function ProfessorInterface({ user }: ProfessorInterfaceProps) {
+  const [studentApplications, setStudentApplications] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [selectedStudent, setSelectedStudent] = useState<any>(null)
+  const [recommendation, setRecommendation] = useState("")
+  const [selectedAwards, setSelectedAwards] = useState<string[]>([])
 
-  // 指導學生的獎學金申請
-  const [studentApplications] = useState([
-    {
-      id: "APP-2025-000199",
-      studentName: "李小華",
-      studentId: "D10901002",
-      type: "phd_research",
-      typeName: "博士班研究獎學金",
-      status: "pending_recommendation",
-      statusName: "待推薦",
-      submittedAt: "2025-06-02",
-      gpa: 3.75,
-      amount: 120000,
-      researchTopic: "深度學習在自然語言處理的應用研究",
-      needsRecommendation: true,
-    },
-    {
-      id: "APP-2025-000200",
-      studentName: "王小美",
-      studentId: "D10901001",
-      type: "direct_phd",
-      typeName: "逕博獎學金",
-      status: "recommended",
-      statusName: "已推薦",
-      submittedAt: "2025-05-28",
-      gpa: 3.88,
-      amount: 150000,
-      researchTopic: "區塊鏈技術在供應鏈管理的創新應用",
-      needsRecommendation: false,
-    },
-  ])
+  // Fetch applications for professor review
+  useEffect(() => {
+    const fetchApplications = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        // This endpoint may need to be adjusted if a dedicated professor review list exists
+        const res = await apiClient.request<any>(
+          "/applications/review/list?status=pending_recommendation"
+        )
+        setStudentApplications(res.data || [])
+      } catch (e: any) {
+        setError(e.message || "Failed to load applications")
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchApplications()
+  }, [])
 
   const getStatusColor = (status: string) => {
     const statusMap = {
@@ -74,9 +69,27 @@ export function ProfessorInterface({ user }: ProfessorInterfaceProps) {
     return statusMap[status as keyof typeof statusMap] || "secondary"
   }
 
-  const handleRecommend = (appId: string) => {
-    console.log(`Recommending application ${appId}`)
-    // API call to submit recommendation
+  const handleRecommend = async (appId: number) => {
+    setLoading(true)
+    setError(null)
+    setSuccess(null)
+    try {
+      await apiClient.applications.submitRecommendation(
+        appId,
+        "professor_recommendation",
+        recommendation,
+        selectedAwards
+      )
+      setSuccess("Recommendation submitted!")
+      setRecommendation("")
+      setSelectedAwards([])
+      // Optionally refetch applications
+      // ...
+    } catch (e: any) {
+      setError(e.message || "Failed to submit recommendation")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -216,16 +229,56 @@ export function ProfessorInterface({ user }: ProfessorInterfaceProps) {
 
                               {selectedStudent.needsRecommendation && (
                                 <div>
-                                  <label className="text-sm font-medium">指導教授推薦意見</label>
-                                  <Textarea placeholder="請輸入推薦意見與評語..." rows={4} className="mt-1" />
+                                  <label className="text-sm font-medium">選擇可申請獎學金組合</label>
+                                  <div className="flex flex-col gap-2 mt-2">
+                                    <label className="flex items-center gap-2">
+                                      <input
+                                        type="checkbox"
+                                        value="phd_nstc"
+                                        checked={selectedAwards.includes("phd_nstc")}
+                                        onChange={e => {
+                                          if (e.target.checked) setSelectedAwards([...selectedAwards, "phd_nstc"])
+                                          else setSelectedAwards(selectedAwards.filter(a => a !== "phd_nstc"))
+                                        }}
+                                      />
+                                      國科會博士生獎學金
+                                    </label>
+                                    <label className="flex items-center gap-2">
+                                      <input
+                                        type="checkbox"
+                                        value="phd_moe_1"
+                                        checked={selectedAwards.includes("phd_moe_1")}
+                                        onChange={e => {
+                                          if (e.target.checked) setSelectedAwards([...selectedAwards, "phd_moe_1"])
+                                          else setSelectedAwards(selectedAwards.filter(a => a !== "phd_moe_1"))
+                                        }}
+                                      />
+                                      教育部博士生獎學金+1萬
+                                    </label>
+                                    <label className="flex items-center gap-2">
+                                      <input
+                                        type="checkbox"
+                                        value="phd_moe_2"
+                                        checked={selectedAwards.includes("phd_moe_2")}
+                                        onChange={e => {
+                                          if (e.target.checked) setSelectedAwards([...selectedAwards, "phd_moe_2"])
+                                          else setSelectedAwards(selectedAwards.filter(a => a !== "phd_moe_2"))
+                                        }}
+                                      />
+                                      教育部博士生獎學金+2萬
+                                    </label>
+                                  </div>
                                 </div>
                               )}
 
                               {selectedStudent.needsRecommendation && (
                                 <div className="flex gap-2">
-                                  <Button onClick={() => handleRecommend(selectedStudent.id)}>
+                                  <Button
+                                    onClick={() => handleRecommend(selectedStudent.id)}
+                                    disabled={loading}
+                                  >
                                     <CheckCircle className="h-4 w-4 mr-1" />
-                                    提交推薦
+                                    {loading ? "Submitting..." : "提交推薦"}
                                   </Button>
                                 </div>
                               )}

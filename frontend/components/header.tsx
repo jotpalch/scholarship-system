@@ -12,14 +12,15 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { NationalityFlag } from "@/components/nationality-flag"
+import { NotificationButton } from "@/components/notification-button"
 import { getTranslation } from "@/lib/i18n"
-import { Bell, LogOut, Settings, User, GraduationCap } from "lucide-react"
+import { LogOut, Settings, User, GraduationCap } from "lucide-react"
 
 interface UserType {
   id: string
   name: string
   email: string
-  role: "student" | "faculty" | "admin" | "super_admin"
+  role: "student" | "professor" | "college" | "admin" | "super_admin"
   studentId?: string
   nationality?: string
 }
@@ -29,15 +30,17 @@ interface HeaderProps {
   locale: "zh" | "en"
   onLocaleChange: (locale: "zh" | "en") => void
   showLanguageSwitcher?: boolean
+  onLogout: () => void
 }
 
-export function Header({ user, locale, onLocaleChange, showLanguageSwitcher = false }: HeaderProps) {
+export function Header({ user, locale, onLocaleChange, showLanguageSwitcher = false, onLogout }: HeaderProps) {
   const t = (key: string) => getTranslation(locale, key)
 
   const getRoleBadge = (role: string) => {
     const roleMap = {
       student: { label: user.role === "student" ? t("roles.student") : "學生", variant: "default" as const },
-      faculty: { label: "教師", variant: "secondary" as const },
+      professor: { label: "教授", variant: "secondary" as const },
+      college: { label: "學院", variant: "secondary" as const },
       admin: { label: "管理員", variant: "destructive" as const },
       super_admin: { label: "系統管理員", variant: "destructive" as const },
     }
@@ -62,7 +65,7 @@ export function Header({ user, locale, onLocaleChange, showLanguageSwitcher = fa
                   <div className="flex items-center space-x-2">
                     <span className="font-bold text-xl nycu-text-gradient">NYCU</span>
                     <span className="text-sm font-medium text-nycu-navy-600">
-                      {locale === "zh" ? "陽明交大" : "Yang Ming Chiao Tung"}
+                      {locale === "zh" ? "陽明交大" : "National Yang Ming Chiao Tung University"}
                     </span>
                   </div>
                   <span className="text-xs text-nycu-navy-500 font-medium">
@@ -100,10 +103,7 @@ export function Header({ user, locale, onLocaleChange, showLanguageSwitcher = fa
             {showLanguageSwitcher && <LanguageSwitcher currentLocale={locale} onLocaleChange={onLocaleChange} />}
 
             {/* Notifications */}
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="h-5 w-5" />
-              <span className="absolute -top-1 -right-1 h-3 w-3 bg-nycu-orange-500 rounded-full text-xs"></span>
-            </Button>
+            <NotificationButton locale={locale} />
 
             {/* User Menu */}
             <DropdownMenu>
@@ -144,7 +144,7 @@ export function Header({ user, locale, onLocaleChange, showLanguageSwitcher = fa
                   <span>{user.role === "student" && locale === "en" ? "Settings" : "設定"}</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-red-600">
+                <DropdownMenuItem className="text-red-600" onClick={onLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>{user.role === "student" ? t("nav.logout") : "登出"}</span>
                 </DropdownMenuItem>

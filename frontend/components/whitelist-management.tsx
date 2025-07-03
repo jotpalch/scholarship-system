@@ -101,7 +101,7 @@ export function WhitelistManagement() {
           <FileText className="h-5 w-5" />
           學士班新生獎學金白名單管理
         </CardTitle>
-        <CardDescription>管理不符合GPA標準但可申請獎學金的學生名單</CardDescription>
+        <CardDescription>管理可申請獎學金的學生白名單 - 僅限白名單內的學生才能申請</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between">
@@ -116,7 +116,7 @@ export function WhitelistManagement() {
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>新增白名單學生</DialogTitle>
-                  <DialogDescription>新增不符合GPA標準但可申請獎學金的學生</DialogDescription>
+                  <DialogDescription>新增可申請獎學金的學生至白名單</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -156,11 +156,11 @@ export function WhitelistManagement() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>加入原因 *</Label>
+                    <Label>核准原因 *</Label>
                     <Textarea
                       value={newStudent.reason}
                       onChange={(e) => setNewStudent({ ...newStudent, reason: e.target.value })}
-                      placeholder="請說明加入白名單的原因..."
+                      placeholder="請說明核准該學生申請獎學金的原因..."
                       rows={3}
                     />
                   </div>
@@ -205,7 +205,7 @@ export function WhitelistManagement() {
                 <TableHead>姓名</TableHead>
                 <TableHead>系所</TableHead>
                 <TableHead>GPA</TableHead>
-                <TableHead>加入原因</TableHead>
+                <TableHead>核准原因</TableHead>
                 <TableHead>新增日期</TableHead>
                 <TableHead>操作</TableHead>
               </TableRow>
@@ -217,7 +217,7 @@ export function WhitelistManagement() {
                   <TableCell>{student.studentName}</TableCell>
                   <TableCell>{student.department}</TableCell>
                   <TableCell>
-                    <Badge variant={student.gpa < 3.38 ? "destructive" : "default"}>{student.gpa}</Badge>
+                    <Badge variant="default">{student.gpa}</Badge>
                   </TableCell>
                   <TableCell className="max-w-xs">
                     <div className="truncate" title={student.reason}>
