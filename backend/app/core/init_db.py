@@ -633,7 +633,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
         name_en="Doctoral Scholarship",
         description="國科會與教育部聯合博士生獎學金",
         description_en="Combined MOST and MOE doctoral scholarship",
-        category=ScholarshipCategory.DOCTORAL,
+        category=ScholarshipCategory.DOCTORAL.value,
         sub_scholarships=[
             {
                 "code": "doctoral_most",
