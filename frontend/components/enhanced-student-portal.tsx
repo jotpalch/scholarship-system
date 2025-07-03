@@ -200,7 +200,13 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
   }, [])
 
   // Form state for new application
-  const [newApplicationData, setNewApplicationData] = useState({
+  interface NewApplicationData {
+    scholarship_type: string
+    category_id?: number
+    sub_type?: string
+  }
+
+  const [newApplicationData, setNewApplicationData] = useState<NewApplicationData>({
     scholarship_type: '',
   })
   
@@ -360,6 +366,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     // Build application with minimum required data (works with or without studentData)
     const applicationData = {
       scholarship_type: newApplicationData.scholarship_type,
+      category_id: newApplicationData.category_id,
+      sub_type: newApplicationData.sub_type,
       academic_year: truncateString(academicYear, 10), // Max 10 chars
       semester: truncateString(semester, 10), // Max 10 chars
       contact_email: user.email, // Always available from user
@@ -755,7 +763,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     setNewApplicationData({
       scholarship_type: application.scholarship_type,
     })
-    setSelectedScholarship(eligibleScholarships.find(s => s.code === application.scholarship_type) || null)
+    const scholarship = eligibleScholarships.find((s: ScholarshipType) => s.code === application.scholarship_type)
+    setSelectedScholarship(scholarship || null)
     
     // 載入已上傳的文件
     await fetchApplicationFiles(application.id)
@@ -799,6 +808,22 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     
     // 切換到新增申請頁面
     setActiveTab("new-application")
+
+    // Reset files if required docs differ
+    const currentDocs = selectedScholarship?.required_documents || []
+    const newDocs = scholarship?.required_documents || []
+    const docsChanged = JSON.stringify(currentDocs.sort()) !== JSON.stringify(newDocs.sort())
+    if (docsChanged) {
+      setUploadedFiles((prev) => {
+        const filtered: { [key: string]: File[] } = {}
+        for (const docType of newDocs) {
+          if (prev[docType]) {
+            filtered[docType] = prev[docType]
+          }
+        }
+        return filtered
+      })
+    }
   }
 
   // Loading state
@@ -1071,27 +1096,48 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
             <CardContent className="space-y-6">
               {/* Form fields */}
               <div className="space-y-4">
+                {/* Category Select */}
                 <div>
-                  <Label htmlFor="scholarship_type">{locale === "zh" ? "獎學金類型" : "Scholarship Type"} *</Label>
+                  <Label htmlFor="category_select">{locale === "zh" ? "獎學金大類" : "Scholarship Category"} *</Label>
+                  <Select
+                    value={selectedCategoryId ? String(selectedCategoryId) : ""}
+                    onValueChange={(value) => {
+                      const idNum = Number(value)
+                      setSelectedCategoryId(idNum)
+                      setNewApplicationData((prev) => ({ ...prev, category_id: idNum, scholarship_type: "", sub_type: undefined }))
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={locale === "zh" ? "選擇獎學金大類" : "Select category"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={String(cat.id)}>
+                          {locale === "zh" ? cat.nameZh : cat.nameEn || cat.nameZh}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Sub-type Select */}
+                <div>
+                  <Label htmlFor="scholarship_type">{locale === "zh" ? "獎學金子類" : "Scholarship Sub-type"} *</Label>
                   <Select 
                     value={newApplicationData.scholarship_type} 
                     onValueChange={(value) => {
-                      setNewApplicationData(prev => ({ ...prev, scholarship_type: value }))
-                      const scholarship = eligibleScholarships.find(s => s.code === value)
+                      const scholarship = eligibleScholarships.find((s: ScholarshipType) => s.code === value)
+                      setNewApplicationData((prev) => ({ ...prev, scholarship_type: value, sub_type: scholarship?.sub_type }))
                       setSelectedScholarship(scholarship || null)
-                      // Only reset files if scholarship has different required documents
-                      const newScholarship = scholarship
-                      const currentRequiredDocs = selectedScholarship?.required_documents || []
-                      const newRequiredDocs = newScholarship?.required_documents || []
-                      
-                      // Check if the required documents are different
-                      const docsChanged = JSON.stringify(currentRequiredDocs.sort()) !== JSON.stringify(newRequiredDocs.sort())
-                      
+
+                      // Reset files if required docs differ
+                      const currentDocs = selectedScholarship?.required_documents || []
+                      const newDocs = scholarship?.required_documents || []
+                      const docsChanged = JSON.stringify(currentDocs.sort()) !== JSON.stringify(newDocs.sort())
                       if (docsChanged) {
-                        // Only clear files for documents that are no longer required
-                        setUploadedFiles(prev => {
+                        setUploadedFiles((prev) => {
                           const filtered: { [key: string]: File[] } = {}
-                          for (const docType of newRequiredDocs) {
+                          for (const docType of newDocs) {
                             if (prev[docType]) {
                               filtered[docType] = prev[docType]
                             }
@@ -1102,11 +1148,11 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={locale === "zh" ? "選擇獎學金類型" : "Select scholarship type"} />
+                      <SelectValue placeholder={locale === "zh" ? "選擇獎學金子類" : "Select sub-type"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {eligibleScholarships.map((scholarship) => (
-                        <SelectItem key={scholarship.id} value={scholarship.code}>
+                      {filteredScholarships.map((scholarship) => (
+                        <SelectItem key={scholarship.code} value={scholarship.code}>
                           {scholarship.name}
                         </SelectItem>
                       ))}
