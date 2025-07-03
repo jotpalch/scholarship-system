@@ -70,3 +70,62 @@
 
 * Always add new sub-types to `ScholarshipSubType` enum & Alembic enum if needed.
 * Ensure GPA rules defined per sub-type in `SCHOLARSHIP_GPA_REQUIREMENTS`.
+
+## 6. Component Usage (Frontend)
+
+### useScholarshipCategories Hook
+
+```tsx
+import { useScholarshipCategories } from '@/hooks/useScholarshipCategories'
+
+function ScholarshipPicker() {
+  const { categories, getSubTypes } = useScholarshipCategories()
+  const [categoryId, setCategoryId] = useState<number>()
+  const [subTypes, setSubTypes] = useState<ScholarshipType[]>([])
+
+  return (
+    <>
+      <Select onValueChange={v => {
+        const id = Number(v)
+        setCategoryId(id)
+        getSubTypes(id).then(setSubTypes)
+      }}>
+        {categories.map(c => (
+          <SelectItem key={c.id} value={String(c.id)}>{c.nameZh}</SelectItem>
+        ))}
+      </Select>
+      <Select>
+        {subTypes.map(s => (
+          <SelectItem key={s.code} value={s.code}>{s.name}</SelectItem>
+        ))}
+      </Select>
+    </>
+  )
+}
+```
+
+### EnhancedStudentPortal
+
+* Shows **Category** & **Sub-type** dropdowns.
+* Auto-clears files if sub-type changes.
+* Sends `category_id` & `sub_type` when saving or submitting.
+
+---
+
+## 7. Testing Strategy
+
+### Unit
+* `hooks/useScholarshipCategories` mocked API call
+
+### Integration
+* React Testing Library tests for ScholarshipPicker (not shown)
+
+### End-to-End
+* Playwright – `e2e/scholarship-category-flow.spec.ts`
+  1. Login as student
+  2. Open **New Application** tab
+  3. Select Category "博士獎學金"
+  4. Verify sub-type list contains 國科會 / 教育部 options
+  5. Pick 國科會, ensure selection persists
+
+> E2E runs via `npm run test:e2e` and is executed in CI Docker stack.
