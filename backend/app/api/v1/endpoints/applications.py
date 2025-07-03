@@ -7,11 +7,17 @@ from fastapi import APIRouter, Depends, status, Query, Path, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.deps import get_db
+from app.schemas.response import ApiResponse
 from app.schemas.application import (
-    ApplicationCreate, ApplicationUpdate, ApplicationResponse,
-    ApplicationListResponse, ApplicationStatusUpdate, DashboardStats, ApplicationReviewCreate, ProfessorReviewCreate
+    ApplicationCreate,
+    ApplicationUpdate,
+    ApplicationResponse,
+    ApplicationListResponse,
+    ApplicationStatusUpdate,
+    DashboardStats,
+    ApplicationReviewCreate,
+    ProfessorReviewCreate,
 )
-from app.schemas.common import MessageResponse
 from app.services.application_service import ApplicationService
 from app.services.minio_service import minio_service
 from app.core.security import get_current_user, require_student, require_staff
@@ -20,7 +26,7 @@ from app.models.user import User
 router = APIRouter()
 
 
-@router.post("/", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ApiResponse[ApplicationResponse], status_code=status.HTTP_201_CREATED)
 async def create_application(
     application_data: ApplicationCreate,
     current_user: User = Depends(require_student),
@@ -28,10 +34,18 @@ async def create_application(
 ):
     """Create a new scholarship application"""
     service = ApplicationService(db)
-    return await service.create_application(current_user, application_data)
+    application = await service.create_application(current_user, application_data)
+
+    # Standardized response
+    from app.utils.response import api_response
+
+    return api_response(
+        data=application,
+        message="Application created successfully",
+    )
 
 
-@router.post("/draft", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/draft", response_model=ApiResponse[ApplicationResponse], status_code=status.HTTP_201_CREATED)
 async def save_application_draft(
     application_data: ApplicationCreate,
     current_user: User = Depends(require_student),
@@ -39,7 +53,14 @@ async def save_application_draft(
 ):
     """Save application as draft"""
     service = ApplicationService(db)
-    return await service.save_application_draft(current_user, application_data)
+    application = await service.save_application_draft(current_user, application_data)
+
+    from app.utils.response import api_response
+
+    return api_response(
+        data=application,
+        message="Draft saved successfully",
+    )
 
 
 @router.get("/", response_model=List[ApplicationListResponse])

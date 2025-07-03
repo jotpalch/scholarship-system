@@ -108,6 +108,27 @@ class ApplicationService:
         if scholarship.max_completed_terms and application_data.completed_terms is not None and application_data.completed_terms > scholarship.max_completed_terms:
             raise ValidationError(f"Completed terms {application_data.completed_terms} exceeds maximum {scholarship.max_completed_terms}")
         
+        # ------------------------------------------------------------------
+        # GPA validation (must consider sub-scholarship requirements)
+        # ------------------------------------------------------------------
+
+        # Determine minimal GPA requirement among the main scholarship and its sub-scholarships (if any)
+        min_required_gpa: Optional[Decimal] = scholarship.min_gpa if scholarship.min_gpa is not None else None
+
+        # If the scholarship is combined, inspect sub-scholarships for GPA rules
+        if scholarship.is_combined:
+            for sub in scholarship.get_sub_scholarships():
+                if sub.min_gpa is not None:
+                    if min_required_gpa is None or sub.min_gpa < min_required_gpa:
+                        min_required_gpa = sub.min_gpa
+
+        # Perform GPA check if requirement exists and application GPA provided
+        if min_required_gpa is not None and application_data.gpa is not None:
+            if Decimal(application_data.gpa) < Decimal(min_required_gpa):
+                raise ValidationError(
+                    f"GPA {application_data.gpa} does not meet minimum requirement {min_required_gpa} for this scholarship"
+                )
+        
         # Check for existing active applications
         # In the new design, we need to get user ID differently
         # For now, we'll pass it as a parameter or check via student_id
@@ -147,6 +168,13 @@ class ApplicationService:
         result = await self.db.execute(stmt)
         scholarship = result.scalar_one_or_none()
         
+        # Resolve sub-scholarship if provided
+        sub_scholarship: Optional[ScholarshipType] = None
+        if getattr(application_data, "sub_scholarship_type_id", None):
+            sub_stmt = select(ScholarshipType).where(ScholarshipType.id == application_data.sub_scholarship_type_id)
+            sub_result = await self.db.execute(sub_stmt)
+            sub_scholarship = sub_result.scalar_one_or_none()
+        
         # Create application
         app_id = self._generate_app_id()
         application = Application(
@@ -172,6 +200,8 @@ class ApplicationService:
             budget_plan=application_data.budget_plan,
             milestone_plan=application_data.milestone_plan,
             agree_terms=application_data.agree_terms,
+            scholarship_type_id=scholarship.id if scholarship else None,
+            sub_scholarship_type_id=sub_scholarship.id if sub_scholarship else None,
             form_data=self._serialize_for_json(application_data.model_dump())
         )
         
