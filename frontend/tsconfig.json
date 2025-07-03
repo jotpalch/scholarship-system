@@ -27,7 +27,7 @@
         "./*"
       ]
     },
-    "types": ["jest", "node"]
+    "types": ["react", "jest", "node"]
   },
   "include": [
     "next-env.d.ts",
