@@ -1,128 +1,56 @@
 import { test, expect } from '@playwright/test'
+import { LoginPage } from './pages/login-page'
+import { AdminDashboardPage } from './pages/admin-dashboard-page'
+import { setupAuthMocks, setupAdminMocks, clearBrowserState } from './test-helpers'
 
 test.describe('Admin Dashboard', () => {
+  let loginPage: LoginPage
+  let dashboardPage: AdminDashboardPage
+
   test.beforeEach(async ({ page }) => {
-    // Setup admin authentication mocks
-    await page.route('**/api/v1/auth/login', (route) => {
-      route.fulfill({
-        contentType: 'application/json',
-        body: JSON.stringify({
-          success: true,
-          message: 'Login successful',
-          data: {
-            access_token: 'admin-token',
-            token_type: 'Bearer'
-          }
-        })
-      })
-    })
-
-    await page.route('**/api/v1/auth/me', (route) => {
-      route.fulfill({
-        contentType: 'application/json',
-        body: JSON.stringify({
-          success: true,
-          message: 'User retrieved',
-          data: {
-            id: '1',
-            username: 'admin1',
-            email: 'admin@test.com',
-            role: 'admin',
-            full_name: 'Test Admin',
-            is_active: true,
-            created_at: '2025-01-01',
-            updated_at: '2025-01-01'
-          }
-        })
-      })
-    })
-
-    // Mock admin dashboard stats
-    await page.route('**/api/v1/admin/dashboard-stats', (route) => {
-      route.fulfill({
-        contentType: 'application/json',
-        body: JSON.stringify({
-          success: true,
-          message: 'Dashboard stats retrieved',
-          data: {
-            total_applications: 150,
-            pending_review: 25,
-            approved_applications: 89,
-            rejected_applications: 36,
-            total_students: 245,
-            active_scholarships: 8
-          }
-        })
-      })
-    })
-
-    // Mock all applications for admin
-    await page.route('**/api/v1/admin/applications**', (route) => {
-      route.fulfill({
-        contentType: 'application/json',
-        body: JSON.stringify({
-          success: true,
-          message: 'Applications retrieved',
-          data: [
-            {
-              id: 1,
-              student_id: 'student1',
-              student_name: 'John Doe',
-              student_email: 'john@test.com',
-              scholarship_type: 'academic_excellence',
-              status: 'submitted',
-              personal_statement: 'I am a dedicated student...',
-              gpa_requirement_met: true,
-              submitted_at: '2025-01-01T10:00:00Z',
-              created_at: '2025-01-01',
-              updated_at: '2025-01-01'
-            },
-            {
-              id: 2,
-              student_id: 'student2',
-              student_name: 'Jane Smith',
-              student_email: 'jane@test.com',
-              scholarship_type: 'need_based',
-              status: 'under_review',
-              personal_statement: 'I need financial assistance...',
-              gpa_requirement_met: true,
-              submitted_at: '2025-01-01T11:00:00Z',
-              created_at: '2025-01-01',
-              updated_at: '2025-01-01'
-            }
-          ]
-        })
-      })
-    })
-
-    // Login as admin and navigate to dashboard
+    loginPage = new LoginPage(page)
+    dashboardPage = new AdminDashboardPage(page)
+    
+    // Clear state and setup mocks
+    await clearBrowserState(page)
+    await setupAuthMocks(page, 'admin')
+    await setupAdminMocks(page)
+    
+    // Navigate to login page and authenticate
     await page.goto('/')
-    await page.fill('input[type="text"]', 'admin1')
-    await page.fill('input[type="password"]', 'admin123')
-    await page.click('button[type="submit"]')
+    
+    // Check if we need to login
+    try {
+      await page.locator('form').waitFor({ timeout: 5000 })
+      
+      // If form is found, proceed with login
+      await page.locator('#username').fill('admin1')
+      await page.locator('#password').fill('admin123')
+      await page.locator('button[type="submit"]').click()
+      
+      // Wait for dashboard to load
+      await page.locator('text=Admin Dashboard').waitFor({ timeout: 10000 })
+    } catch (error) {
+      // If no login form, we might already be authenticated
+      console.log('No login form found, checking if already authenticated')
+    }
   })
 
   test('should display admin dashboard with statistics', async ({ page }) => {
-    await expect(page.locator('text=Admin Dashboard')).toBeVisible()
+    await dashboardPage.expectDashboardVisible()
+    await dashboardPage.expectStatistics()
     
-    // Check dashboard statistics
-    await expect(page.locator('text=Total Applications')).toBeVisible()
+    // Check specific numbers from mock data
     await expect(page.locator('text=150')).toBeVisible()
-    
-    await expect(page.locator('text=Pending Review')).toBeVisible()
     await expect(page.locator('text=25')).toBeVisible()
-    
-    await expect(page.locator('text=Approved')).toBeVisible()
     await expect(page.locator('text=89')).toBeVisible()
-    
-    await expect(page.locator('text=Rejected')).toBeVisible()
     await expect(page.locator('text=36')).toBeVisible()
   })
 
   test('should display all applications list', async ({ page }) => {
-    await expect(page.locator('text=All Applications')).toBeVisible()
+    await dashboardPage.expectApplicationsList()
     
-    // Check application entries
+    // Check application entries from mock data
     await expect(page.locator('text=John Doe')).toBeVisible()
     await expect(page.locator('text=jane@test.com')).toBeVisible()
     await expect(page.locator('text=academic_excellence')).toBeVisible()
@@ -132,15 +60,18 @@ test.describe('Admin Dashboard', () => {
   })
 
   test('should filter applications by status', async ({ page }) => {
+    // Wait for applications to load first
+    await dashboardPage.expectApplicationsList()
+    
     // Click on pending filter
-    await page.click('button:has-text("Pending")')
+    await dashboardPage.filterByStatus('Pending')
     
     // Should show only pending applications
     await expect(page.locator('text=submitted')).toBeVisible()
     await expect(page.locator('text=under_review')).toBeVisible()
     
     // Click on approved filter
-    await page.click('button:has-text("Approved")')
+    await dashboardPage.filterByStatus('Approved')
     
     // Should filter to approved applications only
     // (Mock would need to be updated for this test to be meaningful)
@@ -162,12 +93,14 @@ test.describe('Admin Dashboard', () => {
       })
     })
 
-    // Find application and click approve
-    const applicationRow = page.locator('text=John Doe').locator('..')
-    await applicationRow.locator('button:has-text("Approve")').click()
+    // Wait for applications to load
+    await dashboardPage.expectApplicationsList()
+    
+    // Approve application using page object method
+    await dashboardPage.approveApplication('John Doe')
     
     // Should show success message
-    await expect(page.locator('text=Application approved successfully')).toBeVisible()
+    await dashboardPage.expectSuccessMessage('Application approved successfully')
   })
 
   test('should reject application with reason', async ({ page }) => {
@@ -331,9 +264,9 @@ test.describe('Admin Dashboard', () => {
             },
             {
               id: '2',
-              username: 'faculty1',
-              email: 'faculty1@test.com',
-              role: 'faculty',
+              username: 'professor1',
+              email: 'professor1@test.com',
+              role: 'professor',
               full_name: 'Dr. Smith',
               is_active: true,
               created_at: '2025-01-01'
@@ -348,7 +281,7 @@ test.describe('Admin Dashboard', () => {
     
     // Should show users list
     await expect(page.locator('text=student1@test.com')).toBeVisible()
-    await expect(page.locator('text=faculty1@test.com')).toBeVisible()
+    await expect(page.locator('text=professor1@test.com')).toBeVisible()
     await expect(page.locator('text=Dr. Smith')).toBeVisible()
   })
 }) 

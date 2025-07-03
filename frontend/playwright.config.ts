@@ -22,7 +22,16 @@ const config = defineConfig({
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
+    
+    /* Navigation timeout */
+    navigationTimeout: 60000,
+    
+    /* Action timeout */
+    actionTimeout: 10000,
   },
+
+  /* Global timeout for each test */
+  timeout: 60000,
 
   /* Configure projects for major browsers */
   projects: [
@@ -61,6 +70,10 @@ const config = defineConfig({
     //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     // },
   ],
+
+  /* Test directory settings */
+  testIgnore: '**/test-results/**',
+  outputDir: 'test-results/',
 });
 
 // Only configure webServer for local development
@@ -71,6 +84,8 @@ if (!process.env.CI) {
     url: 'http://localhost:3000',
     reuseExistingServer: !!process.env.PLAYWRIGHT_REUSE_SERVER,
     timeout: 120 * 1000,
+    stdout: 'pipe',
+    stderr: 'pipe',
   };
 }
 

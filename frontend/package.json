@@ -15,8 +15,12 @@
     "test:ci": "jest --config=jest.config.standalone.js --coverage --watchAll=false --ci",
     "test:watch": "jest --watch",
     "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
+    "test:e2e": "./run-e2e-tests.sh",
+    "test:e2e:docker": "./run-e2e-tests.sh docker",
+    "test:e2e:ui": "./run-e2e-tests.sh ui",
+    "test:e2e:debug": "./run-e2e-tests.sh debug",
+    "test:e2e:headed": "./run-e2e-tests.sh headed",
+    "test:api": "node test-api-connection.js",
     "dev:safe": "npm run test:api && npm run dev"
   },
   "dependencies": {
@@ -38,7 +42,7 @@
     "@radix-ui/react-progress": "1.1.1",
     "@radix-ui/react-radio-group": "1.2.2",
     "@radix-ui/react-scroll-area": "1.2.2",
-    "@radix-ui/react-select": "2.1.4",
+    "@radix-ui/react-select": "^2.1.4",
     "@radix-ui/react-separator": "1.1.1",
     "@radix-ui/react-slider": "1.2.2",
     "@radix-ui/react-slot": "1.1.1",

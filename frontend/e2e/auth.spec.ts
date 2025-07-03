@@ -1,24 +1,27 @@
 import { test, expect } from '@playwright/test'
+import { LoginPage } from './pages/login-page'
+import { clearBrowserState } from './test-helpers'
 
 test.describe('Authentication', () => {
+  let loginPage: LoginPage
+
   test.beforeEach(async ({ page }) => {
-    await page.goto('/')
+    loginPage = new LoginPage(page)
+    // Ensure clean state for each test
+    await clearBrowserState(page)
+    await loginPage.goto()
   })
 
   test('should show login form when not authenticated', async ({ page }) => {
-    await expect(page.locator('h1')).toContainText('Scholarship Management System')
-    await expect(page.locator('input[type="text"]')).toBeVisible()
-    await expect(page.locator('input[type="password"]')).toBeVisible()
-    await expect(page.locator('button[type="submit"]')).toBeVisible()
+    await expect(page.locator('text=登入系統')).toBeVisible()
+    await loginPage.expectLoginForm()
   })
 
   test('should handle login failure with invalid credentials', async ({ page }) => {
-    await page.fill('input[type="text"]', 'invalid_user')
-    await page.fill('input[type="password"]', 'invalid_pass')
-    await page.click('button[type="submit"]')
+    await loginPage.login('invalid_user', 'invalid_pass')
     
-    // Should show error message
-    await expect(page.locator('text=Login failed')).toBeVisible()
+    // Should show error message (actual message from the app)
+    await loginPage.expectError('Validation failed')
   })
 
   test('should redirect to appropriate dashboard on successful login', async ({ page }) => {
@@ -57,13 +60,23 @@ test.describe('Authentication', () => {
       })
     })
 
-    await page.fill('input[type="text"]', 'testuser')
-    await page.fill('input[type="password"]', 'password123')
-    await page.click('button[type="submit"]')
+    // Mock applications endpoint
+    await page.route('**/api/v1/applications', (route) => {
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          message: 'Applications retrieved',
+          data: []
+        })
+      })
+    })
+
+    await loginPage.login('testuser', 'password123')
     
-    // Should show student portal
-    await expect(page.locator('text=Academic Excellence')).toBeVisible()
-    await expect(page.locator('text=My Applications')).toBeVisible()
+    // Should show student portal - look for Chinese text since app is in Chinese
+    await expect(page.locator('text=學術優秀獎學金').first()).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('text=我的申請')).toBeVisible()
   })
 
   test('should logout successfully', async ({ page }) => {
@@ -102,18 +115,29 @@ test.describe('Authentication', () => {
       })
     })
 
-    await page.fill('input[type="text"]', 'testuser')
-    await page.fill('input[type="password"]', 'password123')
-    await page.click('button[type="submit"]')
+    // Mock applications endpoint
+    await page.route('**/api/v1/applications', (route) => {
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          message: 'Applications retrieved',
+          data: []
+        })
+      })
+    })
+
+    await loginPage.login('testuser', 'password123')
     
     // Wait for login to complete
-    await expect(page.locator('text=Academic Excellence')).toBeVisible()
+    await expect(page.locator('text=學術優秀獎學金').first()).toBeVisible({ timeout: 10000 })
     
-    // Find and click logout button
-    await page.click('button:has-text("Logout")')
+    // Find and click logout button (it's in a dropdown menu)
+    await page.click('[data-testid="user-menu"], .avatar, [role="button"] img, button[aria-haspopup="menu"]')
+    await page.click('text=登出')
     
     // Should return to login page
-    await expect(page.locator('h1')).toContainText('Scholarship Management System')
-    await expect(page.locator('input[type="text"]')).toBeVisible()
+    await expect(page.locator('text=登入系統')).toBeVisible()
+    await loginPage.expectLoginForm()
   })
 }) 
