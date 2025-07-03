@@ -45,6 +45,7 @@ module.exports = {
     '^@/components/ui/(.*)$': '<rootDir>/components/ui/$1',
     '^@/lib/(.*)$': '<rootDir>/lib/$1',
     '^@/hooks/(.*)$': '<rootDir>/hooks/$1',
+    '^@/components/(.*)$': '<rootDir>/components/$1',
   },
 
   // Module directories
