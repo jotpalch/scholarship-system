@@ -81,6 +81,8 @@ export interface Application {
 
 export interface ApplicationCreate {
   scholarship_type: string
+  scholarship_type_id?: number  // 主獎學金ID
+  sub_scholarship_type_id?: number  // 子獎學金ID (用於合併獎學金)
   academic_year?: string
   semester?: string
   gpa?: number
@@ -173,6 +175,10 @@ export interface ScholarshipType {
   name_en?: string
   description?: string
   description_en?: string
+  category: 'doctoral' | 'undergraduate' | 'master' | 'special'
+  sub_type: 'most' | 'moe' | 'general'
+  is_combined: boolean
+  parent_scholarship_id?: number
   amount: number
   currency: string
   eligible_student_types?: string[]
@@ -193,6 +199,8 @@ export interface ScholarshipType {
   updated_at: string
   created_by?: number
   updated_by?: number
+  sub_scholarships?: ScholarshipType[]
+  parent_scholarship?: ScholarshipType
 }
 
 // User management types
@@ -531,6 +539,38 @@ class ApiClient {
     
     getAll: async (): Promise<ApiResponse<ScholarshipType[]>> => {
       return this.request('/scholarships')
+    },
+    
+    // Get combined scholarships
+    getCombined: async (): Promise<ApiResponse<ScholarshipType[]>> => {
+      return this.request('/scholarships/combined/list')
+    },
+    
+    // Create combined doctoral scholarship
+    createCombinedDoctoral: async (data: {
+      name: string
+      name_en: string
+      description: string
+      description_en: string
+      application_start_date?: string
+      application_end_date?: string
+      sub_scholarships?: Array<{
+        code: string
+        name: string
+        name_en?: string
+        description?: string
+        description_en?: string
+        sub_type: 'most' | 'moe'
+        amount: number
+        min_gpa?: number
+        max_ranking_percent?: number
+        required_documents?: string[]
+      }>
+    }): Promise<ApiResponse<ScholarshipType>> => {
+      return this.request('/scholarships/combined/doctoral', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      })
     }
   }
 

@@ -19,6 +19,21 @@ class ScholarshipStatus(enum.Enum):
     DRAFT = "draft"
 
 
+class ScholarshipCategory(enum.Enum):
+    """Scholarship category enum"""
+    DOCTORAL = "doctoral"  # 博士獎學金
+    UNDERGRADUATE = "undergraduate"  # 學士獎學金
+    MASTER = "master"  # 碩士獎學金
+    SPECIAL = "special"  # 特殊獎學金
+
+
+class ScholarshipSubType(enum.Enum):
+    """Scholarship sub-type enum for combined scholarships"""
+    MOST = "most"  # 國科會 (Ministry of Science and Technology)
+    MOE = "moe"    # 教育部 (Ministry of Education)
+    GENERAL = "general"  # 一般（非合併獎學金）
+
+
 class ScholarshipType(Base):
     """Scholarship type configuration model"""
     __tablename__ = "scholarship_types"
@@ -29,6 +44,12 @@ class ScholarshipType(Base):
     name_en = Column(String(200))
     description = Column(Text)
     description_en = Column(Text)
+    
+    # 類別設定 - 支援合併獎學金
+    category = Column(String(50), nullable=False, default=ScholarshipCategory.SPECIAL.value)
+    sub_type = Column(String(50), nullable=False, default=ScholarshipSubType.GENERAL.value)
+    is_combined = Column(Boolean, default=False)  # 是否為合併獎學金
+    parent_scholarship_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=True)  # 父獎學金ID（用於合併獎學金）
     
     # 金額設定
     amount = Column(Numeric(10, 2), nullable=False)
@@ -68,6 +89,7 @@ class ScholarshipType(Base):
     
     # 關聯
     rules = relationship("ScholarshipRule", back_populates="scholarship_type", cascade="all, delete-orphan")
+    parent_scholarship = relationship("ScholarshipType", remote_side=[id], backref="sub_scholarships")
 
     def __repr__(self):
         return f"<ScholarshipType(id={self.id}, code={self.code}, name={self.name})>"
@@ -84,6 +106,31 @@ class ScholarshipType(Base):
         if not self.application_start_date or not self.application_end_date:
             return False
         return bool(self.application_start_date <= now <= self.application_end_date)
+    
+    @property
+    def is_doctoral_scholarship(self) -> bool:
+        """Check if this is a doctoral scholarship"""
+        return self.category == ScholarshipCategory.DOCTORAL.value
+    
+    @property
+    def is_most_scholarship(self) -> bool:
+        """Check if this is MOST (國科會) scholarship"""
+        return self.sub_type == ScholarshipSubType.MOST.value
+    
+    @property
+    def is_moe_scholarship(self) -> bool:
+        """Check if this is MOE (教育部) scholarship"""
+        return self.sub_type == ScholarshipSubType.MOE.value
+    
+    def get_sub_scholarships(self) -> list:
+        """Get all sub-scholarships if this is a combined scholarship"""
+        if self.is_combined:
+            return self.sub_scholarships
+        return []
+    
+    def get_parent_scholarship(self):
+        """Get parent scholarship if this is a sub-scholarship"""
+        return self.parent_scholarship
     
     def is_student_in_whitelist(self, student_id: int) -> bool:
         """Check if student is in whitelist"""

@@ -7,7 +7,7 @@ from app.core.security import require_student, require_admin
 from app.models.user import User
 from app.models.student import Student
 from app.models.scholarship import ScholarshipType
-from app.schemas.scholarship import ScholarshipTypeResponse
+from app.schemas.scholarship import ScholarshipTypeResponse, CombinedScholarshipCreate, ScholarshipTypeCreate
 from app.services.scholarship_service import ScholarshipService
 from app.core.config import settings
 from app.schemas.response import ApiResponse
@@ -34,6 +34,89 @@ async def get_eligible_scholarships(
     
     service = ScholarshipService(db)
     return await service.get_eligible_scholarships(student)
+
+@router.get("/{scholarship_id}", response_model=ScholarshipTypeResponse)
+async def get_scholarship_detail(
+    scholarship_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get scholarship details including sub-scholarships for combined types"""
+    service = ScholarshipService(db)
+    scholarship = await service.get_scholarship_with_sub_types(scholarship_id)
+    
+    if not scholarship:
+        raise HTTPException(status_code=404, detail="Scholarship not found")
+    
+    return scholarship
+
+@router.post("/combined/doctoral", response_model=ScholarshipTypeResponse)
+async def create_combined_doctoral_scholarship(
+    data: CombinedScholarshipCreate,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a combined doctoral scholarship (MOST + MOE)"""
+    service = ScholarshipService(db)
+    
+    # 預設的子獎學金設定
+    if not data.sub_scholarships:
+        data.sub_scholarships = [
+            {
+                "code": "doctoral_most",
+                "name": "國科會博士生獎學金",
+                "name_en": "MOST Doctoral Scholarship",
+                "description": "國科會提供的博士生研究獎學金",
+                "description_en": "Doctoral research scholarship provided by MOST",
+                "sub_type": "most",
+                "amount": 40000,
+                "min_gpa": 3.7,
+                "max_ranking_percent": 20,
+                "required_documents": ["transcript", "research_proposal", "recommendation_letter"],
+                "application_start_date": data.application_start_date,
+                "application_end_date": data.application_end_date
+            },
+            {
+                "code": "doctoral_moe",
+                "name": "教育部博士生獎學金",
+                "name_en": "MOE Doctoral Scholarship",
+                "description": "教育部提供的博士生學術獎學金",
+                "description_en": "Doctoral academic scholarship provided by MOE",
+                "sub_type": "moe",
+                "amount": 35000,
+                "min_gpa": 3.5,
+                "max_ranking_percent": 30,
+                "required_documents": ["transcript", "research_proposal"],
+                "application_start_date": data.application_start_date,
+                "application_end_date": data.application_end_date
+            }
+        ]
+    
+    scholarship = await service.create_combined_doctoral_scholarship(data)
+    
+    return ApiResponse(
+        success=True,
+        message="Combined doctoral scholarship created successfully",
+        data=scholarship
+    )
+
+@router.get("/combined/list", response_model=List[ScholarshipTypeResponse])
+async def get_combined_scholarships(
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all combined scholarships"""
+    stmt = select(ScholarshipType).where(ScholarshipType.is_combined == True)
+    result = await db.execute(stmt)
+    scholarships = result.scalars().all()
+    
+    # Load sub-scholarships for each combined scholarship
+    for scholarship in scholarships:
+        sub_stmt = select(ScholarshipType).where(
+            ScholarshipType.parent_scholarship_id == scholarship.id
+        )
+        sub_result = await db.execute(sub_stmt)
+        scholarship.sub_scholarships = sub_result.scalars().all()
+    
+    return scholarships
 
 @router.post("/dev/reset-application-periods")
 async def reset_application_periods(

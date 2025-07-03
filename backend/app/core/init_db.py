@@ -19,9 +19,11 @@ from app.models.student import (
 )
 from app.core.security import get_password_hash
 from app.db.base_class import Base
-from app.models.scholarship import ScholarshipType, ScholarshipStatus
+from app.models.scholarship import ScholarshipType, ScholarshipStatus, ScholarshipCategory, ScholarshipSubType
 from app.models.notification import Notification, NotificationType, NotificationPriority
 from app.core.config import settings
+from app.services.scholarship_service import ScholarshipService
+from app.schemas.scholarship import CombinedScholarshipCreate
 
 
 async def initLookupTables(session: AsyncSession) -> None:
@@ -537,7 +539,7 @@ async def createTestStudents(session: AsyncSession, users: list[User]) -> None:
 
 
 async def createTestScholarships(session: AsyncSession) -> None:
-    """Create test scholarship data with dev-friendly settings"""
+    """Create test scholarship data with dev-friendly settings, including combined doctoral scholarship"""
     
     print("🎓 Creating test scholarship data...")
     
@@ -558,6 +560,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
     start_date = now - timedelta(days=30)
     end_date = now + timedelta(days=30)
     
+    # ==== 基本獎學金 (非合併) ====
     scholarships_data = [
         {
             "code": "undergraduate_freshman",
@@ -565,6 +568,9 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "name_en": "Undergraduate Freshman Scholarship",
             "description": "適用於學士班新生，需符合 GPA ≥ 3.38 或前35%排名",
             "description_en": "For undergraduate freshmen, requires GPA ≥ 3.38 or top 35% ranking",
+            "category": ScholarshipCategory.UNDERGRADUATE.value,
+            "sub_type": ScholarshipSubType.GENERAL.value,
+            "is_combined": False,
             "amount": 50000.00,
             "currency": "TWD",
             "eligible_student_types": ["undergraduate"],
@@ -581,31 +587,14 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "requires_research_proposal": False,
         },
         {
-            "code": "phd_nstc",
-            "name": "國科會博士生獎學金",
-            "name_en": "NSTC PhD Scholarship",
-            "description": "適用於博士班在學學生，需提供研究計畫",
-            "description_en": "For PhD students, requires research proposal",
-            "amount": 120000.00,
-            "currency": "TWD",
-            "eligible_student_types": ["phd"],
-            "min_gpa": 3.5,
-            "max_completed_terms": 2,
-            "required_documents": ["transcript", "research_proposal", "bank_account"],
-            "whitelist_enabled": False,
-            "whitelist_student_ids": [],
-            "application_start_date": start_date,
-            "application_end_date": end_date,
-            "status": ScholarshipStatus.ACTIVE.value,
-            "requires_professor_recommendation": True,
-            "requires_research_proposal": True,
-        },
-        {
             "code": "direct_phd",
             "name": "逕升博士獎學金",
             "name_en": "Direct PhD Scholarship",
             "description": "適用於逕升博士班學生，需完整研究計畫",
             "description_en": "For direct PhD students, requires complete research plan",
+            "category": ScholarshipCategory.DOCTORAL.value,
+            "sub_type": ScholarshipSubType.GENERAL.value,
+            "is_combined": False,
             "amount": 150000.00,
             "currency": "TWD",
             "eligible_student_types": ["direct_phd"],
@@ -633,9 +622,55 @@ async def createTestScholarships(session: AsyncSession) -> None:
             scholarship = ScholarshipType(**scholarship_data)
             session.add(scholarship)
         else:
-            # 更新現有的獎學金資料（特別是申請期間）
+            # 更新現有的獎學金資料
             for key, value in scholarship_data.items():
                 setattr(existing, key, value)
+    
+    # ==== 合併博士獎學金 ====
+    service = ScholarshipService(session)
+    combined_data = CombinedScholarshipCreate(
+        name="博士生獎學金",
+        name_en="Doctoral Scholarship",
+        description="國科會與教育部聯合博士生獎學金",
+        description_en="Combined MOST and MOE doctoral scholarship",
+        category=ScholarshipCategory.DOCTORAL.value,
+        sub_scholarships=[
+            {
+                "code": "doctoral_most",
+                "name": "國科會博士生獎學金",
+                "name_en": "MOST Doctoral Scholarship",
+                "description": "國科會博士生研究獎學金",
+                "description_en": "MOST PhD scholarship",
+                "sub_type": "most",
+                "amount": 40000,
+                "min_gpa": 3.7,
+                "max_ranking_percent": 20,
+                "required_documents": ["transcript", "research_proposal", "recommendation_letter"],
+                "application_start_date": start_date,
+                "application_end_date": end_date
+            },
+            {
+                "code": "doctoral_moe",
+                "name": "教育部博士生獎學金",
+                "name_en": "MOE Doctoral Scholarship",
+                "description": "教育部博士生學術獎學金",
+                "description_en": "MOE PhD scholarship",
+                "sub_type": "moe",
+                "amount": 35000,
+                "min_gpa": 3.5,
+                "max_ranking_percent": 30,
+                "required_documents": ["transcript", "research_proposal"],
+                "application_start_date": start_date,
+                "application_end_date": end_date
+            }
+        ]
+    )
+    
+    # 如果尚未建立過，則創建
+    result = await session.execute(select(ScholarshipType).where(ScholarshipType.code == "doctoral_combined"))
+    existing_parent = result.scalar_one_or_none()
+    if not existing_parent:
+        await service.create_combined_doctoral_scholarship(combined_data)
     
     await session.commit()
     print("✅ Test scholarship data created successfully!")
