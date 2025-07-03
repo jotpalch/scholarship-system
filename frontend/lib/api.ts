@@ -331,7 +331,8 @@ class ApiClient {
       
       // Log response details for debugging
       console.log(`Response status: ${response.status} ${response.statusText}`)
-      console.log(`Response headers:`, Object.fromEntries(response.headers.entries()))
+      const respHeaders = response && response.headers && response.headers.entries ? Object.fromEntries(response.headers.entries()) : {}
+      console.log(`Response headers:`, respHeaders)
       
       let data: any
       const contentType = response.headers.get('content-type')
