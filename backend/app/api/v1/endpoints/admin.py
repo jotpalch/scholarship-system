@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, update, delete
 
 from app.db.deps import get_db
-from app.schemas.common import MessageResponse, PaginatedResponse, SystemSettingSchema, EmailTemplateSchema, ApiResponse
+from app.schemas.common import PaginatedResponse, SystemSettingSchema, EmailTemplateSchema
+from app.schemas.response import ApiResponse
+from app.utils.response import api_response
 from app.schemas.application import ApplicationListResponse
 from app.schemas.notification import NotificationResponse, NotificationCreate, NotificationUpdate
 from app.core.security import require_admin
@@ -561,7 +563,7 @@ async def update_announcement(
     return NotificationResponse.model_validate(announcement_dict)
 
 
-@router.delete("/announcements/{announcement_id}", response_model=MessageResponse)
+@router.delete("/announcements/{announcement_id}", response_model=ApiResponse[dict])
 async def delete_announcement(
     announcement_id: int,
     current_user: User = Depends(require_admin),
@@ -589,4 +591,4 @@ async def delete_announcement(
     await db.delete(announcement)
     await db.commit()
     
-    return MessageResponse(message="系統公告已成功刪除") 
+    return api_response(message="系統公告已成功刪除", data={"announcement_id": announcement_id}) 
