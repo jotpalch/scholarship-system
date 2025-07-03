@@ -5,6 +5,7 @@ Common schemas for API responses and pagination
 from typing import Any, Generic, List, Optional, TypeVar
 from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
+from app.schemas.response import ApiResponse  # noqa: E402
 
 T = TypeVar("T")
 
@@ -13,15 +14,6 @@ class MessageResponse(BaseModel):
     """Standard message response"""
     success: bool = True
     message: str
-    trace_id: Optional[str] = None
-
-
-class ApiResponse(BaseModel, Generic[T]):
-    """Standard API response format"""
-    success: bool = True
-    message: str
-    data: Optional[T] = None
-    errors: Optional[List[str]] = None
     trace_id: Optional[str] = None
 
 
