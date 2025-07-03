@@ -81,6 +81,8 @@ export interface Application {
 
 export interface ApplicationCreate {
   scholarship_type: string
+  category_id?: number
+  sub_type?: string
   academic_year?: string
   semester?: string
   gpa?: number
@@ -193,6 +195,19 @@ export interface ScholarshipType {
   updated_at: string
   created_by?: number
   updated_by?: number
+  category_id?: number  // link to scholarship category
+  sub_type?: "nsc_phd" | "moe_phd" | string
+}
+
+// Scholarship category interface
+export interface ScholarshipCategory {
+  id: number
+  nameZh: string
+  nameEn?: string
+  description?: string
+  descriptionEn?: string
+  createdAt: string
+  scholarships?: ScholarshipType[]
 }
 
 // User management types
@@ -531,6 +546,18 @@ class ApiClient {
     
     getAll: async (): Promise<ApiResponse<ScholarshipType[]>> => {
       return this.request('/scholarships')
+    }
+  }
+
+  scholarshipCategories = {
+    getAll: (): Promise<ApiResponse<ScholarshipCategory[]>> => {
+      return this.request('/scholarshipCategories')
+    },
+    getById: (id: number): Promise<ApiResponse<ScholarshipCategory>> => {
+      return this.request(`/scholarshipCategories/${id}`)
+    },
+    getSubTypes: (id: number): Promise<ApiResponse<ScholarshipType[]>> => {
+      return this.request(`/scholarshipCategories/${id}/subTypes`)
     }
   }
 
