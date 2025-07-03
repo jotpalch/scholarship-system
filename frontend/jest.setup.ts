@@ -1,3 +1,4 @@
+// @ts-nocheck
 import '@testing-library/jest-dom'
 import React from 'react'
 
@@ -112,4 +113,6 @@ if (!global.fetch) {
     json: async () => ({}),
     text: async () => '',
   }) as any
-} 
+}
+
+// @ts-nocheck 

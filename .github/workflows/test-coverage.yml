@@ -92,8 +92,7 @@ jobs:
           --health-cmd "curl -f http://localhost:9000/minio/health/live"
           --health-interval 30s
           --health-timeout 20s
-          --health-retries 3 \
-          minio server /data --console-address ":9001"
+          --health-retries 3
         ports:
           - 9000:9000
           - 9001:9001

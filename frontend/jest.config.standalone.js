@@ -39,7 +39,10 @@ module.exports = {
     // Common hook paths  
     '^@/hooks/use-auth$': '<rootDir>/hooks/use-auth',
     '^@/hooks/use-applications$': '<rootDir>/hooks/use-applications',
-    '^@/hooks/use-toast$': '<rootDir>/hooks/use-toast'
+    '^@/hooks/use-toast$': '<rootDir>/hooks/use-toast',
+
+    // Generic mapping for all ui components under components/ui
+    '^@/components/ui/(.*)$': '<rootDir>/components/ui/$1',
   },
 
   // Module directories
