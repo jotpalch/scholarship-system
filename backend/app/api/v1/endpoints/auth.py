@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.deps import get_db
 from app.schemas.user import UserCreate, UserLogin, TokenResponse, UserResponse
-from app.schemas.common import MessageResponse
+from app.schemas.response import ApiResponse
+from app.utils.response import api_response
 from app.services.auth_service import AuthService
 from app.services.mock_sso_service import MockSSOService
 from app.services.developer_profile_service import DeveloperProfileService, DeveloperProfile, DeveloperProfileManager
@@ -18,17 +19,18 @@ from app.models.user import User, UserRole
 router = APIRouter()
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=ApiResponse[UserResponse], status_code=status.HTTP_201_CREATED)
 async def register(
     user_data: UserCreate,
     db: AsyncSession = Depends(get_db)
 ):
     """Register a new user"""
     auth_service = AuthService(db)
-    return await auth_service.register_user(user_data)
+    user = await auth_service.register_user(user_data)
+    return api_response(data=user, message="User registered successfully")
 
 
-@router.post("/login")
+@router.post("/login", response_model=ApiResponse[TokenResponse])
 async def login(
     login_data: UserLogin,
     db: AsyncSession = Depends(get_db)
@@ -37,39 +39,25 @@ async def login(
     auth_service = AuthService(db)
     token_response = await auth_service.login(login_data)
     
-    # Return wrapped in standard ApiResponse format
-    return {
-        "success": True,
-        "message": "Login successful",
-        "data": {
-            "access_token": token_response.access_token,
-            "token_type": token_response.token_type,
-            "expires_in": token_response.expires_in,
-            "user": token_response.user.model_dump()
-        }
-    }
+    return api_response(data=token_response, message="Login successful")
 
 
-@router.get("/me")
+@router.get("/me", response_model=ApiResponse[UserResponse])
 async def get_current_user_info(
     current_user: User = Depends(get_current_user)
 ):
     """Get current user information"""
     user_data = UserResponse.model_validate(current_user)
-    return {
-        "success": True,
-        "message": "User information retrieved successfully",
-        "data": user_data
-    }
+    return api_response(data=user_data, message="User information retrieved successfully")
 
 
-@router.post("/logout", response_model=MessageResponse)
+@router.post("/logout", response_model=ApiResponse[None])
 async def logout():
     """Logout user (client-side token removal)"""
-    return MessageResponse(message="Logged out successfully")
+    return api_response(message="Logged out successfully")
 
 
-@router.post("/refresh")
+@router.post("/refresh", response_model=ApiResponse[TokenResponse])
 async def refresh_token(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -78,20 +66,11 @@ async def refresh_token(
     auth_service = AuthService(db)
     token_response = await auth_service.create_tokens(current_user)
     
-    # Return wrapped in standard ApiResponse format
-    return {
-        "success": True,
-        "message": "Token refreshed successfully",
-        "data": {
-            "access_token": token_response.access_token,
-            "token_type": token_response.token_type,
-            "expires_in": token_response.expires_in
-        }
-    }
+    return api_response(data=token_response, message="Token refreshed successfully")
 
 
 # Mock SSO endpoints for development
-@router.get("/mock-sso/users")
+@router.get("/mock-sso/users", response_model=ApiResponse[list])
 async def get_mock_users(
     db: AsyncSession = Depends(get_db)
 ):
@@ -105,14 +84,10 @@ async def get_mock_users(
     mock_sso_service = MockSSOService(db)
     users = await mock_sso_service.get_mock_users()
     
-    return {
-        "success": True,
-        "message": "Mock users retrieved successfully",
-        "data": users
-    }
+    return api_response(data=users, message="Mock users retrieved successfully")
 
 
-@router.post("/mock-sso/login")
+@router.post("/mock-sso/login", response_model=ApiResponse[TokenResponse])
 async def mock_sso_login(
     request_data: dict,
     db: AsyncSession = Depends(get_db)
@@ -135,16 +110,7 @@ async def mock_sso_login(
         mock_sso_service = MockSSOService(db)
         token_response = await mock_sso_service.mock_sso_login(username)
         
-        return {
-            "success": True,
-            "message": f"Mock SSO login successful for {username}",
-            "data": {
-                "access_token": token_response.access_token,
-                "token_type": token_response.token_type,
-                "expires_in": token_response.expires_in,
-                "user": token_response.user.model_dump()
-            }
-        }
+        return api_response(data=token_response, message=f"Mock SSO login successful for {username}")
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -156,7 +122,7 @@ async def mock_sso_login(
 
 
 # Developer Profile endpoints for personalized testing
-@router.get("/dev-profiles/developers")
+@router.get("/dev-profiles/developers", response_model=ApiResponse[list])
 async def get_all_developers(
     db: AsyncSession = Depends(get_db)
 ):
@@ -170,14 +136,10 @@ async def get_all_developers(
     dev_service = DeveloperProfileService(db)
     developer_ids = await dev_service.get_all_developer_ids()
     
-    return {
-        "success": True,
-        "message": "Developer list retrieved successfully",
-        "data": developer_ids
-    }
+    return api_response(data=developer_ids, message="Developer list retrieved successfully")
 
 
-@router.get("/dev-profiles/{developer_id}")
+@router.get("/dev-profiles/{developer_id}", response_model=ApiResponse[dict])
 async def get_developer_profiles(
     developer_id: str,
     db: AsyncSession = Depends(get_db)
@@ -206,18 +168,17 @@ async def get_developer_profiles(
         for user in users
     ]
     
-    return {
-        "success": True,
-        "message": f"Developer profiles for {developer_id} retrieved successfully",
-        "data": {
+    return api_response(
+        data={
             "developer_id": developer_id,
             "profiles": profiles,
             "count": len(profiles)
-        }
-    }
+        },
+        message=f"Developer profiles for {developer_id} retrieved successfully",
+    )
 
 
-@router.post("/dev-profiles/{developer_id}/quick-setup")
+@router.post("/dev-profiles/{developer_id}/quick-setup", response_model=ApiResponse[dict])
 async def quick_setup_developer(
     developer_id: str,
     db: AsyncSession = Depends(get_db)
@@ -241,18 +202,17 @@ async def quick_setup_developer(
         for user in users
     ]
     
-    return {
-        "success": True,
-        "message": f"Quick setup completed for developer {developer_id}",
-        "data": {
+    return api_response(
+        data={
             "developer_id": developer_id,
             "created_profiles": profiles,
-            "count": len(profiles)
-        }
-    }
+            "count": len(profiles),
+        },
+        message=f"Quick setup completed for developer {developer_id}",
+    )
 
 
-@router.post("/dev-profiles/{developer_id}/create-custom")
+@router.post("/dev-profiles/{developer_id}/create-custom", response_model=ApiResponse[dict])
 async def create_custom_profile(
     developer_id: str,
     profile_data: dict,
@@ -283,16 +243,15 @@ async def create_custom_profile(
         dev_service = DeveloperProfileService(db)
         user = await dev_service.create_developer_user(developer_id, profile)
         
-        return {
-            "success": True,
-            "message": f"Custom profile created for {developer_id}",
-            "data": {
+        return api_response(
+            data={
                 "username": user.username,
                 "email": user.email,
                 "full_name": user.full_name,
-                "role": user.role.value
-            }
-        }
+                "role": user.role.value,
+            },
+            message=f"Custom profile created for {developer_id}",
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -300,7 +259,7 @@ async def create_custom_profile(
         )
 
 
-@router.post("/dev-profiles/{developer_id}/student-suite")
+@router.post("/dev-profiles/{developer_id}/student-suite", response_model=ApiResponse[dict])
 async def create_student_suite(
     developer_id: str,
     db: AsyncSession = Depends(get_db)
@@ -326,18 +285,17 @@ async def create_student_suite(
         for i, user in enumerate(users)
     ]
     
-    return {
-        "success": True,
-        "message": f"Student test suite created for {developer_id}",
-        "data": {
+    return api_response(
+        data={
             "developer_id": developer_id,
             "created_profiles": created_profiles,
-            "count": len(created_profiles)
-        }
-    }
+            "count": len(created_profiles),
+        },
+        message=f"Student test suite created for {developer_id}",
+    )
 
 
-@router.post("/dev-profiles/{developer_id}/staff-suite")
+@router.post("/dev-profiles/{developer_id}/staff-suite", response_model=ApiResponse[dict])
 async def create_staff_suite(
     developer_id: str,
     db: AsyncSession = Depends(get_db)
@@ -362,18 +320,17 @@ async def create_staff_suite(
         for user in users
     ]
     
-    return {
-        "success": True,
-        "message": f"Staff test suite created for {developer_id}",
-        "data": {
+    return api_response(
+        data={
             "developer_id": developer_id,
             "created_profiles": created_profiles,
-            "count": len(created_profiles)
-        }
-    }
+            "count": len(created_profiles),
+        },
+        message=f"Staff test suite created for {developer_id}",
+    )
 
 
-@router.delete("/dev-profiles/{developer_id}")
+@router.delete("/dev-profiles/{developer_id}", response_model=ApiResponse[dict])
 async def delete_developer_profiles(
     developer_id: str,
     db: AsyncSession = Depends(get_db)
@@ -388,17 +345,16 @@ async def delete_developer_profiles(
     dev_service = DeveloperProfileService(db)
     deleted_count = await dev_service.delete_all_developer_users(developer_id)
     
-    return {
-        "success": True,
-        "message": f"Deleted {deleted_count} profiles for developer {developer_id}",
-        "data": {
+    return api_response(
+        data={
             "developer_id": developer_id,
-            "deleted_count": deleted_count
-        }
-    }
+            "deleted_count": deleted_count,
+        },
+        message=f"Deleted {deleted_count} profiles for developer {developer_id}",
+    )
 
 
-@router.delete("/dev-profiles/{developer_id}/{role}")
+@router.delete("/dev-profiles/{developer_id}/{role}", response_model=ApiResponse[dict])
 async def delete_specific_profile(
     developer_id: str,
     role: str,
@@ -417,11 +373,10 @@ async def delete_specific_profile(
         deleted = await dev_service.delete_developer_user(developer_id, user_role)
         
         if deleted:
-            return {
-                "success": True,
-                "message": f"Deleted {role} profile for developer {developer_id}",
-                "data": {"deleted": True}
-            }
+            return api_response(
+                data={"deleted": True},
+                message=f"Deleted {role} profile for developer {developer_id}",
+            )
         else:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
