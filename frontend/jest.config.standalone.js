@@ -43,6 +43,8 @@ module.exports = {
 
     // Generic mapping for all ui components under components/ui
     '^@/components/ui/(.*)$': '<rootDir>/components/ui/$1',
+    '^@/lib/(.*)$': '<rootDir>/lib/$1',
+    '^@/hooks/(.*)$': '<rootDir>/hooks/$1',
   },
 
   // Module directories

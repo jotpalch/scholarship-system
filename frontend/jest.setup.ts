@@ -103,13 +103,27 @@ jest.mock('next/navigation', () => {
   }
 })
 
+// Mock useAuth hook to avoid provider requirement in component tests
+jest.mock('@/hooks/use-auth', () => ({
+  useAuth: () => ({
+    user: null,
+    isLoading: false,
+    login: jest.fn(),
+    logout: jest.fn(),
+  }),
+  AuthProvider: ({ children }) => children,
+}))
+
 // Basic global fetch mock to return successful empty response when not overridden
 if (!global.fetch) {
   global.fetch = jest.fn().mockResolvedValue({
     ok: true,
     status: 200,
     statusText: 'OK',
-    headers: new Headers(),
+    headers: {
+      get: () => null,
+      entries: () => ([] as any),
+    },
     json: async () => ({}),
     text: async () => '',
   }) as any
