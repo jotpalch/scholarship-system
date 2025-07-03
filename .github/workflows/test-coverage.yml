@@ -1,6 +1,8 @@
 name: Test Coverage
 
 on:
+  workflow_call:
+    inputs: {}
   push:
     branches: [ main, develop ]
   pull_request:
