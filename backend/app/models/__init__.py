@@ -27,6 +27,7 @@ from app.models.student import (
     student_identities
 )
 from app.models.scholarship import ScholarshipType, ScholarshipRule
+from app.models.scholarship_category import ScholarshipCategory
 from app.models.application import Application, ApplicationStatus, ApplicationReview
 from app.models.notification import Notification, NotificationType
 from app.models.audit_log import AuditLog, AuditAction
@@ -60,6 +61,7 @@ __all__ = [
     # Scholarship models
     "ScholarshipType",
     "ScholarshipRule",
+    "ScholarshipCategory",
     
     # Other models
     "Notification",

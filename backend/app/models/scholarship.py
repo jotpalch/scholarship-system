@@ -4,12 +4,18 @@ Scholarship type and rule models
 
 from datetime import datetime, timezone
 from typing import Optional
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Numeric, Text, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Numeric, Text, JSON, ForeignKey, Enum as SAEnum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
 
 from app.db.base_class import Base
+
+
+class ScholarshipSubType(enum.Enum):
+    """Scholarship sub-type enum for variants under the same scholarship category"""
+    NSC_PHD = "nsc_phd"
+    MOE_PHD = "moe_phd"
 
 
 class ScholarshipStatus(enum.Enum):
@@ -41,6 +47,10 @@ class ScholarshipType(Base):
     max_completed_terms = Column(Integer)
     required_documents = Column(JSON)  # ["transcript", "research_proposal", ...]
     
+    # 分類與子類型
+    category_id = Column(Integer, ForeignKey("scholarship_categories.id"), nullable=True)
+    sub_type = Column(SAEnum(ScholarshipSubType, name="scholarship_sub_type"), nullable=True)
+    
     # 白名單設定
     whitelist_enabled = Column(Boolean, default=False)  # 是否啟用白名單
     whitelist_student_ids = Column(JSON)  # 白名單學生ID列表
@@ -68,6 +78,7 @@ class ScholarshipType(Base):
     
     # 關聯
     rules = relationship("ScholarshipRule", back_populates="scholarship_type", cascade="all, delete-orphan")
+    category = relationship("ScholarshipCategory", back_populates="scholarship_types")
 
     def __repr__(self):
         return f"<ScholarshipType(id={self.id}, code={self.code}, name={self.name})>"
@@ -163,3 +174,6 @@ class ScholarshipRule(Base):
                 
         except (ValueError, TypeError):
             return False 
+
+
+# Duplicate ScholarshipCategory class definition removed. Actual model is defined in app/models/scholarship_category.py 
