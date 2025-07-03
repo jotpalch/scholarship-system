@@ -4,6 +4,8 @@ Configures middleware, exception handlers, and API routes.
 """
 
 import uuid
+import logging
+import json
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -15,6 +17,37 @@ from app.core.exceptions import ScholarshipException, scholarship_exception_hand
 
 # Import routers
 from app.api.v1.api import api_router
+
+# Configure logging
+logging.basicConfig(
+    level=settings.log_level,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+# 減少 SQLAlchemy 日誌噪音
+logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+logging.getLogger('sqlalchemy.pool').setLevel(logging.WARNING)
+logging.getLogger('sqlalchemy.dialects').setLevel(logging.WARNING)
+
+# Create JSON formatter for structured logging
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        log_record = {
+            "timestamp": self.formatTime(record),
+            "level": record.levelname,
+            "name": record.name,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            log_record["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log_record)
+
+# Configure root logger
+root_logger = logging.getLogger()
+if settings.log_format == "json":
+    handler = logging.StreamHandler()
+    handler.setFormatter(JsonFormatter())
+    root_logger.addHandler(handler)
 
 app = FastAPI(
     title=settings.app_name,
