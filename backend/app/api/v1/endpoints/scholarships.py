@@ -7,14 +7,19 @@ from app.core.security import require_student, require_admin
 from app.models.user import User
 from app.models.student import Student
 from app.models.scholarship import ScholarshipType
-from app.schemas.scholarship import ScholarshipTypeResponse, CombinedScholarshipCreate, ScholarshipTypeCreate
+from app.schemas.scholarship import (
+    ScholarshipTypeResponse,
+    CombinedScholarshipCreate,
+    ScholarshipTypeCreate,
+)
 from app.services.scholarship_service import ScholarshipService
 from app.core.config import settings
 from app.schemas.response import ApiResponse
+from app.utils.response import api_response
 
 router = APIRouter()
 
-@router.get("/eligible", response_model=List[ScholarshipTypeResponse])
+@router.get("/eligible", response_model=ApiResponse[List[ScholarshipTypeResponse]])
 async def get_eligible_scholarships(
     current_user: User = Depends(require_student),
     db: AsyncSession = Depends(get_db)
@@ -33,9 +38,10 @@ async def get_eligible_scholarships(
         )
     
     service = ScholarshipService(db)
-    return await service.get_eligible_scholarships(student)
+    scholarships = await service.get_eligible_scholarships(student)
+    return api_response(data=scholarships, message="Eligible scholarships retrieved successfully")
 
-@router.get("/{scholarship_id}", response_model=ScholarshipTypeResponse)
+@router.get("/{scholarship_id}", response_model=ApiResponse[ScholarshipTypeResponse])
 async def get_scholarship_detail(
     scholarship_id: int,
     db: AsyncSession = Depends(get_db)
@@ -47,7 +53,7 @@ async def get_scholarship_detail(
     if not scholarship:
         raise HTTPException(status_code=404, detail="Scholarship not found")
     
-    return scholarship
+    return api_response(data=scholarship, message="Scholarship detail retrieved successfully")
 
 @router.post("/combined/doctoral", response_model=ScholarshipTypeResponse)
 async def create_combined_doctoral_scholarship(
@@ -99,7 +105,7 @@ async def create_combined_doctoral_scholarship(
         data=scholarship
     )
 
-@router.get("/combined/list", response_model=List[ScholarshipTypeResponse])
+@router.get("/combined/list", response_model=ApiResponse[List[ScholarshipTypeResponse]])
 async def get_combined_scholarships(
     db: AsyncSession = Depends(get_db)
 ):
@@ -116,7 +122,7 @@ async def get_combined_scholarships(
         sub_result = await db.execute(sub_stmt)
         scholarship.sub_scholarships = sub_result.scalars().all()
     
-    return scholarships
+    return api_response(data=scholarships, message="Combined scholarships retrieved successfully")
 
 @router.post("/dev/reset-application-periods")
 async def reset_application_periods(
