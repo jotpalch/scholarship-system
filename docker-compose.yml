@@ -74,13 +74,20 @@ services:
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: your-secret-key-for-development-only-change-in-production
       DEBUG: "true"
-      CORS_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000","http://frontend:3000"]'
+      CORS_ORIGINS: '["http://localhost:3000","http://127.0.0.1:3000","http://frontend:3000","http://*:3000","https://*:3000"]'
       ENVIRONMENT: development
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin123
       MINIO_BUCKET_NAME: scholarship-documents
       MINIO_SECURE: "false"
+      # Email Configuration
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USER: your-email@gmail.com
+      SMTP_PASSWORD: your-app-specific-password
+      EMAIL_FROM: noreply@scholarshipapp.com
+      EMAIL_FROM_NAME: Scholarship System
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend:/app
@@ -110,7 +117,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: http://${HOST_IP:-host.docker.internal}:8000
       NODE_ENV: production
     depends_on:
       backend:

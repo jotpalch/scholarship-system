@@ -164,6 +164,13 @@ run_migration() {
     print_success "Database migrations completed"
 }
 
+# Function to initialize database with test data
+init_db() {
+    print_status "Initializing database with test data..."
+    docker exec scholarship_backend_test python -m app.core.init_db
+    print_success "Database initialization completed"
+}
+
 # Function to run tests
 run_tests() {
     print_status "Running backend tests..."
@@ -205,12 +212,15 @@ case "${1:-}" in
     "migrate")
         run_migration
         ;;
+    "init-db")
+        init_db
+        ;;
     "test")
         run_tests
         ;;
     "help"|*)
         echo ""
-        echo "Usage: $0 {start|stop|restart|status|logs|cleanup|migrate|test|help}"
+        echo "Usage: $0 {start|stop|restart|status|logs|cleanup|migrate|init-db|test|help}"
         echo ""
         echo "Commands:"
         echo "  start    - Build and start all services"
@@ -220,6 +230,7 @@ case "${1:-}" in
         echo "  logs     - Show logs (optionally specify service: backend, frontend, postgres, redis)"
         echo "  cleanup  - Remove all containers and volumes"
         echo "  migrate  - Run database migrations"
+        echo "  init-db  - Initialize database with test data"
         echo "  test     - Run backend tests"
         echo "  help     - Show this help message"
         echo ""
@@ -227,6 +238,7 @@ case "${1:-}" in
         echo "  $0 start                 # Start all services"
         echo "  $0 logs backend          # Show backend logs"
         echo "  $0 stop                  # Stop all services"
+        echo "  $0 init-db               # Initialize database with test data"
         echo ""
         ;;
 esac 

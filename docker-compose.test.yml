@@ -21,6 +21,20 @@ services:
       timeout: 5s
       retries: 5
 
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: scholarship_pgadmin_test
+    ports:
+      - "8080:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: test@test.com
+      PGADMIN_DEFAULT_PASSWORD: test123
+    networks:
+      - scholarship_test_network
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
   # Redis Cache
   redis:
     image: redis:7-alpine
@@ -79,6 +93,9 @@ services:
       MINIO_SECRET_KEY: minioadmin123
       MINIO_BUCKET_NAME: scholarship-documents
       MINIO_SECURE: "false"
+      # Mock SSO Configuration for Testing
+      ENABLE_MOCK_SSO: "true"
+      MOCK_SSO_DOMAIN: dev.university.edu
     volumes:
       - ./backend/uploads:/app/uploads
     depends_on:
@@ -102,7 +119,9 @@ services:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
-      NODE_ENV: production
+      NODE_ENV: development
+      # Override for Docker internal requests if needed
+      INTERNAL_API_URL: http://backend:8000
     depends_on:
       - backend
     networks:
