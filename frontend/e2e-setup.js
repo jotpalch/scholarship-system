@@ -152,7 +152,8 @@ async function startBackend() {
     
     // Save PID for cleanup
     if (backend.pid) {
-      await fs.writeFile(path.join(__dirname, '..', 'backend.pid'), backend.pid.toString());
+      fs.writeFile(path.join(__dirname, '..', 'backend.pid'), backend.pid.toString())
+        .catch(() => {/* ignore errors */});
     }
     
     // Timeout after 30 seconds

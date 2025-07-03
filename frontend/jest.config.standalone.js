@@ -29,6 +29,8 @@ module.exports = {
     '^@/components/ui/textarea$': '<rootDir>/components/ui/textarea',
     '^@/components/ui/select$': '<rootDir>/components/ui/select',
     '^@/components/ui/badge$': '<rootDir>/components/ui/badge',
+    '^@/components/ui/alert$': '<rootDir>/components/ui/alert',
+    '^@/components/ui/dialog$': '<rootDir>/components/ui/dialog',
     '^@/components/ui/tabs$': '<rootDir>/components/ui/tabs',
     '^@/components/ui/progress$': '<rootDir>/components/ui/progress',
     '^@/components/progress-timeline$': '<rootDir>/components/progress-timeline',
