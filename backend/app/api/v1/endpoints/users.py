@@ -10,10 +10,12 @@ from sqlalchemy.orm import selectinload
 
 from app.db.deps import get_db
 from app.schemas.user import UserResponse, UserUpdate, UserCreate, UserListResponse
-from app.schemas.common import MessageResponse, PaginatedResponse
+from app.schemas.common import PaginatedResponse
 from app.core.security import get_current_user, require_admin, require_super_admin
 from app.models.user import User, UserRole
 from app.services.auth_service import AuthService
+from app.schemas.response import ApiResponse
+from app.utils.response import api_response
 
 router = APIRouter()
 
@@ -37,19 +39,18 @@ def convert_user_to_dict(user: User) -> dict:
     }
 
 
-@router.get("/me")
+@router.get("/me", response_model=ApiResponse[UserResponse])
 async def get_my_profile(
     current_user: User = Depends(get_current_user)
 ):
     """Get current user profile"""
-    return {
-        "success": True,
-        "message": "User profile retrieved successfully",
-        "data": convert_user_to_dict(current_user)
-    }
+    return api_response(
+        data=convert_user_to_dict(current_user),
+        message="User profile retrieved successfully",
+    )
 
 
-@router.get("/student-info")
+@router.get("/student-info", response_model=ApiResponse[dict])
 async def get_student_info(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -95,19 +96,18 @@ async def get_student_info(
     academic_result = await db.execute(academic_stmt)
     academic_records = academic_result.scalars().all()
     
-    return {
-        "success": True,
-        "message": "Student information retrieved successfully",
-        "data": {
+    return api_response(
+        data={
             "student": student,
             "latest_term": latest_term,
             "contact": contact,
-            "academic_records": academic_records
-        }
-    }
+            "academic_records": academic_records,
+        },
+        message="Student information retrieved successfully",
+    )
 
 
-@router.put("/me")
+@router.put("/me", response_model=ApiResponse[UserResponse])
 async def update_my_profile(
     update_data: UserUpdate,
     current_user: User = Depends(get_current_user),
@@ -123,11 +123,10 @@ async def update_my_profile(
     await db.commit()
     await db.refresh(current_user)
     
-    return {
-        "success": True,
-        "message": "Profile updated successfully",
-        "data": convert_user_to_dict(current_user)
-    }
+    return api_response(
+        data=convert_user_to_dict(current_user),
+        message="Profile updated successfully",
+    )
 
 
 # ==================== 管理員專用API ====================
