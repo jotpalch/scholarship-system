@@ -63,6 +63,8 @@ class Application(Base):
     # 獎學金類型
     scholarship_type = Column(String(50), nullable=False)
     scholarship_name = Column(String(200))
+    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=True)  # 主獎學金ID
+    sub_scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=True)  # 子獎學金ID（用於合併獎學金）
     amount = Column(Numeric(10, 2))
     
     # 申請狀態
@@ -120,6 +122,10 @@ class Application(Base):
     professor = relationship("User", foreign_keys=[professor_id])
     reviewer = relationship("User", foreign_keys=[reviewer_id])
     final_approver = relationship("User", foreign_keys=[final_approver_id])
+    
+    # 獎學金關聯
+    scholarship = relationship("ScholarshipType", foreign_keys=[scholarship_type_id])
+    sub_scholarship = relationship("ScholarshipType", foreign_keys=[sub_scholarship_type_id])
     
     files = relationship("ApplicationFile", back_populates="application", cascade="all, delete-orphan")
     reviews = relationship("ApplicationReview", back_populates="application", cascade="all, delete-orphan")

@@ -3,17 +3,107 @@ from sqlalchemy import select, and_
 from datetime import datetime, timezone
 import logging
 from decimal import Decimal
-from app.models.scholarship import ScholarshipType, ScholarshipStatus
+from app.models.scholarship import ScholarshipType, ScholarshipStatus, ScholarshipCategory, ScholarshipSubType
 from app.models.student import Student, StudentTermRecord
-from app.core.exceptions import ValidationError
+from app.core.exceptions import ValidationError, NotFoundError
 from app.core.config import settings, DEV_SCHOLARSHIP_SETTINGS
-from typing import List, Union
+from app.schemas.scholarship import CombinedScholarshipCreate, ScholarshipTypeCreate
+from typing import List, Union, Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
 class ScholarshipService:
     def __init__(self, db: AsyncSession):
         self.db = db
+    
+    async def create_combined_doctoral_scholarship(self, data: CombinedScholarshipCreate) -> ScholarshipType:
+        """Create a combined doctoral scholarship with MOST and MOE sub-types"""
+        try:
+            # Create parent scholarship
+            parent_scholarship = ScholarshipType(
+                code="doctoral_combined",
+                name=data.name,
+                name_en=data.name_en,
+                description=data.description,
+                description_en=data.description_en,
+                category=ScholarshipCategory.DOCTORAL.value,
+                sub_type=ScholarshipSubType.GENERAL.value,
+                is_combined=True,
+                amount=Decimal("0"),  # 總金額將由子獎學金決定
+                eligible_student_types=["phd", "direct_phd"],
+                status=ScholarshipStatus.ACTIVE.value
+            )
+            
+            self.db.add(parent_scholarship)
+            await self.db.flush()
+            
+            # Create sub-scholarships
+            sub_scholarships = []
+            for sub_data in data.sub_scholarships:
+                sub_scholarship = ScholarshipType(
+                    code=sub_data['code'],
+                    name=sub_data['name'],
+                    name_en=sub_data.get('name_en'),
+                    description=sub_data.get('description'),
+                    description_en=sub_data.get('description_en'),
+                    category=ScholarshipCategory.DOCTORAL.value,
+                    sub_type=sub_data['sub_type'],  # MOST or MOE
+                    is_combined=False,
+                    parent_scholarship_id=parent_scholarship.id,
+                    amount=Decimal(str(sub_data['amount'])),
+                    min_gpa=Decimal(str(sub_data.get('min_gpa', 3.5))),
+                    max_ranking_percent=Decimal(str(sub_data.get('max_ranking_percent', 30))),
+                    required_documents=sub_data.get('required_documents', []),
+                    eligible_student_types=["phd", "direct_phd"],
+                    status=ScholarshipStatus.ACTIVE.value,
+                    application_start_date=sub_data.get('application_start_date'),
+                    application_end_date=sub_data.get('application_end_date')
+                )
+                
+                self.db.add(sub_scholarship)
+                sub_scholarships.append(sub_scholarship)
+            
+            await self.db.commit()
+            await self.db.refresh(parent_scholarship)
+            
+            return parent_scholarship
+            
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Error creating combined scholarship: {e}")
+            raise ValidationError(f"Failed to create combined scholarship: {str(e)}")
+    
+    async def get_scholarship_with_sub_types(self, scholarship_id: int) -> Optional[ScholarshipType]:
+        """Get scholarship with its sub-scholarships if it's a combined type"""
+        stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_id)
+        result = await self.db.execute(stmt)
+        scholarship = result.scalar_one_or_none()
+        
+        if not scholarship:
+            raise NotFoundError(f"Scholarship with ID {scholarship_id} not found")
+        
+        # If it's a combined scholarship, load sub-scholarships
+        if scholarship.is_combined:
+            sub_stmt = select(ScholarshipType).where(
+                ScholarshipType.parent_scholarship_id == scholarship_id
+            )
+            sub_result = await self.db.execute(sub_stmt)
+            scholarship.sub_scholarships = sub_result.scalars().all()
+        
+        return scholarship
+    
+    async def validate_sub_scholarship_application(self, parent_id: int, sub_id: int) -> bool:
+        """Validate that sub_scholarship belongs to parent scholarship"""
+        sub_stmt = select(ScholarshipType).where(
+            and_(
+                ScholarshipType.id == sub_id,
+                ScholarshipType.parent_scholarship_id == parent_id
+            )
+        )
+        result = await self.db.execute(sub_stmt)
+        sub_scholarship = result.scalar_one_or_none()
+        
+        return sub_scholarship is not None
     
     def _safe_gpa_to_decimal(self, gpa: Union[str, int, float, Decimal]) -> Decimal:
         """Safely convert GPA to Decimal for comparison"""
@@ -46,15 +136,18 @@ class ScholarshipService:
                 DEV_SCHOLARSHIP_SETTINGS.get("BYPASS_WHITELIST", False))
     
     async def get_eligible_scholarships(self, student: Student) -> List[ScholarshipType]:
-        """Get scholarships that the student is eligible for"""
-        # Get all active scholarships
+        """Get scholarships that the student is eligible for, including combined scholarships"""
+        # Get all active scholarships (only parent scholarships)
         stmt = select(ScholarshipType).where(
-            ScholarshipType.status == ScholarshipStatus.ACTIVE.value
+            and_(
+                ScholarshipType.status == ScholarshipStatus.ACTIVE.value,
+                ScholarshipType.parent_scholarship_id.is_(None)  # Only get parent scholarships
+            )
         )
         result = await self.db.execute(stmt)
         scholarships = result.scalars().all()
         
-        logger.info(f"Found {len(scholarships)} active scholarships")
+        logger.info(f"Found {len(scholarships)} active parent scholarships")
         
         # Get student's academic record to determine type
         from app.models.student import StudentAcademicRecord, StudentType
