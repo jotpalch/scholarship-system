@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     app_name: str = config("APP_NAME", default="Scholarship Management System")
     app_version: str = config("APP_VERSION", default="1.0.0")
     debug: bool = config("DEBUG", default=False, cast=bool)
+    environment: str = config("ENVIRONMENT", default="production")
+    api_v1_str: str = config("API_V1_STR", default="/api/v1")
     
     # Server
     host: str = config("HOST", default="0.0.0.0")
@@ -50,6 +52,13 @@ class Settings(BaseSettings):
     allowed_file_types: List[str] = config("ALLOWED_FILE_TYPES", default="pdf,jpg,jpeg,png,doc,docx", cast=lambda v: [s.strip() for s in v.split(',')])
     max_files_per_application: int = config("MAX_FILES_PER_APPLICATION", default=5, cast=int)
     
+    # MinIO Configuration
+    minio_endpoint: str = config("MINIO_ENDPOINT", default="localhost:9000")
+    minio_access_key: str = config("MINIO_ACCESS_KEY", default="minioadmin")
+    minio_secret_key: str = config("MINIO_SECRET_KEY", default="minioadmin123")
+    minio_bucket: str = config("MINIO_BUCKET_NAME", default="scholarship-files")
+    minio_secure: bool = config("MINIO_SECURE", default=False, cast=bool)
+    
     # OCR Service
     ocr_service_enabled: bool = config("OCR_SERVICE_ENABLED", default=False, cast=bool)
     ocr_api_key: Optional[str] = config("OCR_API_KEY", default=None)
@@ -62,6 +71,11 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = config("LOG_LEVEL", default="INFO")
     log_format: str = config("LOG_FORMAT", default="json")
+    sqlalchemy_log_level: str = config("SQLALCHEMY_LOG_LEVEL", default="WARNING")  # 簡化 SQLAlchemy 日誌
+    
+    # Mock SSO for development
+    enable_mock_sso: bool = config("ENABLE_MOCK_SSO", default=True, cast=bool)
+    mock_sso_domain: str = config("MOCK_SSO_DOMAIN", default="dev.university.edu")
     
     @field_validator("database_url", mode="before")
     @classmethod
@@ -103,30 +117,25 @@ settings = Settings()
 
 # Scholarship-specific constants
 SCHOLARSHIP_GPA_REQUIREMENTS = {
-    "academic_excellence": 3.8,
-    "need_based": 2.5,
-    "research_grant": 3.5,
-    "sports_scholarship": 2.0,
-    "international_student": 3.0,
-    "leadership": 3.2,
-    "community_service": 2.8,
-    "stem_excellence": 3.6,
-    "arts_scholarship": 3.0,
-    "first_generation": 2.5
+    "undergraduate_freshman": 3.38,
+    "phd_nstc": 3.5,
+    "phd_moe": 3.5,
+    "direct_phd": 3.5
 }
 
 SCHOLARSHIP_CATEGORIES = [
-    "academic_excellence",
-    "need_based", 
-    "research_grant",
-    "sports_scholarship",
-    "international_student",
-    "leadership",
-    "community_service",
-    "stem_excellence",
-    "arts_scholarship",
-    "first_generation"
+    "undergraduate_freshman",
+    "phd_nstc",
+    "phd_moe",
+    "direct_phd"
 ]
+
+# Development mode settings for testing
+DEV_SCHOLARSHIP_SETTINGS = {
+    "ALWAYS_OPEN_APPLICATION": True,  # 開發模式下總是開放申請
+    "BYPASS_WHITELIST": True,         # 開發模式下略過白名單檢查 (注意：生產環境僅限白名單學生申請)
+    "MOCK_APPLICATION_PERIOD": True,  # 使用模擬的申請期間
+}
 
 # Application constants
 MAX_PERSONAL_STATEMENT_LENGTH = 2000
@@ -142,4 +151,4 @@ MIME_TYPE_MAPPING = {
     "png": "image/png",
     "doc": "application/msword",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-} 
+}

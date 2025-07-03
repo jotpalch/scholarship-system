@@ -2,7 +2,7 @@
 Scholarship type and rule models
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Numeric, Text, JSON, ForeignKey
 from sqlalchemy.orm import relationship
@@ -41,6 +41,10 @@ class ScholarshipType(Base):
     max_completed_terms = Column(Integer)
     required_documents = Column(JSON)  # ["transcript", "research_proposal", ...]
     
+    # 白名單設定
+    whitelist_enabled = Column(Boolean, default=False)  # 是否啟用白名單
+    whitelist_student_ids = Column(JSON)  # 白名單學生ID列表
+    
     # 申請時間
     application_start_date = Column(DateTime(timezone=True))
     application_end_date = Column(DateTime(timezone=True))
@@ -76,10 +80,23 @@ class ScholarshipType(Base):
     @property
     def is_application_period(self) -> bool:
         """Check if within application period"""
-        now = datetime.now()
-        if self.application_start_date and self.application_end_date:
-            return bool(self.application_start_date <= now <= self.application_end_date)
-        return True
+        now = datetime.now(timezone.utc)
+        if not self.application_start_date or not self.application_end_date:
+            return False
+        return bool(self.application_start_date <= now <= self.application_end_date)
+    
+    def is_student_in_whitelist(self, student_id: int) -> bool:
+        """Check if student is in whitelist"""
+        # 如果未啟用白名單，則不限制申請（返回True表示通過檢查）
+        if not self.whitelist_enabled:
+            return True  # 未啟用白名單時，所有學生都可申請
+        
+        # 如果啟用白名單但列表為空，則無人可申請
+        if not self.whitelist_student_ids:
+            return False  # 啟用白名單但列表為空，無人可申請
+            
+        # 檢查學生是否在白名單中
+        return student_id in self.whitelist_student_ids
 
 
 class ScholarshipRule(Base):

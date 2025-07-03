@@ -4,7 +4,7 @@ Notification model for system messages
 
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, JSON
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -34,7 +34,7 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # 系統公告的 user_id 為 null
     
     # 通知內容
     title = Column(String(200), nullable=False)
@@ -51,7 +51,7 @@ class Notification(Base):
     related_resource_id = Column(Integer)
     action_url = Column(String(500))  # 點擊後導向的URL
     
-    # 狀態
+    # 狀態 (deprecated for system announcements, use NotificationRead instead)
     is_read = Column(Boolean, default=False)
     is_dismissed = Column(Boolean, default=False)
     
@@ -74,6 +74,7 @@ class Notification(Base):
     
     # 關聯
     user = relationship("User", back_populates="notifications")
+    read_records = relationship("NotificationRead", back_populates="notification", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Notification(id={self.id}, user_id={self.user_id}, title={self.title})>"
@@ -90,11 +91,45 @@ class Notification(Base):
         """Check if notification is urgent"""
         return bool(self.priority == NotificationPriority.URGENT.value)
     
+    @property
+    def is_system_announcement(self) -> bool:
+        """Check if this is a system announcement"""
+        return self.user_id is None
+    
     def mark_as_read(self):
-        """Mark notification as read"""
-        self.is_read = True
-        self.read_at = datetime.now()
+        """Mark notification as read (for personal notifications only)"""
+        if not self.is_system_announcement:
+            self.is_read = True
+            self.read_at = datetime.now()
     
     def dismiss(self):
         """Dismiss notification"""
-        self.is_dismissed = True 
+        self.is_dismissed = True
+
+
+class NotificationRead(Base):
+    """Track per-user read status for notifications"""
+    __tablename__ = "notification_reads"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    notification_id = Column(Integer, ForeignKey("notifications.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    
+    # 讀取狀態
+    is_read = Column(Boolean, default=True)  # 創建記錄就表示已讀
+    read_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # 時間戳記
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # 關聯
+    notification = relationship("Notification", back_populates="read_records")
+    user = relationship("User")
+    
+    # 確保每個用戶對每個通知只有一個讀取記錄
+    __table_args__ = (
+        UniqueConstraint('notification_id', 'user_id', name='_notification_user_read_uc'),
+    )
+    
+    def __repr__(self):
+        return f"<NotificationRead(notification_id={self.notification_id}, user_id={self.user_id}, read_at={self.read_at})>" 

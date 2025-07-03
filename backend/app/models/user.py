@@ -16,8 +16,9 @@ class UserRole(enum.Enum):
     """User role enum"""
     STUDENT = "student"
     PROFESSOR = "professor" 
-    REVIEWER = "reviewer"
+    COLLEGE = "college"
     ADMIN = "admin"
+    SUPER_ADMIN = "super_admin"
 
 
 class User(Base):
@@ -33,6 +34,9 @@ class User(Base):
     full_name = Column(String(100), nullable=False)
     chinese_name = Column(String(50))
     english_name = Column(String(100))
+    
+    # Student linking (for role=STUDENT)
+    student_no = Column(String(20), nullable=True, index=True)
     
     # Role and status
     role: Mapped[UserRole] = Column(Enum(UserRole), nullable=False, default=UserRole.STUDENT)
@@ -50,10 +54,10 @@ class User(Base):
     reset_password_expires = Column(DateTime(timezone=True))
     
     # Relationships
-    student_profile = relationship("Student", back_populates="user", uselist=False)
     applications = relationship("Application", foreign_keys="[Application.user_id]", back_populates="student")
     reviews = relationship("ApplicationReview", back_populates="reviewer")
     notifications = relationship("Notification", back_populates="user")
+    notification_reads = relationship("NotificationRead", back_populates="user")
     audit_logs = relationship("AuditLog", back_populates="user")
 
     def __repr__(self):
@@ -80,6 +84,10 @@ class User(Base):
         """Check if user is professor"""
         return bool(self.role == UserRole.PROFESSOR)
     
-    def is_reviewer(self) -> bool:
-        """Check if user is reviewer"""
-        return bool(self.role == UserRole.REVIEWER) 
+    def is_college(self) -> bool:
+        """Check if user is college"""
+        return bool(self.role == UserRole.COLLEGE)
+    
+    def is_super_admin(self) -> bool:
+        """Check if user is super admin"""
+        return bool(self.role == UserRole.SUPER_ADMIN) 

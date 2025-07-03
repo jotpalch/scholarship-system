@@ -11,7 +11,8 @@ psycopg2-binary==2.9.8
 
 # Authentication and Security
 python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
+passlib==1.7.4
+bcrypt==4.0.1
 python-decouple==3.8
 
 # Data validation and serialization
@@ -36,6 +37,9 @@ jinja2==3.1.2
 pillow==10.1.0
 opencv-python==4.8.1.78
 pytesseract==0.3.10
+
+# Object Storage
+minio==7.2.0
 
 # Logging and monitoring
 structlog==23.2.0

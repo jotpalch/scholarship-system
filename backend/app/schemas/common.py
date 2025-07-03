@@ -3,7 +3,8 @@ Common schemas for API responses and pagination
 """
 
 from typing import Any, Generic, List, Optional, TypeVar
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+from datetime import datetime
 
 T = TypeVar("T")
 
@@ -12,6 +13,15 @@ class MessageResponse(BaseModel):
     """Standard message response"""
     success: bool = True
     message: str
+    trace_id: Optional[str] = None
+
+
+class ApiResponse(BaseModel, Generic[T]):
+    """Standard API response format"""
+    success: bool = True
+    message: str
+    data: Optional[T] = None
+    errors: Optional[List[str]] = None
     trace_id: Optional[str] = None
 
 
@@ -30,8 +40,16 @@ class PaginatedResponse(BaseModel, Generic[T]):
     page: int
     size: int
     pages: int
-    has_next: bool
-    has_prev: bool
+    
+    @property
+    def has_next(self) -> bool:
+        """Check if there are more pages"""
+        return self.page < self.pages
+    
+    @property
+    def has_prev(self) -> bool:
+        """Check if there are previous pages"""
+        return self.page > 1
 
 
 class ValidationErrorDetail(BaseModel):
@@ -46,4 +64,22 @@ class ErrorResponse(BaseModel):
     success: bool = False
     message: str
     errors: Optional[List[ValidationErrorDetail]] = None
-    trace_id: Optional[str] = None 
+    trace_id: Optional[str] = None
+
+
+class SystemSettingSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    key: str
+    value: str
+
+
+class EmailTemplateSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    key: str
+    subject_template: str
+    body_template: str
+    cc: str | None = None
+    bcc: str | None = None
+    updated_at: datetime | None = None 

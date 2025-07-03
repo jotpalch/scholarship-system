@@ -77,7 +77,7 @@ class AuthService:
     
     async def create_tokens(self, user: User) -> TokenResponse:
         """Create access and refresh tokens for user"""
-        token_data = {"sub": user.id, "username": user.username, "role": user.role.value}
+        token_data = {"sub": str(user.id), "username": user.username, "role": user.role.value}
         
         access_token = create_access_token(token_data)
         refresh_token = create_refresh_token(token_data)

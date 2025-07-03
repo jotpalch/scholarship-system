@@ -19,7 +19,7 @@ from app.models.user import User, UserRole
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT token bearer
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -67,15 +67,21 @@ def verify_token(token: str) -> Dict[str, Any]:
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: AsyncSession = Depends(get_db)
 ) -> User:
     """Get current authenticated user"""
+    if credentials is None:
+        raise AuthenticationError("Authorization header missing")
+    
     try:
         payload = verify_token(credentials.credentials)
-        user_id: int = payload.get("sub")
-        if user_id is None:
+        user_id_str: str = payload.get("sub")
+        if user_id_str is None:
             raise AuthenticationError("Invalid token")
+        user_id = int(user_id_str)  # Convert string back to int
+    except AuthenticationError:
+        raise  # Re-raise authentication errors as-is
     except Exception:
         raise AuthenticationError("Could not validate credentials")
     
@@ -118,9 +124,16 @@ def require_roles(*required_roles: UserRole):
 
 # Role-specific dependencies
 def require_admin(current_user: User = Depends(get_current_active_user)) -> User:
-    """Require admin role"""
-    if not current_user.is_admin():
+    """Require admin or super admin role"""
+    if not (current_user.is_admin() or current_user.is_super_admin()):
         raise AuthorizationError("Admin access required")
+    return current_user
+
+
+def require_super_admin(current_user: User = Depends(get_current_active_user)) -> User:
+    """Require super admin role only"""
+    if not current_user.is_super_admin():
+        raise AuthorizationError("Super admin access required")
     return current_user
 
 
@@ -138,15 +151,15 @@ def require_professor(current_user: User = Depends(get_current_active_user)) -> 
     return current_user
 
 
-def require_reviewer(current_user: User = Depends(get_current_active_user)) -> User:
-    """Require reviewer role"""
-    if not current_user.is_reviewer():
-        raise AuthorizationError("Reviewer access required")
+def require_college(current_user: User = Depends(get_current_active_user)) -> User:
+    """Require college role"""
+    if not current_user.is_college():
+        raise AuthorizationError("College access required")
     return current_user
 
 
 def require_staff(current_user: User = Depends(get_current_active_user)) -> User:
-    """Require staff access (admin, reviewer, or professor)"""
-    if not any([current_user.is_admin(), current_user.is_reviewer(), current_user.is_professor()]):
+    """Require staff access (admin, college, professor, or super_admin)"""
+    if not any([current_user.is_admin(), current_user.is_college(), current_user.is_professor(), current_user.is_super_admin()]):
         raise AuthorizationError("Staff access required")
     return current_user 

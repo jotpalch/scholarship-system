@@ -27,6 +27,9 @@ class ApplicationStatus(enum.Enum):
     REJECTED = "rejected"
     RETURNED = "returned"
     CANCELLED = "cancelled"
+    RENEWAL_PENDING = "renewal_pending"
+    RENEWAL_REVIEWED = "renewal_reviewed"
+    MANUAL_EXCLUDED = "manual_excluded"
 
 
 class ReviewStatus(enum.Enum):
@@ -113,13 +116,14 @@ class Application(Base):
     
     # 關聯
     student = relationship("User", foreign_keys=[user_id], back_populates="applications")
-    student_profile = relationship("Student", foreign_keys=[student_id], back_populates="applications")
+    studentProfile = relationship("Student", foreign_keys=[student_id], back_populates="applications")
     professor = relationship("User", foreign_keys=[professor_id])
     reviewer = relationship("User", foreign_keys=[reviewer_id])
     final_approver = relationship("User", foreign_keys=[final_approver_id])
     
     files = relationship("ApplicationFile", back_populates="application", cascade="all, delete-orphan")
     reviews = relationship("ApplicationReview", back_populates="application", cascade="all, delete-orphan")
+    professor_reviews = relationship("ProfessorReview", back_populates="application", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Application(id={self.id}, app_id={self.app_id}, status={self.status})>"
@@ -153,10 +157,12 @@ class ApplicationFile(Base):
     
     # 檔案資訊
     filename = Column(String(255), nullable=False)
-    original_filename = Column(String(255), nullable=False)
-    file_path = Column(String(500), nullable=False)
+    original_filename = Column(String(255))
+    file_path = Column(String(500))  # For backward compatibility
+    object_name = Column(String(500))  # MinIO object name
     file_size = Column(Integer)
     mime_type = Column(String(100))
+    content_type = Column(String(100))  # For MinIO
     file_type = Column(String(50), default=FileType.OTHER.value)
     
     # OCR 處理結果
@@ -170,6 +176,7 @@ class ApplicationFile(Base):
     
     # 時間戳記
     uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
+    upload_date = Column(DateTime(timezone=True), server_default=func.now())  # Alias for MinIO service
     processed_at = Column(DateTime(timezone=True))
     
     # 關聯
@@ -210,4 +217,22 @@ class ApplicationReview(Base):
     reviewer = relationship("User", back_populates="reviews")
 
     def __repr__(self):
-        return f"<ApplicationReview(id={self.id}, application_id={self.application_id}, reviewer_id={self.reviewer_id})>" 
+        return f"<ApplicationReview(id={self.id}, application_id={self.application_id}, reviewer_id={self.reviewer_id})>"
+
+
+class ProfessorReview(Base):
+    __tablename__ = "professor_reviews"
+    id = Column(Integer, primary_key=True, index=True)
+    application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)
+    professor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    selected_awards = Column(JSON)
+    recommendation = Column(Text)
+    review_status = Column(String(20), default="pending")
+    reviewed_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    application = relationship("Application", back_populates="professor_reviews")
+    professor = relationship("User")
+
+    def __repr__(self):
+        return f"<ProfessorReview(id={self.id}, application_id={self.application_id}, professor_id={self.professor_id})>" 

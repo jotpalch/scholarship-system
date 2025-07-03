@@ -28,9 +28,27 @@ class ApplicationBase(BaseModel):
     agree_terms: bool = Field(False, description="Agreement to terms")
 
 
-class ApplicationCreate(ApplicationBase):
-    """Application creation schema"""
-    pass
+class ApplicationCreate(BaseModel):
+    """Application creation schema with optional fields for draft saving"""
+    scholarship_type: Optional[str] = Field(None, description="Scholarship type code")
+    academic_year: Optional[str] = Field(None, description="Academic year")
+    semester: Optional[str] = Field(None, description="Semester")
+    gpa: Optional[Decimal] = Field(None, description="GPA")
+    class_ranking_percent: Optional[Decimal] = Field(None, description="Class ranking percentage")
+    dept_ranking_percent: Optional[Decimal] = Field(None, description="Department ranking percentage")
+    completed_terms: Optional[int] = Field(None, description="Number of completed terms")
+    contact_phone: Optional[str] = Field(None, description="Contact phone")
+    contact_email: Optional[str] = Field(None, description="Contact email")
+    contact_address: Optional[str] = Field(None, description="Contact address")
+    bank_account: Optional[str] = Field(None, description="Bank account")
+    research_proposal: Optional[str] = Field(None, description="Research proposal")
+    budget_plan: Optional[str] = Field(None, description="Budget plan")
+    milestone_plan: Optional[str] = Field(None, description="Milestone plan")
+    agree_terms: Optional[bool] = Field(False, description="Agreement to terms")
+    
+    # 新增欄位支持前端
+    personal_statement: Optional[str] = Field(None, description="Personal statement")
+    expected_graduation_date: Optional[str] = Field(None, description="Expected graduation date")
 
 
 class ApplicationUpdate(BaseModel):
@@ -58,12 +76,14 @@ class ApplicationFileResponse(BaseModel):
     
     id: int
     filename: str
-    original_filename: str
-    file_size: int
-    mime_type: str
+    original_filename: Optional[str] = None
+    file_size: Optional[int] = None
+    mime_type: Optional[str] = None
     file_type: str
-    is_verified: bool
+    is_verified: Optional[bool] = False
     uploaded_at: datetime
+    file_path: Optional[str] = None  # 預覽/下載URL
+    download_url: Optional[str] = None  # 下載URL
 
 
 class ApplicationReviewResponse(BaseModel):
@@ -77,6 +97,24 @@ class ApplicationReviewResponse(BaseModel):
     score: Optional[Decimal]
     comments: Optional[str]
     reviewed_at: Optional[datetime]
+
+
+class ProfessorReviewCreate(BaseModel):
+    application_id: int
+    selected_awards: Optional[List[str]] = None
+    recommendation: Optional[str] = None
+    review_status: Optional[str] = None
+
+
+class ProfessorReviewResponse(BaseModel):
+    id: int
+    application_id: int
+    professor_id: int
+    selected_awards: Optional[List[str]] = None
+    recommendation: Optional[str] = None
+    review_status: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
 
 
 class ApplicationResponse(BaseModel):
@@ -118,6 +156,7 @@ class ApplicationResponse(BaseModel):
     updated_at: datetime
     files: List[ApplicationFileResponse] = []
     reviews: List[ApplicationReviewResponse] = []
+    professor_reviews: List[ProfessorReviewResponse] = []
     
     # Computed properties
     @property
@@ -150,6 +189,7 @@ class ApplicationReviewCreate(BaseModel):
     score: Optional[Decimal] = None
     comments: Optional[str] = None
     recommendation: Optional[str] = None
+    selected_awards: Optional[List[str]] = None
 
 
 class ApplicationListResponse(BaseModel):
@@ -158,6 +198,8 @@ class ApplicationListResponse(BaseModel):
     
     id: int
     app_id: str
+    user_id: int
+    student_id: int
     scholarship_type: str
     scholarship_name: Optional[str]
     amount: Optional[Decimal]
@@ -170,6 +212,17 @@ class ApplicationListResponse(BaseModel):
     # Optional fields for staff view
     student_name: Optional[str] = None
     student_no: Optional[str] = None
+    
+    # Extended fields for college/admin dashboard
+    gpa: Optional[Decimal] = None
+    department: Optional[str] = None
+    nationality: Optional[str] = None
+    
+    # Chinese display name for scholarship type
+    scholarship_type_zh: Optional[str] = None
+    
+    # Computed fields
+    days_waiting: Optional[int] = None  # Days since submission
 
 
 class ApplicationStatusUpdate(BaseModel):
@@ -189,4 +242,23 @@ class DashboardStats(BaseModel):
     rejected_applications: int = Field(0, description="Number of rejected applications")
     pending_review: int = Field(0, description="Number of applications pending review")
     total_amount: Decimal = Field(0, description="Total scholarship amount approved")
-    recent_activities: List[Dict[str, Any]] = Field([], description="Recent application activities") 
+    recent_activities: List[Dict[str, Any]] = Field([], description="Recent application activities")
+
+
+class ProfessorReviewCreate(BaseModel):
+    application_id: int
+    selected_awards: Optional[List[str]] = None
+    recommendation: Optional[str] = None
+    review_status: Optional[str] = None
+
+
+class ProfessorReviewResponse(BaseModel):
+    id: int
+    application_id: int
+    professor_id: int
+    selected_awards: Optional[List[str]] = None
+    recommendation: Optional[str] = None
+    review_status: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None 
+    

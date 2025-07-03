@@ -7,6 +7,11 @@ from .application import (
 from .scholarship import ScholarshipTypeResponse, ScholarshipRuleResponse
 from .notification import NotificationResponse
 from .common import MessageResponse, PaginationParams, PaginatedResponse
+from .settings import (
+    SystemSettingCreate, SystemSettingUpdate, SystemSettingResponse,
+    EmailTemplateCreate, EmailTemplateUpdate, EmailTemplateResponse,
+    EmailConfig, EmailSendRequest
+)
 
 __all__ = [
     "UserCreate", "UserUpdate", "UserResponse", "UserLogin",
@@ -15,5 +20,8 @@ __all__ = [
     "ApplicationFileResponse", "ApplicationReviewCreate", "ApplicationReviewResponse",
     "ScholarshipTypeResponse", "ScholarshipRuleResponse",
     "NotificationResponse",
-    "MessageResponse", "PaginationParams", "PaginatedResponse"
+    "MessageResponse", "PaginationParams", "PaginatedResponse",
+    "SystemSettingCreate", "SystemSettingUpdate", "SystemSettingResponse",
+    "EmailTemplateCreate", "EmailTemplateUpdate", "EmailTemplateResponse",
+    "EmailConfig", "EmailSendRequest"
 ]

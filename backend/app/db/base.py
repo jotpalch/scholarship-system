@@ -12,7 +12,7 @@ from app.core.config import settings
 # Create async engine for async operations
 async_engine = create_async_engine(
     settings.database_url,
-    echo=settings.debug,
+    echo=False,  # 關閉詳細 SQL 日誌
     future=True,
     pool_pre_ping=True,
     pool_recycle=3600,  # Recycle connections after 1 hour
@@ -23,7 +23,7 @@ async_engine = create_async_engine(
 # Create sync engine for Alembic migrations
 sync_engine = create_engine(
     settings.database_url_sync,
-    echo=settings.debug,
+    echo=False,  # 關閉詳細 SQL 日誌
     future=True,
     pool_pre_ping=True,
     pool_recycle=3600,
