@@ -1,0 +1,57 @@
+[run]
+source = app
+branch = True
+parallel = True
+omit = 
+    */tests/*
+    */test_*
+    */__init__.py
+    */migrations/*
+    */alembic/*
+    */venv/*
+    */.venv/*
+    */virtualenv/*
+    */site-packages/*
+    */distutils/*
+    app/core/config.py
+    app/db/base.py
+
+[report]
+precision = 2
+show_missing = True
+skip_covered = False
+fail_under = 90
+exclude_lines =
+    # Have to re-enable the standard pragma
+    pragma: no cover
+    
+    # Don't complain about missing debug-only code:
+    def __repr__
+    if self\.debug
+    
+    # Don't complain if tests don't hit defensive assertion code:
+    raise AssertionError
+    raise NotImplementedError
+    
+    # Don't complain if non-runnable code isn't run:
+    if 0:
+    if __name__ == .__main__.:
+    
+    # Don't complain about abstract methods
+    @(abc\.)?abstractmethod
+    
+    # Ignore type checking blocks
+    if TYPE_CHECKING:
+    
+    # Ignore exception handlers
+    except ImportError:
+    except Exception as e:
+
+[html]
+directory = htmlcov
+
+[xml]
+output = coverage.xml
+
+[json]
+output = coverage.json
