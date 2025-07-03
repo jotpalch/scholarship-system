@@ -16,7 +16,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { getTranslation } from "@/lib/i18n"
 import { useApplications } from "@/hooks/use-applications"
 import { FormValidator, Locale } from "@/lib/validators"
-import api, { ScholarshipType, Application as ApiApplication, ApplicationFile } from "@/lib/api"
+import api, { ScholarshipType, Application as ApiApplication, ApplicationFile, ScholarshipCategory } from "@/lib/api"
+import { useScholarshipCategories } from "@/hooks/useScholarshipCategories"
 
 // 使用API的Application類型
 type Application = ApiApplication
@@ -106,6 +107,22 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
   const [eligibleScholarships, setEligibleScholarships] = useState<ScholarshipType[]>([])
   const [isLoadingScholarships, setIsLoadingScholarships] = useState(true)
   const [scholarshipsError, setScholarshipsError] = useState<string | null>(null)
+
+  // Scholarship categories
+  const { categories, isLoading: isLoadingCategories } = useScholarshipCategories()
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
+
+  const filteredScholarships = useMemo(() => {
+    return selectedCategoryId
+      ? eligibleScholarships.filter((s: ScholarshipType) => s.category_id === selectedCategoryId)
+      : eligibleScholarships
+  }, [eligibleScholarships, selectedCategoryId])
+
+  useEffect(() => {
+    // Reset scholarship selection when switching category
+    setNewApplicationData((prev: any) => ({ ...prev, scholarship_type: '' }))
+    setSelectedScholarship(null)
+  }, [selectedCategoryId])
 
   // Fetch eligible scholarships on component mount
   useEffect(() => {
@@ -784,8 +801,6 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     setActiveTab("new-application")
   }
 
-
-
   // Loading state
   if (isLoadingScholarships || isLoadingStudentData) {
     return (
@@ -1099,8 +1114,6 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                   </Select>
                 </div>
 
-
-
                 {/* Required Documents Section */}
                 {selectedScholarship?.required_documents && selectedScholarship.required_documents.length > 0 && (
                   <div className="space-y-4">
@@ -1350,8 +1363,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                   </div>
                 ) : applicationFiles[selectedApplicationForDetails.id] && applicationFiles[selectedApplicationForDetails.id].length > 0 ? (
                   <div className="mt-2 space-y-2">
-                                      {applicationFiles[selectedApplicationForDetails.id].map((file: any, index: number) => (
-                    <div key={file.id || index} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                    {applicationFiles[selectedApplicationForDetails.id].map((file: any, index: number) => (
+                      <div key={file.id || index} className="flex items-center justify-between p-2 bg-muted rounded-md">
                         <div className="flex items-center gap-2">
                           <FileText className="h-4 w-4" />
                           <div>
@@ -1421,8 +1434,6 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
           )}
         </DialogContent>
       </Dialog>
-
-
 
       {/* 文件預覽對話框 */}
       <Dialog open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>
