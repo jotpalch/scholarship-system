@@ -87,6 +87,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/testing-library__react": "^14.0.0",
+    "@types/lucide-react": "^0.26.4",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
     "eslint": "^8.57.0",
