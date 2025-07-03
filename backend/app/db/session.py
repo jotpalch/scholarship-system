@@ -6,7 +6,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import sessionmaker
 from app.core.config import settings
-from app.db.deps import get_db  # noqa: E402
 
 # Async engine for async operations
 async_engine = create_async_engine(
@@ -40,7 +39,13 @@ SessionLocal = sessionmaker(
     autocommit=False,
 )
 
-# Ensure __all__ includes get_db for star imports
+# Lazy proxy to get_db to avoid circular import during module init
+async def get_db():
+    """Proxy to app.db.deps.get_db to maintain backward compatibility."""
+    from app.db.deps import get_db as _get_db  # local import to avoid circular dependency
+    async for session in _get_db():
+        yield session
+
 __all__ = [
     'async_engine',
     'sync_engine',
