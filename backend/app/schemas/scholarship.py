@@ -23,6 +23,8 @@ class ScholarshipTypeResponse(BaseModel):
     max_ranking_percent: Optional[Decimal] = None
     max_completed_terms: Optional[int] = None
     required_documents: Optional[List[str]] = None
+    category_id: Optional[int] = Field(None, alias="categoryId")
+    sub_type: Optional[str] = Field(None, alias="subType")
     application_start_date: Optional[datetime] = None
     application_end_date: Optional[datetime] = None
     status: str
@@ -32,6 +34,7 @@ class ScholarshipTypeResponse(BaseModel):
     
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 class ScholarshipRuleResponse(BaseModel):

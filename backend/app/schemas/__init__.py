@@ -5,6 +5,7 @@ from .application import (
     ApplicationFileResponse, ApplicationReviewCreate, ApplicationReviewResponse
 )
 from .scholarship import ScholarshipTypeResponse, ScholarshipRuleResponse
+from .scholarship_category import ScholarshipCategoryResponse
 from .notification import NotificationResponse
 from .common import MessageResponse, PaginationParams, PaginatedResponse
 from .settings import (
@@ -19,6 +20,7 @@ __all__ = [
     "ApplicationCreate", "ApplicationUpdate", "ApplicationResponse",
     "ApplicationFileResponse", "ApplicationReviewCreate", "ApplicationReviewResponse",
     "ScholarshipTypeResponse", "ScholarshipRuleResponse",
+    "ScholarshipCategoryResponse",
     "NotificationResponse",
     "MessageResponse", "PaginationParams", "PaginatedResponse",
     "SystemSettingCreate", "SystemSettingUpdate", "SystemSettingResponse",
