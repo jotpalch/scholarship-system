@@ -49,6 +49,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
   
   const [activeTab, setActiveTab] = useState("applications")
   const [editingApplication, setEditingApplication] = useState<Application | null>(null)
+  const [selectedSubTypes, setSelectedSubTypes] = useState<Record<string, string[]>>({})
   
   const getScholarshipTypeName = (scholarshipType: string): string => {
     const scholarship = eligibleScholarships.find(s => s.code === scholarshipType)
@@ -259,7 +260,15 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         // Calculate total required items
         const requiredFields = fields.filter(f => f.is_active && f.is_required)
         const requiredDocuments = documents.filter(d => d.is_active && d.is_required)
-        const totalRequired = requiredFields.length + requiredDocuments.length
+        let totalRequired = requiredFields.length + requiredDocuments.length
+        
+        // Add sub-type selection as a required item if applicable
+        const scholarship = selectedScholarship
+        if (scholarship?.eligible_sub_types && 
+            scholarship.eligible_sub_types[0] !== "general" &&
+            scholarship.eligible_sub_types.length > 0) {
+          totalRequired += 1
+        }
         
         if (totalRequired === 0) {
           setFormProgress(100) // No requirements means 100% complete
@@ -283,6 +292,15 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
             completedItems++
           }
         })
+        
+        // Check sub-type selection completion
+        if (scholarship?.eligible_sub_types && 
+            scholarship.eligible_sub_types[0] !== "general" &&
+            scholarship.eligible_sub_types.length > 0) {
+          if (selectedSubTypes[newApplicationData.scholarship_type]?.length > 0) {
+            completedItems++
+          }
+        }
 
         // Calculate percentage
         const progress = Math.round((completedItems / totalRequired) * 100)
@@ -294,7 +312,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     }
 
     calculateProgress()
-  }, [newApplicationData.scholarship_type, dynamicFormData, dynamicFileData])
+  }, [newApplicationData.scholarship_type, dynamicFormData, dynamicFileData, selectedScholarship, selectedSubTypes])
 
 
 
@@ -318,6 +336,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       semester: truncateString(semester, 10), // Max 10 chars
       contact_email: user.email, // Always available from user
       agree_terms: true, // Default to true
+      // Include selected sub-types if any
+      selected_sub_types: selectedSubTypes[newApplicationData.scholarship_type] || [],
       // Include dynamic form data
       ...dynamicFormData,
       // Optional fields from studentData (if available)
@@ -700,7 +720,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       {/* Scholarship Info Cards */}
       {eligibleScholarships.map((scholarship) => {
         const applicationInfo = scholarshipApplicationInfo[scholarship.code]
-        const isEligible = Array.isArray(scholarship.eligible_sub_types) && scholarship.eligible_sub_types.length > 0
+        const isEligible = Array.isArray(scholarship.eligible_sub_types) && 
+          scholarship.eligible_sub_types.length > 0
         
         return (
         <Card 
@@ -1087,7 +1108,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                 {editingApplication ? (
                   locale === "zh" ? "編輯申請" : "Edit Application"
                 ) : (
-                  locale === "zh" ? `申請 ${eligibleScholarships[0]?.name}` : `Apply for ${eligibleScholarships[0]?.name_en}`
+                  locale === "zh" ? `申請獎學金` : `Apply for Scholarship`
                 )}
               </CardTitle>
               <CardDescription>
@@ -1097,8 +1118,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                     : `Editing Application ID: ${editingApplication.app_id || `APP-${editingApplication.id}`}`
                 ) : (
                   locale === "zh"
-                    ? "請填寫完整資料並上傳相關文件"
-                    : "Please complete all information and upload required documents"
+                    ? "選擇獎學金類型後，請填寫完整資料並上傳相關文件"
+                    : "Please select a scholarship type, complete all information and upload required documents"
                 )}
               </CardDescription>
             </CardHeader>
@@ -1114,6 +1135,16 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                       const scholarship = eligibleScholarships.find(s => s.code === value)
                       setSelectedScholarship(scholarship || null)
                       
+                      // Initialize selected sub-types if not "general"
+                      if (scholarship?.eligible_sub_types && 
+                          scholarship.eligible_sub_types[0] !== "general" &&
+                          scholarship.eligible_sub_types.length > 0) {
+                        setSelectedSubTypes(prev => ({
+                          ...prev,
+                          [value]: [...scholarship.eligible_sub_types]
+                        }))
+                      }
+                      
                       // Reset dynamic form data when scholarship type changes
                       setDynamicFormData({})
                       setDynamicFileData({})
@@ -1126,14 +1157,71 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                       <SelectValue placeholder={locale === "zh" ? "選擇獎學金類型" : "Select scholarship type"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {eligibleScholarships.map((scholarship) => (
-                        <SelectItem key={scholarship.id} value={scholarship.code}>
-                          {scholarship.name}
-                        </SelectItem>
-                      ))}
+                      {eligibleScholarships
+                        .filter(scholarship => 
+                          Array.isArray(scholarship.eligible_sub_types) && 
+                          scholarship.eligible_sub_types.length > 0
+                        )
+                        .map((scholarship) => (
+                          <SelectItem key={scholarship.id} value={scholarship.code}>
+                            {scholarship.name}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Sub-type selection UI */}
+                {newApplicationData.scholarship_type && selectedScholarship?.eligible_sub_types && 
+                 selectedScholarship.eligible_sub_types[0] !== "general" && 
+                 selectedScholarship.eligible_sub_types.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>{locale === "zh" ? "申請項目" : "Application Items"} *</Label>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {selectedScholarship.eligible_sub_types.map((subType) => {
+                        const isSelected = selectedSubTypes[newApplicationData.scholarship_type]?.includes(subType)
+                        return (
+                          <Card
+                            key={subType}
+                            className={clsx(
+                              "relative cursor-pointer transition-all duration-200",
+                              "hover:border-primary/50",
+                              isSelected && "border-primary bg-primary/5"
+                            )}
+                            onClick={() => {
+                              setSelectedSubTypes(prev => {
+                                const currentSelected = prev[newApplicationData.scholarship_type] || []
+                                const newSelected = isSelected
+                                  ? currentSelected.filter(t => t !== subType)
+                                  : [...currentSelected, subType]
+                                return {
+                                  ...prev,
+                                  [newApplicationData.scholarship_type]: newSelected
+                                }
+                              })
+                            }}
+                          >
+                            <div className="absolute top-2 right-2 w-4 h-4 rounded-full border-2 flex items-center justify-center">
+                              {isSelected && (
+                                <div className="w-2 h-2 rounded-full bg-primary" />
+                              )}
+                            </div>
+                            <CardContent className="p-4">
+                              <p className="text-sm font-medium">
+                                {getTranslation(locale, `scholarship_subtypes.${subType}`)}
+                              </p>
+                            </CardContent>
+                          </Card>
+                        )
+                      })}
+                    </div>
+                    {selectedSubTypes[newApplicationData.scholarship_type]?.length === 0 && (
+                      <p className="text-sm text-destructive">
+                        {locale === "zh" ? "請至少選擇一個申請項目" : "Please select at least one item"}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Dynamic Application Form */}
                 {newApplicationData.scholarship_type && (
@@ -1148,6 +1236,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                     }}
                     initialValues={dynamicFormData}
                     initialFiles={dynamicFileData}
+                    selectedSubTypes={selectedSubTypes[newApplicationData.scholarship_type] || []}
                   />
                 )}
               </div>

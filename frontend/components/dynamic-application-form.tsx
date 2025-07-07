@@ -25,6 +25,7 @@ interface DynamicApplicationFormProps {
   initialValues?: Record<string, any>
   initialFiles?: Record<string, File[]>
   className?: string
+  selectedSubTypes?: string[]
 }
 
 interface FormData {
@@ -42,7 +43,8 @@ export function DynamicApplicationForm({
   onFileChange,
   initialValues = {},
   initialFiles = {},
-  className
+  className,
+  selectedSubTypes
 }: DynamicApplicationFormProps) {
   // State
   const [formConfig, setFormConfig] = useState<ScholarshipFormConfig | null>(null)
