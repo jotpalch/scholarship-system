@@ -2,10 +2,9 @@
 Student models for academic information with normalized database design
 """
 
-from datetime import datetime, date
-from typing import Optional, List
-from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, SmallInteger, Text, Table
-from sqlalchemy.orm import relationship, Mapped
+from typing import Optional
+from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, SmallInteger, Text, Table, UniqueConstraint, ForeignKeyConstraint
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
 
@@ -23,7 +22,7 @@ class Degree(Base):
 
     # 關聯
     enrollTypes = relationship("EnrollType", back_populates="degree")
-    studentAcademicRecords = relationship("StudentAcademicRecord", back_populates="degreeRef")
+    studentAcademicRecords = relationship("StudentAcademicRecord", back_populates="degreeRef", overlaps="enrollType")
 
 
 class Identity(Base):
@@ -34,7 +33,7 @@ class Identity(Base):
     name = Column(String(100), nullable=False)
 
     # 關聯
-    students = relationship("Student", secondary="student_identities", back_populates="identities")
+    studentAcademicRecords = relationship("StudentAcademicRecord", back_populates="identityRef")
 
 
 class StudyingStatus(Base):
@@ -87,27 +86,22 @@ class EnrollType(Base):
     """入學管道表"""
     __tablename__ = "enroll_types"
 
-    id = Column(Integer, primary_key=True)
-    code = Column(String(10))
+    degreeId = Column(SmallInteger, ForeignKey("degrees.id"), primary_key=True)
+    code = Column(SmallInteger, primary_key=True)
     name = Column(String(100), nullable=False)
-    degreeId = Column(SmallInteger, ForeignKey("degrees.id"))
+    name_en = Column(String(100), nullable=False)
 
     # 關聯
     degree = relationship("Degree", back_populates="enrollTypes")
-    studentAcademicRecords = relationship("StudentAcademicRecord", back_populates="enrollType")
+    studentAcademicRecords = relationship("StudentAcademicRecord", back_populates="enrollType", overlaps="degreeRef,studentAcademicRecords")
 
     __table_args__ = (
+        UniqueConstraint('degreeId', 'code', name='uq_degree_code'),
         {"sqlite_autoincrement": True}
     )
 
-
-# === 學生多對多身份關聯表 ===
-student_identities = Table(
-    'student_identities',
-    Base.metadata,
-    Column('student_id', Integer, ForeignKey('students.id', ondelete='CASCADE'), primary_key=True),
-    Column('identity_id', SmallInteger, ForeignKey('identities.id'), primary_key=True)
-)
+    def __repr__(self):
+        return f"<EnrollType(id={self.id}, name={self.name}, degree={self.degreeId})>"
 
 
 # === 主要學生資料表 ===
@@ -126,9 +120,9 @@ class Student(Base):
     birthDate = Column(Date)  # birth_date
 
     # 關聯
-    identities = relationship("Identity", secondary=student_identities, back_populates="students")
     academicRecords = relationship("StudentAcademicRecord", back_populates="student")
     contacts = relationship("StudentContact", back_populates="student", uselist=False)
+    termRecords = relationship("StudentTermRecord", back_populates="student")
     applications = relationship("Application", back_populates="studentProfile")
 
     def __repr__(self):
@@ -154,62 +148,64 @@ class Student(Base):
         to avoid lazy loading issues. Use scholarship_service for proper async handling.
         """
         if not academic_record:
-            # Fallback based on student number pattern
-            if self.stdNo:
-                if self.stdNo.startswith('U'):
-                    return StudentType.UNDERGRADUATE
-                elif self.stdNo.startswith('M'):
-                    return StudentType.GRADUATE
-                elif self.stdNo.startswith('P'):
-                    return StudentType.PHD
-                elif self.stdNo.startswith('D'):
-                    return StudentType.DIRECT_PHD
+            #TODO 用學號判斷學生類型
+            # 先回傳學士
             return StudentType.UNDERGRADUATE
         
-        # Based on degree field from lookup table
-        if academic_record.degree == 1:  # 學士
-            return StudentType.UNDERGRADUATE
-        elif academic_record.degree == 2:  # 碩士
-            return StudentType.GRADUATE
-        elif academic_record.degree == 3:  # 博士
-            # Check if it's direct PhD based on student number pattern
-            if self.stdNo and self.stdNo.startswith('D'):
-                return StudentType.DIRECT_PHD
+        if academic_record.degree == 1:
             return StudentType.PHD
+        elif academic_record.degree == 2:
+            return StudentType.MASTER
         else:
             return StudentType.UNDERGRADUATE
 
 
 class StudentAcademicRecord(Base):
-    """學籍資料表"""
+    """學生學籍資料"""
     __tablename__ = "student_academic_records"
 
     id = Column(Integer, primary_key=True)
-    studentId = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"))
+    studentId = Column(Integer, ForeignKey("students.id"))
     degree = Column(SmallInteger, ForeignKey("degrees.id"))
+    identity = Column(SmallInteger, ForeignKey("identities.id"))
     studyingStatus = Column(SmallInteger, ForeignKey("studying_statuses.id"))
     schoolIdentity = Column(SmallInteger, ForeignKey("school_identities.id"))
     termCount = Column(SmallInteger)
     depId = Column(Integer, ForeignKey("departments.id"))
     academyId = Column(Integer, ForeignKey("academies.id"))
-    enrollTypeId = Column(Integer, ForeignKey("enroll_types.id"))
-    enrollYear = Column(Integer)
-    enrollTerm = Column(SmallInteger)  # 1 or 2
+    enrollTypeCode = Column(SmallInteger)
+    enrollYear = Column(SmallInteger)
+    enrollTerm = Column(SmallInteger)
     highestSchoolName = Column(String(100))
-    nationality = Column(SmallInteger)  # 1=中華民國, 2=其他
-    createdAt = Column(DateTime, default=func.now())
+    nationality = Column(SmallInteger)
+
+    createdAt = Column(DateTime(timezone=True), server_default=func.now())
+    updatedAt = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # 關聯
     student = relationship("Student", back_populates="academicRecords")
-    degreeRef = relationship("Degree", back_populates="studentAcademicRecords")
-    studyingStatusRef = relationship("StudyingStatus", back_populates="studentAcademicRecords")
-    schoolIdentityRef = relationship("SchoolIdentity", back_populates="studentAcademicRecords")
-    department = relationship("Department", back_populates="studentAcademicRecords")
-    academy = relationship("Academy", back_populates="studentAcademicRecords")
-    enrollType = relationship("EnrollType", back_populates="studentAcademicRecords")
+    degreeRef = relationship("Degree", overlaps="enrollType,studentAcademicRecords")
+    identityRef = relationship("Identity")
+    studyingStatusRef = relationship("StudyingStatus")
+    schoolIdentityRef = relationship("SchoolIdentity")
+    department = relationship("Department")
+    academy = relationship("Academy")
+    enrollType = relationship(
+        "EnrollType",
+        foreign_keys=[enrollTypeCode, degree],
+        primaryjoin="and_(StudentAcademicRecord.enrollTypeCode == EnrollType.code, StudentAcademicRecord.degree == EnrollType.degreeId)",
+        overlaps="degreeRef,studentAcademicRecords"
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ['enrollTypeCode', 'degree'],
+            ['enroll_types.code', 'enroll_types.degreeId']
+        ),
+    )
 
     def __repr__(self):
-        return f"<StudentAcademicRecord(id={self.id}, studentId={self.studentId})>"
+        return f"<StudentAcademicRecord(id={self.id}, studentId={self.studentId})>" 
 
 
 class StudentContact(Base):
@@ -229,7 +225,7 @@ class StudentContact(Base):
         return f"<StudentContact(studentId={self.studentId}, email={self.email})>"
 
 
-# === 學期成績記錄 (保持原有功能) ===
+# === 學期成績記錄 ===
 class StudentTermRecord(Base):
     """Student term academic record"""
     __tablename__ = "student_term_records"
@@ -242,14 +238,19 @@ class StudentTermRecord(Base):
     semester = Column(String(10), nullable=False)  # trm_term
     studyStatus = Column(String(10), default="1")  # trm_studystatus
     
-    # 成績資訊
+    # 學期成績資訊
     averageScore = Column(String(10))  # trm_ascore
     gpa = Column(String(10))  # trm_ascore_gpa
-    semesterGpa = Column(String(10))  # trm_stdascore
     
-    # 排名資訊
+    # 學系排名資訊
     classRankingPercent = Column(String(10))  # trm_placingsrate
     deptRankingPercent = Column(String(10))  # trm_depplacingrate
+    depId = Column(Integer, ForeignKey("departments.id"))
+    academyId = Column(Integer, ForeignKey("academies.id"))
+
+    # 累積成績資訊
+    totalAverageScore = Column(String(10))  # trm_ascore_total
+    totalGpa = Column(String(10))  # trm_ascore_total_gpa
     
     # 修習統計
     completedTerms = Column(Integer)  # trm_termcount
@@ -269,9 +270,8 @@ class StudentTermRecord(Base):
 class StudentType(enum.Enum):
     """Student type enum"""
     UNDERGRADUATE = "undergraduate"  # 學士
-    GRADUATE = "graduate"            # 碩士
-    PHD = "phd"                     # 博士
-    DIRECT_PHD = "direct_phd"       # 逕升博士
+    MASTER = "master"  # 碩士
+    PHD = "phd"  # 博士
 
 
 class StudyStatus(enum.Enum):

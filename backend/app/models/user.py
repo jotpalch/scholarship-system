@@ -2,10 +2,8 @@
 User model for authentication and role management
 """
 
-from datetime import datetime
-from typing import Optional
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum
-from sqlalchemy.orm import relationship, Mapped, mapped_column
+from sqlalchemy.orm import relationship, Mapped
 from sqlalchemy.sql import func
 import enum
 
@@ -36,7 +34,7 @@ class User(Base):
     english_name = Column(String(100))
     
     # Student linking (for role=STUDENT)
-    student_no = Column(String(20), nullable=True, index=True)
+    student_no = Column(String(20), nullable=True, index=True, unique=True, default=None)
     
     # Role and status
     role: Mapped[UserRole] = Column(Enum(UserRole), nullable=False, default=UserRole.STUDENT)

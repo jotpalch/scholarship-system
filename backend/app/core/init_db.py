@@ -6,6 +6,7 @@ import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime, date, timezone, timedelta
+from typing import List
 
 from app.db.session import async_engine, AsyncSessionLocal
 from app.models.user import User, UserRole
@@ -14,13 +15,12 @@ from app.models.student import (
     Degree, Identity, StudyingStatus, SchoolIdentity, Academy, Department, EnrollType,
     # 學生資料
     Student, StudentAcademicRecord, StudentContact, StudentTermRecord,
-    # Enum
-    StudentType, StudyStatus
 )
 from app.core.security import get_password_hash
 from app.db.base_class import Base
-from app.models.scholarship import ScholarshipType, ScholarshipStatus
+from app.models.scholarship import ScholarshipRule, ScholarshipType, ScholarshipStatus, ScholarshipCategory
 from app.models.notification import Notification, NotificationType, NotificationPriority
+from app.models.application_field import ApplicationField, ApplicationDocument
 from app.core.config import settings
 
 
@@ -30,10 +30,11 @@ async def initLookupTables(session: AsyncSession) -> None:
     print("📚 Initializing lookup tables...")
     
     # === 學位 ===
+    # 1 博士, 2 碩士, 3 大學
     degrees_data = [
-        {"id": 1, "name": "學士"},
+        {"id": 1, "name": "博士"},
         {"id": 2, "name": "碩士"},
-        {"id": 3, "name": "博士"}
+        {"id": 3, "name": "學士"}
     ]
     
     for degree_data in degrees_data:
@@ -75,16 +76,16 @@ async def initLookupTables(session: AsyncSession) -> None:
     # === 學籍狀態 ===
     studying_statuses_data = [
         {"id": 1, "name": "在學"},
-        {"id": 2, "name": "延畢"},
-        {"id": 3, "name": "休學"},
-        {"id": 4, "name": "退學"},
-        {"id": 5, "name": "轉學離校"},
-        {"id": 6, "name": "轉系離校"},
-        {"id": 7, "name": "雙主修離校"},
-        {"id": 8, "name": "輔系離校"},
-        {"id": 9, "name": "死亡"},
-        {"id": 10, "name": "畢業"},
-        {"id": 11, "name": "修業未畢"}
+        {"id": 2, "name": "應畢"},
+        {"id": 3, "name": "延畢"},
+        {"id": 4, "name": "休學"},
+        {"id": 5, "name": "期中退學"},
+        {"id": 6, "name": "期末退學"},
+        {"id": 7, "name": "開除學籍"},
+        {"id": 8, "name": "死亡"},
+        {"id": 9, "name": "保留學籍"},
+        {"id": 10, "name": "放棄入學"},
+        {"id": 11, "name": "畢業"}
     ]
     
     for status_data in studying_statuses_data:
@@ -97,14 +98,14 @@ async def initLookupTables(session: AsyncSession) -> None:
     
     # === 學校身份 ===
     school_identities_data = [
-        {"id": 1, "name": "正取生"},
-        {"id": 2, "name": "備取生"},
-        {"id": 3, "name": "境外學生"},
-        {"id": 4, "name": "外籍學生"},
-        {"id": 5, "name": "在職專班"},
-        {"id": 6, "name": "交換學生"},
-        {"id": 7, "name": "雙聯學位"},
-        {"id": 8, "name": "專業碩士"}
+        {"id": 1, "name": "一般生"},
+        {"id": 2, "name": "在職生"},
+        {"id": 3, "name": "選讀學分"},
+        {"id": 4, "name": "交換學生"},
+        {"id": 5, "name": "外校生"},
+        {"id": 6, "name": "提早選讀生"},
+        {"id": 7, "name": "跨校生"},
+        {"id": 8, "name": "專案選讀生"}
     ]
     
     for school_identity_data in school_identities_data:
@@ -164,54 +165,46 @@ async def initLookupTables(session: AsyncSession) -> None:
             session.add(department)
     
     # === 入學管道 ===
+    # 修正 degreeId: 1=博士, 2=碩士, 3=學士
     enroll_types_data = [
         # 博士班入學管道
-        {"code": "1", "name": "招生考試一般生", "degreeId": 3},
-        {"code": "2", "name": "招生考試在職生(目前有一般生)", "degreeId": 3},
-        {"code": "3", "name": "選讀生", "degreeId": 3},
-        {"code": "4", "name": "推甄一般生", "degreeId": 3},
-        {"code": "5", "name": "推甄在職生(目前有一般生)", "degreeId": 3},
-        {"code": "6", "name": "僑生", "degreeId": 3},
-        {"code": "7", "name": "外籍生", "degreeId": 3},
-        {"code": "8", "name": "大學逕博", "degreeId": 3},
-        {"code": "9", "name": "碩士逕博", "degreeId": 3},
-        {"code": "10", "name": "跨校學士逕博", "degreeId": 3},
-        {"code": "11", "name": "跨校碩士逕博", "degreeId": 3},
-        {"code": "12", "name": "雙聯學位", "degreeId": 3},
-        {"code": "17", "name": "陸生", "degreeId": 3},
-        {"code": "18", "name": "轉校", "degreeId": 3},
-        {"code": "26", "name": "專案入學", "degreeId": 3},
-        {"code": "29", "name": "TIGP", "degreeId": 3},
-        {"code": "30", "name": "其他", "degreeId": 3},
+        {"degreeId": 1, "code": 1, "name": "招生考試一般生", "name_en": "Regular Student - Entrance Exam"},
+        {"degreeId": 1, "code": 2, "name": "招生考試在職生(目前有一般生)", "name_en": "Working Professional - Entrance Exam (Currently Regular)"},
+        {"degreeId": 1, "code": 3, "name": "選讀生", "name_en": "Non-Degree Student"},
+        {"degreeId": 1, "code": 4, "name": "推甄一般生", "name_en": "Regular Student - Recommendation"},
+        {"degreeId": 1, "code": 5, "name": "推甄在職生(目前有一般生)", "name_en": "Working Professional - Recommendation (Currently Regular)"},
+        {"degreeId": 1, "code": 6, "name": "僑生", "name_en": "Overseas Chinese Student"},
+        {"degreeId": 1, "code": 7, "name": "外籍生", "name_en": "International Student"},
+        {"degreeId": 1, "code": 8, "name": "大學逕博", "name_en": "Direct PhD from Bachelor"},
+        {"degreeId": 1, "code": 9, "name": "碩士逕博", "name_en": "Direct PhD from Master"},
+        {"degreeId": 1, "code": 10, "name": "跨校學士逕博", "name_en": "Direct PhD from Bachelor (Inter-University)"},
+        {"degreeId": 1, "code": 11, "name": "跨校碩士逕博", "name_en": "Direct PhD from Master (Inter-University)"},
+        {"degreeId": 1, "code": 12, "name": "雙聯學位", "name_en": "Dual Degree"},
+        {"degreeId": 1, "code": 17, "name": "陸生", "name_en": "Mainland Chinese Student"},
+        {"degreeId": 1, "code": 18, "name": "轉校", "name_en": "Transfer Student"},
+        {"degreeId": 1, "code": 26, "name": "專案入學", "name_en": "Special Admission"},
+        {"degreeId": 1, "code": 29, "name": "TIGP", "name_en": "Taiwan International Graduate Program"},
+        {"degreeId": 1, "code": 30, "name": "其他", "name_en": "Others"},
         
         # 碩士班入學管道
-        {"code": "M1", "name": "一般考試", "degreeId": 2},
-        {"code": "M2", "name": "推薦甄選", "degreeId": 2},
-        {"code": "M3", "name": "在職專班", "degreeId": 2},
-        {"code": "M4", "name": "僑生", "degreeId": 2},
-        {"code": "M5", "name": "外籍生", "degreeId": 2},
+        {"degreeId": 2, "code": 1, "name": "一般考試", "name_en": "Regular Entrance Exam"},
+        {"degreeId": 2, "code": 2, "name": "推薦甄選", "name_en": "Recommendation Selection"},
+        {"degreeId": 2, "code": 3, "name": "在職專班", "name_en": "Working Professional Program"},
+        {"degreeId": 2, "code": 4, "name": "僑生", "name_en": "Overseas Chinese Student"},
+        {"degreeId": 2, "code": 5, "name": "外籍生", "name_en": "International Student"},
         
         # 學士班入學管道
-        {"code": "B1", "name": "大學個人申請", "degreeId": 1},
-        {"code": "B2", "name": "大學考試分發", "degreeId": 1},
-        {"code": "B3", "name": "四技二專甄選", "degreeId": 1},
-        {"code": "B4", "name": "運動績優", "degreeId": 1},
-        {"code": "B5", "name": "僑生", "degreeId": 1},
-        {"code": "B6", "name": "外籍生", "degreeId": 1}
+        {"degreeId": 3, "code": 1, "name": "大學個人申請", "name_en": "Individual Application"},
+        {"degreeId": 3, "code": 2, "name": "大學考試分發", "name_en": "Examination Distribution"},
+        {"degreeId": 3, "code": 3, "name": "四技二專甄選", "name_en": "Technical College Selection"},
+        {"degreeId": 3, "code": 4, "name": "運動績優", "name_en": "Outstanding Athletic Achievement"},
+        {"degreeId": 3, "code": 5, "name": "僑生", "name_en": "Overseas Chinese Student"},
+        {"degreeId": 3, "code": 6, "name": "外籍生", "name_en": "International Student"}
     ]
     
     for enroll_type_data in enroll_types_data:
-        result = await session.execute(
-            select(EnrollType).where(
-                EnrollType.code == enroll_type_data["code"],
-                EnrollType.degreeId == enroll_type_data["degreeId"]
-            )
-        )
-        existing = result.scalar_one_or_none()
-        
-        if not existing:
-            enroll_type = EnrollType(**enroll_type_data)
-            session.add(enroll_type)
+        enroll_type = EnrollType(**enroll_type_data)
+        session.add(enroll_type)
     
     await session.commit()
     print("✅ Lookup tables initialized successfully!")
@@ -266,6 +259,7 @@ async def createTestUsers(session: AsyncSession) -> list[User]:
             "fullName": "陳小明",
             "chineseName": "陳小明",
             "englishName": "Chen Xiao Ming",
+            "studentNo": "U1120001",
             "role": UserRole.STUDENT
         },
         {
@@ -275,6 +269,7 @@ async def createTestUsers(session: AsyncSession) -> list[User]:
             "fullName": "王博士",
             "chineseName": "王博士",
             "englishName": "Wang PhD",
+            "studentNo": "P1120001",
             "role": UserRole.STUDENT
         },
         {
@@ -284,6 +279,7 @@ async def createTestUsers(session: AsyncSession) -> list[User]:
             "fullName": "李逕升",
             "chineseName": "李逕升",
             "englishName": "Li Direct",
+            "studentNo": "D1120001",
             "role": UserRole.STUDENT
         },
         {
@@ -293,6 +289,17 @@ async def createTestUsers(session: AsyncSession) -> list[User]:
             "fullName": "張碩士",
             "chineseName": "張碩士",
             "englishName": "Zhang Master",
+            "studentNo": "M1120001",
+            "role": UserRole.STUDENT
+        },
+        {
+            "username": "phd_china",
+            "email": "phd_china@nycu.edu.tw",
+            "password": "stuchina123",
+            "fullName": "陸生",
+            "chineseName": "陸生",
+            "englishName": "China Student",
+            "studentNo": "P1160002",
             "role": UserRole.STUDENT
         }
     ]
@@ -304,19 +311,7 @@ async def createTestUsers(session: AsyncSession) -> list[User]:
         result = await session.execute(select(User).where(User.username == user_data["username"]))
         existing = result.scalar_one_or_none()
         
-        if not existing:
-            # Set student_no for student users
-            student_no = None
-            if user_data["role"] == UserRole.STUDENT:
-                if user_data["username"] == "stu_under":
-                    student_no = "U1120001"
-                elif user_data["username"] == "stu_phd":
-                    student_no = "P1120001"
-                elif user_data["username"] == "stu_direct":
-                    student_no = "D1120001"
-                elif user_data["username"] == "stu_master":
-                    student_no = "M1120001"
-            
+        if not existing:            
             user = User(
                 username=user_data["username"],
                 email=user_data["email"],
@@ -325,7 +320,7 @@ async def createTestUsers(session: AsyncSession) -> list[User]:
                 chinese_name=user_data["chineseName"],
                 english_name=user_data["englishName"],
                 role=user_data["role"],
-                student_no=student_no,
+                student_no=user_data.get("studentNo"),
                 is_active=True,
                 is_verified=True
             )
@@ -342,197 +337,278 @@ async def createTestUsers(session: AsyncSession) -> list[User]:
     return created_users
 
 
-async def createTestStudents(session: AsyncSession, users: list[User]) -> None:
+async def createTestStudents(session: AsyncSession, users: List[User]) -> None:
     """Create test student data with new normalized structure"""
     
     print("🎓 Creating test student data...")
     
     student_users = [user for user in users if user.role == UserRole.STUDENT]
-    
+
+    # 修正 degree: 1=博士, 2=碩士, 3=學士
+    student_data = {
+        "stu_under": {
+            "pid": "A123456789",
+            "sex": "M",
+            "birthDate": date(2000, 5, 15),
+            "academic_record": {
+                "degree": 3,  # 學士
+                "identity": 1, # 一般生
+                "studyingStatus": 1, # 在學
+                "schoolIdentity": 1, # 一般生
+                "termCount": 2,
+                "depId": 1,
+                "academyId": 1,
+                "enrollTypeCode": 1, # 大學個人申請
+                "enrollYear": 112,
+                "enrollTerm": 1,
+                "highestSchoolName": "台北市立建國高級中學",
+                "nationality": 1 # 中華民國
+            },
+            "contact": {
+                "cellphone": "0912345678",
+                "email": "stu_under@nycu.edu.tw",
+                "zipCode": "30010",
+                "address": "新竹市東區大學路1001號"
+            },
+            "term_record": {
+                # 學期資訊
+                "academicYear": "112",
+                "semester": "1",
+                "studyStatus": "1",
+
+                # 學期成績資訊
+                "averageScore": "85.5",
+                "gpa": "3.5",
+
+                # 學系排名資訊
+                "classRankingPercent": "20.0",
+                "deptRankingPercent": "25.0",
+                "depId": 1,
+                "academyId": 1,
+
+                # 累積成績資訊
+                "totalAverageScore": "85.5",
+                "totalGpa": "3.5",
+
+                # 修習統計
+                "completedTerms": 2
+            },
+        },
+        "stu_phd": {
+            "pid": "B123456789",
+            "sex": "M",
+            "birthDate": date(1995, 8, 20),
+            "academic_record": {
+                "degree": 1, # 博士
+                "identity": 1, # 一般生
+                "studyingStatus": 1, # 在學
+                "schoolIdentity": 1, # 一般生
+                "termCount": 1,
+                "depId": 1,
+                "academyId": 1,
+                "enrollTypeCode": 1, # 招生考試一般生
+                "enrollYear": 112,
+                "enrollTerm": 1,
+                "highestSchoolName": "國立交通大學",
+                "nationality": 1 # 中華民國
+            },
+            "contact": {
+                "cellphone": "0912345678",
+                "email": "stu_phd@nycu.edu.tw",
+                "zipCode": "30010",
+                "address": "新竹市東區大學路1001號"
+            },
+            "term_record": {
+                # 學期資訊
+                "academicYear": "112",
+                "semester": "1",
+                "studyStatus": "1",
+
+                # 學期成績資訊
+                "averageScore": "88.0",
+                "gpa": "3.6",
+
+                # 學系排名資訊
+                "classRankingPercent": "15.0",
+                "deptRankingPercent": "20.0",
+                "depId": 1,
+                "academyId": 1,
+
+                # 累積成績資訊
+                "totalAverageScore": "85.5",
+                "totalGpa": "3.5",
+
+                # 修習統計
+                "completedTerms": 1
+            },
+        },
+        "stu_direct": {
+            "pid": "C123456789",
+            "sex": "F",
+            "birthDate": date(1998, 3, 10),
+            "academic_record": {
+                "degree": 1, # 博士
+                "identity": 1, # 一般生
+                "studyingStatus": 1, # 在學
+                "schoolIdentity": 1, # 一般生
+                "termCount": 1,
+                "depId": 1,
+                "academyId": 1,
+                "enrollTypeCode": 9, # 碩士逕博
+                "enrollYear": 112,
+                "enrollTerm": 1,
+                "highestSchoolName": "國立陽明交通大學",
+                "nationality": 1 # 中華民國
+            },
+            "contact": {
+                "cellphone": "0912345678",
+                "email": "stu_direct@nycu.edu.tw",
+                "zipCode": "30010",
+                "address": "新竹市東區大學路1001號"
+            },
+            "term_record": {
+                "academicYear": "112",
+                "semester": "1",
+                "studyStatus": "1",
+
+                # 學期成績資訊
+                "averageScore": "88.0",
+                "gpa": "3.8",
+
+                # 學系排名資訊
+                "classRankingPercent": "10.0",
+                "deptRankingPercent": "15.0",
+                "depId": 1,
+                "academyId": 1,
+
+                # 累積成績資訊
+                "totalAverageScore": "90.0",
+                "totalGpa": "3.8",
+
+                # 修習統計
+                "completedTerms": 1
+            },
+        },
+        "stu_master": {
+            "pid": "D123456789",
+            "sex": "F",
+            "birthDate": date(1997, 12, 5),
+            "academic_record": {
+                "degree": 2, # 碩士
+                "identity": 1, # 一般生
+                "studyingStatus": 1, # 在學
+                "schoolIdentity": 1, # 一般生
+                "termCount": 1,
+                "depId": 1,
+                "academyId": 1,
+                "enrollTypeCode": 1, # 一般考試
+                "enrollYear": 112,
+                "enrollTerm": 1,
+                "highestSchoolName": "國立台灣大學",
+                "nationality": 1 # 中華民國
+            },
+            "contact": {
+                "cellphone": "0912345678",
+                "email": "stu_master@nycu.edu.tw",
+                "zipCode": "30010",
+                "address": "新竹市東區大學路1001號"
+            },
+            "term_record": {
+                "academicYear": "112",
+                "semester": "1",
+                "studyStatus": "1",
+
+                # 學期成績資訊
+                "averageScore": "87.0",
+                "gpa": "3.55",
+
+                # 學系排名資訊
+                "classRankingPercent": "18.0",
+                "deptRankingPercent": "22.0",
+                "depId": 1,
+                "academyId": 1,
+
+                # 累積成績資訊
+                "totalAverageScore": "87.0",
+                "totalGpa": "3.55",
+
+                # 修習統計
+                "completedTerms": 1
+            },
+        },
+        "phd_china": {
+            "pid": "E123456789",
+            "sex": "M",
+            "birthDate": date(1996, 1, 15),
+            "academic_record": {
+                "degree": 1, # 博士
+                "identity": 17, # 陸生
+                "studyingStatus": 1, # 在學
+                "schoolIdentity": 1, # 一般生
+                "termCount": 1,
+                "depId": 1,
+                "academyId": 1,
+                "enrollTypeCode": 17, # 陸生
+                "enrollYear": 112,
+                "enrollTerm": 1,
+                "highestSchoolName": "國立清華大學",
+                "nationality": 2 # 非中華民國國籍
+            },
+            "contact": {
+                "cellphone": "0912345678",
+                "email": "phd_china@nycu.edu.tw",
+                "zipCode": "30010",
+                "address": "新竹市東區大學路1001號"
+            },
+            "term_record": {
+                "academicYear": "112",
+                "semester": "1",
+                "studyStatus": "1",
+
+                # 學期成績資訊
+                "averageScore": "88.0",
+                "gpa": "3.6",
+
+                # 學系排名資訊
+                "classRankingPercent": "15.0",
+                "deptRankingPercent": "20.0",
+                "depId": 1,
+                "academyId": 1,
+
+                # 累積成績資訊
+                "totalAverageScore": "85.5",
+                "totalGpa": "3.5",
+
+                # 修習統計
+                "completedTerms": 1
+            },
+        }
+    }
+
     for user in student_users:
-        # 建立學生基本資料
-        if user.username == "stu_under":
+        student_info = student_data[user.username]
+
+        result = await session.execute(select(Student).where(Student.pid == student_info["pid"]))
+        existing = result.scalar_one_or_none()
+        
+        if not existing:
             student = Student(
-                stdNo="U1120001",
-                stdCode="U1120001",
-                pid="A123456789",
+                pid=student_info["pid"],
+                sex=student_info["sex"],
+                birthDate=student_info["birthDate"],
+                stdNo=user.student_no,
+                stdCode=user.student_no,
                 cname=user.chinese_name,
                 ename=user.english_name,
-                sex="M",
-                birthDate=date(2000, 5, 15)
             )
-        elif user.username == "stu_phd":
-            student = Student(
-                stdNo="P1120001",
-                stdCode="P1120001",
-                pid="B123456789",
-                cname=user.chinese_name,
-                ename=user.english_name,
-                sex="M",
-                birthDate=date(1995, 8, 20)
-            )
-        elif user.username == "stu_direct":
-            student = Student(
-                stdNo="D1120001",
-                stdCode="D1120001",
-                pid="C123456789",
-                cname=user.chinese_name,
-                ename=user.english_name,
-                sex="F",
-                birthDate=date(1998, 3, 10)
-            )
-        elif user.username == "stu_master":
-            student = Student(
-                stdNo="M1120001",
-                stdCode="M1120001",
-                pid="D123456789",
-                cname=user.chinese_name,
-                ename=user.english_name,
-                sex="F",
-                birthDate=date(1997, 12, 5)
-            )
-        else:
-            continue
-            
-        session.add(student)
+            student.academicRecords.append(StudentAcademicRecord(**student_info["academic_record"]))
+            student.contacts = StudentContact(**student_info["contact"])
+            student.termRecords = [StudentTermRecord(**student_info["term_record"])]
+            session.add(student)
+        
         await session.commit()
-        await session.refresh(student)
-        
-        # 建立學籍資料
-        if user.username == "stu_under":
-            academic_record = StudentAcademicRecord(
-                studentId=student.id,
-                degree=1,  # 學士
-                studyingStatus=1,  # 在學
-                schoolIdentity=1,  # 正取生
-                termCount=2,
-                depId=1,  # 資訊工程學系
-                academyId=1,  # 電機資訊學院
-                enrollTypeId=1,  # 大學個人申請 (需要先查詢ID)
-                enrollYear=112,
-                enrollTerm=1,
-                highestSchoolName="台北市立建國高級中學",
-                nationality=1,  # 中華民國
-                createdAt=datetime.now()
-            )
-        elif user.username == "stu_phd":
-            academic_record = StudentAcademicRecord(
-                studentId=student.id,
-                degree=3,  # 博士
-                studyingStatus=1,  # 在學
-                schoolIdentity=1,  # 正取生
-                termCount=1,
-                depId=1,  # 資訊工程學系
-                academyId=1,  # 電機資訊學院
-                enrollTypeId=1,  # 招生考試一般生 (需要先查詢ID)
-                enrollYear=112,
-                enrollTerm=1,
-                highestSchoolName="國立交通大學",
-                nationality=1,  # 中華民國
-                createdAt=datetime.now()
-            )
-        elif user.username == "stu_direct":
-            academic_record = StudentAcademicRecord(
-                studentId=student.id,
-                degree=3,  # 博士
-                studyingStatus=1,  # 在學
-                schoolIdentity=1,  # 正取生
-                termCount=1,
-                depId=1,  # 資訊工程學系
-                academyId=1,  # 電機資訊學院
-                enrollTypeId=8,  # 大學逕博 (需要先查詢ID)
-                enrollYear=112,
-                enrollTerm=1,
-                highestSchoolName="國立陽明交通大學",
-                nationality=1,  # 中華民國
-                createdAt=datetime.now()
-            )
-        elif user.username == "stu_master":
-            academic_record = StudentAcademicRecord(
-                studentId=student.id,
-                degree=2,  # 碩士
-                studyingStatus=1,  # 在學
-                schoolIdentity=1,  # 正取生
-                termCount=1,
-                depId=1,  # 資訊工程學系
-                academyId=1,  # 電機資訊學院
-                enrollTypeId=19,  # 一般考試 (需要先查詢ID)
-                enrollYear=112,
-                enrollTerm=1,
-                highestSchoolName="國立台灣大學",
-                nationality=1,  # 中華民國
-                createdAt=datetime.now()
-            )
-        
-        session.add(academic_record)
-        
-        # 建立聯絡資料
-        contact = StudentContact(
-            studentId=student.id,
-            cellphone="0912345678",
-            email=user.email,
-            zipCode="30010",
-            address="新竹市東區大學路1001號"
-        )
-        session.add(contact)
-        
-        # 建立成績記錄
-        if user.username == "stu_under":
-            term_record = StudentTermRecord(
-                studentId=student.id,
-                academicYear="112",
-                semester="1",
-                studyStatus="1",
-                averageScore="85.5",
-                gpa="3.5",
-                semesterGpa="3.5",
-                classRankingPercent="20.0",
-                deptRankingPercent="25.0",
-                completedTerms=2
-            )
-        elif user.username == "stu_phd":
-            term_record = StudentTermRecord(
-                studentId=student.id,
-                academicYear="112",
-                semester="1",
-                studyStatus="1",
-                averageScore="88.0",
-                gpa="3.6",
-                semesterGpa="3.6",
-                classRankingPercent="15.0",
-                deptRankingPercent="20.0",
-                completedTerms=1
-            )
-        elif user.username == "stu_direct":
-            term_record = StudentTermRecord(
-                studentId=student.id,
-                academicYear="112",
-                semester="1",
-                studyStatus="1",
-                averageScore="90.0",
-                gpa="3.8",
-                semesterGpa="3.8",
-                classRankingPercent="10.0",
-                deptRankingPercent="15.0",
-                completedTerms=1
-            )
-        elif user.username == "stu_master":
-            term_record = StudentTermRecord(
-                studentId=student.id,
-                academicYear="112",
-                semester="1",
-                studyStatus="1",
-                averageScore="87.0",
-                gpa="3.55",
-                semesterGpa="3.55",
-                classRankingPercent="18.0",
-                deptRankingPercent="22.0",
-                completedTerms=1
-            )
-        
-        session.add(term_record)
-        await session.commit()
-    
+        print(f"✅ Student {user.username} created successfully!")
+
     print("✅ Test student data created successfully!")
 
 
@@ -558,6 +634,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
     start_date = now - timedelta(days=30)
     end_date = now + timedelta(days=30)
     
+    # ==== 基本獎學金 ====
     scholarships_data = [
         {
             "code": "undergraduate_freshman",
@@ -565,40 +642,40 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "name_en": "Undergraduate Freshman Scholarship",
             "description": "適用於學士班新生，需符合 GPA ≥ 3.38 或前35%排名",
             "description_en": "For undergraduate freshmen, requires GPA ≥ 3.38 or top 35% ranking",
-            "amount": 50000.00,
+            "category": ScholarshipCategory.UNDERGRADUATE_FRESHMAN.value,
+            "amount": 10000.00,
             "currency": "TWD",
-            "eligible_student_types": ["undergraduate"],
-            "min_gpa": 3.38,
-            "max_ranking_percent": 35.0,
-            "max_completed_terms": 6,
-            "required_documents": ["transcript", "bank_account"],
-            "whitelist_enabled": not settings.debug,  # 開發模式下關閉白名單
+            "whitelist_enabled": not settings.debug,
             "whitelist_student_ids": student_ids if not settings.debug else [],
             "application_start_date": start_date,
             "application_end_date": end_date,
             "status": ScholarshipStatus.ACTIVE.value,
+            "max_applications_per_year": 1,
             "requires_professor_recommendation": False,
-            "requires_research_proposal": False,
+            "requires_college_review": False,
+            "created_by": 1,
+            "updated_by": 1,
         },
         {
-            "code": "phd_nstc",
-            "name": "國科會博士生獎學金",
-            "name_en": "NSTC PhD Scholarship",
-            "description": "適用於博士班在學學生，需提供研究計畫",
-            "description_en": "For PhD students, requires research proposal",
-            "amount": 120000.00,
+            "code": "phd",
+            "name": "博士生獎學金",
+            "name_en": "PhD Scholarship",
+            "description": "適用於一般博士生，需完整研究計畫和教授推薦 國科會/教育部博士生獎學金",
+            "description_en": "For regular PhD students, requires complete research plan and professor recommendation",
+            "category": ScholarshipCategory.PHD.value,
+            "sub_type_list": ["nstc", "moe_1w", "moe_2w"],
+            "amount": 40000.00,
             "currency": "TWD",
-            "eligible_student_types": ["phd"],
-            "min_gpa": 3.5,
-            "max_completed_terms": 2,
-            "required_documents": ["transcript", "research_proposal", "bank_account"],
             "whitelist_enabled": False,
             "whitelist_student_ids": [],
             "application_start_date": start_date,
             "application_end_date": end_date,
             "status": ScholarshipStatus.ACTIVE.value,
+            "max_applications_per_year": 1,
             "requires_professor_recommendation": True,
-            "requires_research_proposal": True,
+            "requires_college_review": True,
+            "created_by": 1,
+            "updated_by": 1,
         },
         {
             "code": "direct_phd",
@@ -606,19 +683,19 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "name_en": "Direct PhD Scholarship",
             "description": "適用於逕升博士班學生，需完整研究計畫",
             "description_en": "For direct PhD students, requires complete research plan",
-            "amount": 150000.00,
+            "category": ScholarshipCategory.DIRECT_PHD.value,
+            "amount": 10000.00,
             "currency": "TWD",
-            "eligible_student_types": ["direct_phd"],
-            "min_gpa": 3.5,
-            "max_completed_terms": 2,
-            "required_documents": ["transcript", "research_proposal", "budget_plan", "bank_account"],
-            "whitelist_enabled": False,
-            "whitelist_student_ids": [],
+            "whitelist_enabled": not settings.debug,
+            "whitelist_student_ids": student_ids if not settings.debug else [],
             "application_start_date": start_date,
             "application_end_date": end_date,
             "status": ScholarshipStatus.ACTIVE.value,
-            "requires_professor_recommendation": True,
-            "requires_research_proposal": True,
+            "max_applications_per_year": 1,
+            "requires_professor_recommendation": False,
+            "requires_college_review": False,
+            "created_by": 1,
+            "updated_by": 1,
         }
     ]
     
@@ -633,10 +710,329 @@ async def createTestScholarships(session: AsyncSession) -> None:
             scholarship = ScholarshipType(**scholarship_data)
             session.add(scholarship)
         else:
-            # 更新現有的獎學金資料（特別是申請期間）
+            # 更新現有的獎學金資料
             for key, value in scholarship_data.items():
                 setattr(existing, key, value)
     
+    # ==== 獎學金規則 ====
+    scholarship_rules_data = [
+        # 博士生獎學金 共同規則 1. 博士生身分 2. 在學生身分 3. 非在職生身分 4. 非陸港澳生身分
+        {
+            "scholarship_type_id": 2,
+            "sub_type": None,
+            "rule_name": "博士生獎學金 博士生身分",
+            "rule_type": "degree",
+            "tag": "博士生",
+            "description": "博士生獎學金需要博士生身分",
+            "condition_field": "academicRecords.degree",
+            "operator": "==",
+            "expected_value": "1",
+            "message": "博士生獎學金需要博士生身分",
+            "message_en": "PhD scholarship requires PhD student status",
+            "is_hard_rule": True,
+            "is_warning": False,
+            "priority": 1,
+            "is_active": True
+        },
+        {
+            "scholarship_type_id": 2,
+            "sub_type": None,
+            "rule_name": "博士生獎學金 在學生身分 1: 在學 2: 應畢 3: 延畢",
+            "rule_type": "studyingStatus",
+            "tag": "在學生",
+            "description": "博士生獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
+            "condition_field": "academicRecords.studyingStatus",
+            "operator": "in",
+            "expected_value": "1,2,3",
+            "message": "博士生獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
+            "message_en": "PhD scholarship requires active student status",
+            "is_hard_rule": False,
+            "is_warning": False,
+            "priority": 2,
+            "is_active": True
+        },
+        {
+            "scholarship_type_id": 2,
+            "sub_type": None,
+            "rule_name": "博士生獎學金 非在職生身分 需要為一般生",
+            "rule_type": "schoolIdentity",
+            "tag": "非在職生",
+            "description": "博士生獎學金需要非在職生身分 需要為一般生",
+            "condition_field": "academicRecords.schoolIdentity",
+            "operator": "==",
+            "expected_value": "1",
+            "message": "博士生獎學金需要非在職生身分 需要為一般生",
+            "message_en": "PhD scholarship ",
+            "is_hard_rule": False,
+            "is_warning": False,
+            "priority": 3,
+            "is_active": True
+        },
+        {
+            "scholarship_type_id": 2,
+            "sub_type": None,
+            "rule_name": "博士生獎學金 非陸港澳生身分",
+            "rule_type": "Identity",
+            "tag": "非陸生",
+            "description": "博士生獎學金需要非陸港澳生身分",
+            "condition_field": "academicRecords.identity",
+            "operator": "!=",
+            "expected_value": "17",
+            "message": "博士生獎學金需要非陸港澳生身分",
+            "message_en": "PhD scholarship requires non-Mainland China, Hong Kong, or Macao student status",
+            "is_hard_rule": False,
+            "is_warning": False,
+            "priority": 4,
+            "is_active": True
+        },
+        # 博士生獎學金 教育部獎學金 (一萬元) 5. 中華民國國籍 6. 一至三年級
+        {
+            "scholarship_type_id": 2,
+            "sub_type": "moe_1w",
+            "rule_name": "博士生獎學金 教育部獎學金 中華民國國籍",
+            "tag": "中華民國國籍",
+            "description": "博士生獎學金需要中華民國國籍",
+            "rule_type": "nationality",
+            "condition_field": "academicRecords.nationality",
+            "operator": "==",
+            "expected_value": "1",
+            "message": "博士生獎學金需要中華民國國籍",
+            "message_en": "PhD scholarship requires Chinese nationality",
+            "is_hard_rule": False,
+            "is_warning": False,
+            "priority": 5,
+            "is_active": True
+        },
+        {
+            "scholarship_type_id": 2,
+            "sub_type": "moe_1w",
+            "rule_name": "博士生獎學金 教育部獎學金 一至三年級(1-6學期)",
+            "tag": "三年級以下",
+            "description": "博士生獎學金需要一至三年級",
+            "rule_type": "termCount",
+            "condition_field": "academicRecords.termCount",
+            "operator": "in",
+            "expected_value": "1,2,3,4,5,6",
+            "message": "博士生獎學金需要一至三年級",
+            "message_en": "PhD scholarship requires 1-3rd year",
+            "is_hard_rule": False,
+            "is_warning": False,
+            "priority": 6,
+            "is_active": True
+        },
+        # 博士生獎學金 教育部獎學金 (兩萬元) 7. 中華民國國籍 8. 一至三年級
+        {
+            "scholarship_type_id": 2,
+            "sub_type": "moe_2w",
+            "rule_name": "博士生獎學金 教育部獎學金 中華民國國籍",
+            "tag": "中華民國國籍",
+            "description": "博士生獎學金需要中華民國國籍",
+            "rule_type": "nationality",
+            "condition_field": "academicRecords.nationality",
+            "operator": "==",
+            "expected_value": "1",
+            "message": "博士生獎學金需要中華民國國籍",
+            "message_en": "PhD scholarship requires Chinese nationality",
+            "is_hard_rule": False,
+            "is_warning": False,
+            "priority": 7,
+            "is_active": True
+        },
+        {
+            "scholarship_type_id": 2,
+            "sub_type": "moe_2w",
+            "rule_name": "博士生獎學金 教育部獎學金 一至三年級(1-6學期)",
+            "tag": "三年級以下",
+            "description": "博士生獎學金需要一至三年級",
+            "rule_type": "termCount",
+            "condition_field": "academicRecords.termCount",
+            "operator": "in",
+            "expected_value": "1,2,3,4,5,6",
+            "message": "博士生獎學金需要一至三年級",
+            "message_en": "PhD scholarship requires 1-3rd year",
+            "is_hard_rule": False,
+            "is_warning": False,
+            "priority": 8,
+            "is_active": True
+        },
+        # 逕博獎學金 共同規則 1. 博士生身分 2. 在學生身分 3. 非在職生身分 4. 非陸港澳生身分 5. 逕博生身分 6. 第一學年
+        {
+            "scholarship_type_id": 3,
+            "sub_type": None,
+            "rule_name": "逕升博士獎學金 博士生身分",
+            "tag": "博士生",
+            "description": "逕升博士獎學金需要博士生身分",
+            "rule_type": "degree",
+            "condition_field": "academicRecords.degree",
+            "operator": "==",
+            "expected_value": "1",
+            "message": "逕升博士獎學金需要博士生身分",
+            "message_en": "Direct PhD scholarship requires PhD student status",
+            "is_hard_rule": False,
+            "is_warning": False,
+            "priority": 1,
+            "is_active": True
+        },
+        {
+            "scholarship_type_id": 3,
+            "sub_type": None,
+            "rule_name": "逕升博士獎學金 在學生身分 1: 在學 2: 應畢 3: 延畢",
+            "rule_type": "studyingStatus",
+            "tag": "在學生",
+            "condition_field": "academicRecords.studyingStatus",
+            "operator": "in",
+            "expected_value": "1,2,3",
+            "message": "逕升博士獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
+            "message_en": "Direct PhD scholarship requires active student status",
+            "is_hard_rule": False,
+            "is_warning": False,
+            "priority": 2,
+            "is_active": True
+        },
+        {
+            "scholarship_type_id": 3,
+            "sub_type": None,
+            "rule_name": "逕升博士獎學金 非在職生身分 需要為一般生",
+            "rule_type": "schoolIdentity",
+            "tag": "非在職生",
+            "condition_field": "academicRecords.schoolIdentity",
+            "operator": "==",
+            "expected_value": "1",
+            "message": "逕升博士獎學金需要非在職生身分 需要為一般生",
+            "message_en": "Direct PhD scholarship requires regular student status",
+            "is_hard_rule": False,
+            "is_warning": False,
+            "priority": 3,
+            "is_active": True
+        },
+        {
+            "scholarship_type_id": 3,
+            "sub_type": None,
+            "rule_name": "逕升博士獎學金 非陸港澳生身分",
+            "rule_type": "Identity",
+            "tag": "非陸生",
+            "description": "逕升博士獎學金需要非陸港澳生身分",
+            "condition_field": "academicRecords.identity",
+            "operator": "!=",
+            "expected_value": "17",
+            "message": "逕升博士獎學金需要非陸港澳生身分",
+            "message_en": "Direct PhD scholarship requires non-Mainland China, Hong Kong, or Macao student status",
+            "is_hard_rule": False,
+            "is_warning": False,
+            "priority": 4,
+            "is_active": True
+        },
+        {
+            "scholarship_type_id": 3,
+            "sub_type": None,
+            "rule_name": "逕升博士獎學金 逕博生身分 8: 大學逕博 9: 碩士逕博 10: 跨校學士逕博 11: 跨校碩士逕博",
+            "rule_type": "enrollType",
+            "tag": "逕博生",
+            "description": "逕升博士獎學金需要逕博生身分",
+            "condition_field": "academicRecords.enrollTypeCode",
+            "operator": "in",
+            "expected_value": "8,9,10,11",
+            "message": "逕升博士獎學金需要逕博生身分",
+            "message_en": "Direct PhD scholarship requires direct PhD student status",
+            "is_hard_rule": True,
+            "is_warning": False,
+            "priority": 5,
+            "is_active": True
+        },
+        {
+            "scholarship_type_id": 3,
+            "sub_type": None,
+            "rule_name": "逕升博士獎學金 第一學年",
+            "rule_type": "termCount",
+            "tag": "第一學年",
+            "description": "逕升博士獎學金需要第一學年",
+            "condition_field": "academicRecords.termCount",
+            "operator": "in",
+            "expected_value": "1,2",
+            "message": "逕升博士獎學金需要第一學年",
+            "message_en": "Direct PhD scholarship requires first year",
+            "is_hard_rule": False,
+            "is_warning": False,
+            "priority": 6,
+            "is_active": True
+        },
+        # 學士新生獎學金 共同規則 1.學士生身分
+        {
+            "scholarship_type_id": 1,
+            "sub_type": None,
+            "rule_name": "學士新生獎學金 學士生身分",
+            "tag": "學士生",
+            "description": "學士新生獎學金需要學士生身分",
+            "rule_type": "degree",
+            "condition_field": "academicRecords.degree",
+            "operator": "==",
+            "expected_value": "3",
+            "message": "學士新生獎學金需要學士生身分",
+            "message_en": "Undergraduate scholarship requires undergraduate student status",
+            "is_hard_rule": True,
+            "is_warning": False,
+            "priority": 1,
+            "is_active": True
+        },
+        # 一般生入學管道提醒規則
+        {
+            "scholarship_type_id": 2,
+            "sub_type": "moe_1w",
+            "rule_name": "博士生獎學金 一般生入學管道提醒",
+            "tag": "一般生",
+            "description": "一般生身份學生，其入學管道可能為2/5/6/7，請承辦人確認。若為2/5/6/7請特別留意（標紅字）。",
+            "rule_type": "enrollTypeWarning",
+            "condition_field": "academicRecords.enrollTypeCode",
+            "operator": "in",
+            "expected_value": "2,5,6,7",
+            "message": "此學生為一般生，但入學管道為2/5/6/7，請承辦人確認（標紅字）。",
+            "message_en": "This student is a regular student but has an enrollment type of 2/5/6/7. Please double-check (highlighted in red).",
+            "is_hard_rule": False,
+            "is_warning": True,
+            "priority": 99,
+            "is_active": True
+        },
+        {
+            "scholarship_type_id": 2,
+            "sub_type": "moe_2w",
+            "rule_name": "博士生獎學金 一般生入學管道提醒",
+            "tag": "一般生",
+            "description": "一般生身份學生，其入學管道可能為2/5/6/7，請承辦人確認。若為2/5/6/7請特別留意（標紅字）。",
+            "rule_type": "enrollTypeWarning",
+            "condition_field": "academicRecords.enrollTypeCode",
+            "operator": "in",
+            "expected_value": "2,5,6,7",
+            "message": "此學生為一般生，但入學管道為2/5/6/7，請承辦人確認（標紅字）。",
+            "message_en": "This student is a regular student but has an enrollment type of 2/5/6/7. Please double-check (highlighted in red).",
+            "is_hard_rule": False,
+            "is_warning": True,
+            "priority": 99,
+            "is_active": True
+        },
+        # 中華民國國籍生身份提醒規則
+        {
+            "scholarship_type_id": 2,
+            "sub_type": "nstc",
+            "rule_name": "中華民國國籍生身份提醒",
+            "tag": "中華民國國籍",
+            "description": "中華民國國籍生的身份可能為僑生、外籍生，請承辦人自行確認（3/4標紅字）。",
+            "rule_type": "identityWarning",
+            "condition_field": "academicRecords.identity",
+            "operator": "in",
+            "expected_value": "3,4",
+            "message": "此中華民國國籍生身份為僑生或外籍生，請承辦人確認（標紅字）。",
+            "message_en": "This ROC national student is classified as Overseas Chinese or International Student. Please double-check (highlighted in red).",
+            "is_hard_rule": False,
+            "is_warning": True,
+            "priority": 100,
+            "is_active": True
+        }
+    ]
+
+    for scholarship_rule in scholarship_rules_data:
+        scholarship_rule = ScholarshipRule(**scholarship_rule)
+        session.add(scholarship_rule)
+
     await session.commit()
     print("✅ Test scholarship data created successfully!")
     
@@ -744,6 +1140,299 @@ async def createSystemAnnouncements(session: AsyncSession) -> None:
     print("   - Development mode reminder")
 
 
+async def createApplicationFields(session: AsyncSession) -> None:
+    """Create initial application field configurations"""
+    
+    print("📝 Creating application field configurations...")
+    
+    # 獲取管理員用戶ID
+    result = await session.execute(select(User).where(User.username == "admin"))
+    admin_user = result.scalar_one_or_none()
+    admin_id = admin_user.id if admin_user else 1
+    
+    # === 學士班新生獎學金字段配置 ===
+    undergraduate_fields = [
+        {
+            "scholarship_type": "undergraduate_freshman",
+            "field_name": "academic_performance",
+            "field_label": "學業表現說明",
+            "field_label_en": "Academic Performance Description",
+            "field_type": "textarea",
+            "is_required": True,
+            "placeholder": "請說明您在高中階段的學業表現和特殊成就",
+            "placeholder_en": "Please describe your academic performance and special achievements in high school",
+            "max_length": 1500,
+            "display_order": 1,
+            "is_active": True,
+            "help_text": "請詳細描述您的學業成績、排名、特殊成就等",
+            "help_text_en": "Please describe your academic grades, ranking, special achievements, etc.",
+            "created_by": admin_id,
+            "updated_by": admin_id
+        },
+        {
+            "scholarship_type": "undergraduate_freshman",
+            "field_name": "family_income",
+            "field_label": "家庭收入範圍",
+            "field_label_en": "Family Income Range",
+            "field_type": "select",
+            "is_required": True,
+            "placeholder": "請選擇家庭年收入範圍",
+            "placeholder_en": "Please select your family annual income range",
+            "field_options": [
+                {"value": "low", "label": "50萬以下", "label_en": "Under 500K"},
+                {"value": "medium", "label": "50-100萬", "label_en": "500K-1M"},
+                {"value": "high", "label": "100萬以上", "label_en": "Over 1M"}
+            ],
+            "display_order": 2,
+            "is_active": True,
+            "help_text": "請選擇最符合您家庭狀況的收入範圍",
+            "help_text_en": "Please select the income range that best matches your family situation",
+            "created_by": admin_id,
+            "updated_by": admin_id
+        },
+        {
+            "scholarship_type": "undergraduate_freshman",
+            "field_name": "extracurricular",
+            "field_label": "課外活動與服務",
+            "field_label_en": "Extracurricular Activities and Service",
+            "field_type": "textarea",
+            "is_required": False,
+            "placeholder": "請描述您參與的課外活動、社會服務或特殊才能表現",
+            "placeholder_en": "Please describe your extracurricular activities, community service, or special talents",
+            "max_length": 1000,
+            "display_order": 3,
+            "is_active": True,
+            "help_text": "包括社團活動、志工服務、競賽獲獎等",
+            "help_text_en": "Including club activities, volunteer service, competition awards, etc.",
+            "created_by": admin_id,
+            "updated_by": admin_id
+        }
+    ]
+    
+    # === 博士生獎學金字段配置 ===
+    phd_fields = [
+        {
+            "scholarship_type": "phd",
+            "field_name": "research_proposal",
+            "field_label": "研究計畫",
+            "field_label_en": "Research Proposal",
+            "field_type": "textarea",
+            "is_required": True,
+            "placeholder": "請詳細描述您的研究計畫，包括研究目標、方法、預期成果等",
+            "placeholder_en": "Please describe your research proposal including objectives, methods, expected outcomes",
+            "max_length": 2000,
+            "display_order": 1,
+            "is_active": True,
+            "help_text": "請提供詳細的研究計畫，包括研究背景、目標、方法、預期成果等",
+            "help_text_en": "Please provide a detailed research proposal including background, objectives, methods, expected outcomes",
+            "created_by": admin_id,
+            "updated_by": admin_id
+        },
+        {
+            "scholarship_type": "phd",
+            "field_name": "publications",
+            "field_label": "學術發表",
+            "field_label_en": "Academic Publications",
+            "field_type": "textarea",
+            "is_required": False,
+            "placeholder": "請列出您的學術論文發表、會議報告等",
+            "placeholder_en": "Please list your academic publications, conference presentations, etc.",
+            "max_length": 1000,
+            "display_order": 2,
+            "is_active": True,
+            "help_text": "包括期刊論文、會議論文、專利等",
+            "help_text_en": "Including journal papers, conference papers, patents, etc.",
+            "created_by": admin_id,
+            "updated_by": admin_id
+        },
+        {
+            "scholarship_type": "phd",
+            "field_name": "advisor_recommendation",
+            "field_label": "指導教授推薦",
+            "field_label_en": "Advisor Recommendation",
+            "field_type": "textarea",
+            "is_required": True,
+            "placeholder": "請提供指導教授的推薦意見",
+            "placeholder_en": "Please provide your advisor's recommendation",
+            "max_length": 1500,
+            "display_order": 3,
+            "is_active": True,
+            "help_text": "指導教授對您的研究能力和學術表現的評價",
+            "help_text_en": "Your advisor's evaluation of your research ability and academic performance",
+            "created_by": admin_id,
+            "updated_by": admin_id
+        }
+    ]
+    
+    # === 逕升博士獎學金字段配置 ===
+    direct_phd_fields = [
+        {
+            "scholarship_type": "direct_phd",
+            "field_name": "undergraduate_performance",
+            "field_label": "大學學業表現",
+            "field_label_en": "Undergraduate Academic Performance",
+            "field_type": "textarea",
+            "is_required": True,
+            "placeholder": "請描述您在大學階段的學業表現和特殊成就",
+            "placeholder_en": "Please describe your academic performance and special achievements in undergraduate studies",
+            "max_length": 1500,
+            "display_order": 1,
+            "is_active": True,
+            "help_text": "包括GPA、排名、特殊成就、研究經驗等",
+            "help_text_en": "Including GPA, ranking, special achievements, research experience, etc.",
+            "created_by": admin_id,
+            "updated_by": admin_id
+        },
+        {
+            "scholarship_type": "direct_phd",
+            "field_name": "research_interest",
+            "field_label": "研究興趣與方向",
+            "field_label_en": "Research Interest and Direction",
+            "field_type": "textarea",
+            "is_required": True,
+            "placeholder": "請描述您的研究興趣和未來研究方向",
+            "placeholder_en": "Please describe your research interests and future research direction",
+            "max_length": 1000,
+            "display_order": 2,
+            "is_active": True,
+            "help_text": "請說明您感興趣的研究領域和未來發展方向",
+            "help_text_en": "Please describe your research interests and future development direction",
+            "created_by": admin_id,
+            "updated_by": admin_id
+        }
+    ]
+    
+    # 創建所有字段
+    all_fields = undergraduate_fields + phd_fields + direct_phd_fields
+    
+    for field_data in all_fields:
+        # 檢查是否已存在
+        result = await session.execute(
+            select(ApplicationField).where(
+                ApplicationField.scholarship_type == field_data["scholarship_type"],
+                ApplicationField.field_name == field_data["field_name"]
+            )
+        )
+        existing = result.scalar_one_or_none()
+        
+        if not existing:
+            field = ApplicationField(**field_data)
+            session.add(field)
+    
+    # === 文件配置 ===
+    document_configs = [
+        # 學士班文件
+        {
+            "scholarship_type": "undergraduate_freshman",
+            "document_name": "高中成績單",
+            "document_name_en": "High School Transcript",
+            "description": "請上傳高中三年完整成績單",
+            "description_en": "Please upload complete high school transcript for three years",
+            "is_required": True,
+            "accepted_file_types": ["PDF", "JPG", "PNG"],
+            "max_file_size": "5MB",
+            "max_file_count": 1,
+            "display_order": 1,
+            "is_active": True,
+            "upload_instructions": "請確保成績單清晰可讀，包含所有學期成績",
+            "upload_instructions_en": "Please ensure the transcript is clear and readable, including all semester grades",
+            "created_by": admin_id,
+            "updated_by": admin_id
+        },
+        {
+            "scholarship_type": "undergraduate_freshman",
+            "document_name": "推薦信",
+            "document_name_en": "Recommendation Letter",
+            "description": "請上傳高中老師或校長推薦信",
+            "description_en": "Please upload recommendation letter from high school teacher or principal",
+            "is_required": True,
+            "accepted_file_types": ["PDF"],
+            "max_file_size": "10MB",
+            "max_file_count": 2,
+            "display_order": 2,
+            "is_active": True,
+            "upload_instructions": "推薦信需有推薦人簽名和聯絡方式",
+            "upload_instructions_en": "Recommendation letter must include recommender's signature and contact information",
+            "created_by": admin_id,
+            "updated_by": admin_id
+        },
+        # 博士生文件
+        {
+            "scholarship_type": "phd",
+            "document_name": "碩士成績單",
+            "document_name_en": "Master's Transcript",
+            "description": "請上傳碩士班完整成績單",
+            "description_en": "Please upload complete master's transcript",
+            "is_required": True,
+            "accepted_file_types": ["PDF", "JPG", "PNG"],
+            "max_file_size": "5MB",
+            "max_file_count": 1,
+            "display_order": 1,
+            "is_active": True,
+            "upload_instructions": "請確保成績單清晰可讀",
+            "upload_instructions_en": "Please ensure the transcript is clear and readable",
+            "created_by": admin_id,
+            "updated_by": admin_id
+        },
+        {
+            "scholarship_type": "phd",
+            "document_name": "研究計畫書",
+            "document_name_en": "Research Proposal",
+            "description": "請上傳詳細的研究計畫書",
+            "description_en": "Please upload detailed research proposal",
+            "is_required": True,
+            "accepted_file_types": ["PDF"],
+            "max_file_size": "10MB",
+            "max_file_count": 1,
+            "display_order": 2,
+            "is_active": True,
+            "upload_instructions": "研究計畫書應包含研究背景、目標、方法、預期成果等",
+            "upload_instructions_en": "Research proposal should include background, objectives, methods, expected outcomes, etc.",
+            "created_by": admin_id,
+            "updated_by": admin_id
+        },
+        # 逕升博士文件
+        {
+            "scholarship_type": "direct_phd",
+            "document_name": "大學成績單",
+            "document_name_en": "Undergraduate Transcript",
+            "description": "請上傳大學完整成績單",
+            "description_en": "Please upload complete undergraduate transcript",
+            "is_required": True,
+            "accepted_file_types": ["PDF", "JPG", "PNG"],
+            "max_file_size": "5MB",
+            "max_file_count": 1,
+            "display_order": 1,
+            "is_active": True,
+            "upload_instructions": "請確保成績單清晰可讀",
+            "upload_instructions_en": "Please ensure the transcript is clear and readable",
+            "created_by": admin_id,
+            "updated_by": admin_id
+        }
+    ]
+    
+    for doc_data in document_configs:
+        # 檢查是否已存在
+        result = await session.execute(
+            select(ApplicationDocument).where(
+                ApplicationDocument.scholarship_type == doc_data["scholarship_type"],
+                ApplicationDocument.document_name == doc_data["document_name"]
+            )
+        )
+        existing = result.scalar_one_or_none()
+        
+        if not existing:
+            document = ApplicationDocument(**doc_data)
+            session.add(document)
+    
+    await session.commit()
+    print("✅ Application field configurations created successfully!")
+    print("📋 Created configurations for:")
+    print("   - Undergraduate freshman scholarship fields and documents")
+    print("   - PhD scholarship fields and documents")
+    print("   - Direct PhD scholarship fields and documents")
+
+
 async def initDatabase() -> None:
     """Initialize entire database"""
     
@@ -769,6 +1458,9 @@ async def initDatabase() -> None:
         # Create test scholarships
         await createTestScholarships(session)
         
+        # Create application field configurations
+        await createApplicationFields(session)
+        
         # Create system announcements
         await createSystemAnnouncements(session)
     
@@ -782,6 +1474,7 @@ async def initDatabase() -> None:
     print("- Student (博士): stu_phd / stuphd123")
     print("- Student (逕升博士): stu_direct / studirect123")
     print("- Student (碩士): stu_master / stumaster123")
+    print("- Student (陸生): stu_china / stuchina123")
 
 
 if __name__ == "__main__":

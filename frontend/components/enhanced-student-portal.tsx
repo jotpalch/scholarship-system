@@ -11,12 +11,21 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ProgressTimeline } from "@/components/progress-timeline"
 import { FileUpload } from "@/components/file-upload"
-import { Edit, Eye, Trash2, Save, AlertTriangle, Info, FileText, Calendar, User, Loader2 } from "lucide-react"
+import { DynamicApplicationForm } from "@/components/dynamic-application-form"
+import { ApplicationDetailDialog } from "@/components/application-detail-dialog"
+import { Edit, Eye, Trash2, Save, AlertTriangle, Info, FileText, Calendar, User, Loader2, Check } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { getTranslation } from "@/lib/i18n"
 import { useApplications } from "@/hooks/use-applications"
 import { FormValidator, Locale } from "@/lib/validators"
-import api, { ScholarshipType, Application as ApiApplication, ApplicationFile } from "@/lib/api"
+import api, { ScholarshipType, Application as ApiApplication, ApplicationFile, ApplicationCreate, ApplicationField, ApplicationDocument } from "@/lib/api"
+import { 
+  getApplicationTimeline, 
+  getStatusColor, 
+  getStatusName,
+  ApplicationStatus 
+} from "@/lib/utils/application-helpers"
+import { clsx } from "@/lib/utils"
 
 // 使用API的Application類型
 type Application = ApiApplication
@@ -27,53 +36,27 @@ interface EnhancedStudentPortalProps {
     name: string
     email: string
     role: string
-    studentType: "undergraduate" | "phd" | "direct_phd"
+    studentType: "phd" | "master" | "undergraduate" | "other"
   }
   locale: Locale
 }
 
-type ApplicationStatus = "draft" | "submitted" | "under_review" | "pending_recommendation" | "recommended" | "approved" | "rejected" | "returned" | "withdrawn" | "cancelled"
 type BadgeVariant = "secondary" | "default" | "outline" | "destructive"
 
 export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalProps) {
   const t = (key: string) => getTranslation(locale, key)
   const validator = useMemo(() => new FormValidator(locale), [locale])
   
-  // Tab狀態管理
   const [activeTab, setActiveTab] = useState("applications")
-  
-  // 編輯模式狀態
   const [editingApplication, setEditingApplication] = useState<Application | null>(null)
   
-  // 獎學金名稱翻譯映射
   const getScholarshipTypeName = (scholarshipType: string): string => {
-    const scholarshipNames: Record<string, Record<string, string>> = {
-      undergraduate_freshman: {
-        zh: "學士班新生入學獎學金",
-        en: "Undergraduate Freshman Scholarship"
-      },
-      phd_research: {
-        zh: "博士班研究獎學金", 
-        en: "PhD Research Scholarship"
-      },
-      direct_phd: {
-        zh: "逕讀博士班獎學金",
-        en: "Direct PhD Scholarship"
-      },
-      phd_nstc: {
-        zh: "國科會博士生獎學金",
-        en: "NSTC PhD Scholarship"
-      },
-      nstc_scholarship: {
-        zh: "國科會博士生獎學金",
-        en: "NSTC PhD Scholarship"
-      },
-      moe_scholarship: {
-        zh: "教育部博士生獎學金",
-        en: "MOE PhD Scholarship"
-      }
+    const scholarship = eligibleScholarships.find(s => s.code === scholarshipType)
+    if (scholarship) {
+      return locale === "zh" ? scholarship.name : (scholarship.name_en || scholarship.name)
     }
-    return scholarshipNames[scholarshipType]?.[locale] || scholarshipType
+
+    return scholarshipType
   }
   
   // Debug authentication status
@@ -106,6 +89,16 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
   const [eligibleScholarships, setEligibleScholarships] = useState<ScholarshipType[]>([])
   const [isLoadingScholarships, setIsLoadingScholarships] = useState(true)
   const [scholarshipsError, setScholarshipsError] = useState<string | null>(null)
+  
+  // State for scholarship application info (form fields and documents)
+  const [scholarshipApplicationInfo, setScholarshipApplicationInfo] = useState<{
+    [scholarshipType: string]: {
+      fields: ApplicationField[]
+      documents: ApplicationDocument[]
+      isLoading: boolean
+      error: string | null
+    }
+  }>({})
 
   // Fetch eligible scholarships on component mount
   useEffect(() => {
@@ -113,25 +106,12 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       try {
         setIsLoadingScholarships(true)
         const response = await api.scholarships.getEligible()
-        console.log('Scholarship response:', response) // Debug log
         
-        // Handle both direct array response and ApiResponse format
         let scholarshipData: ScholarshipType[] = []
-        if (Array.isArray(response)) {
-          scholarshipData = response
-        } else if (response && typeof response === 'object' && 'data' in response) {
-          // Handle ApiResponse format
-          if (response.success && Array.isArray(response.data)) {
-            scholarshipData = response.data
-          } else {
-            console.error('API response unsuccessful:', response.message)
-            setScholarshipsError(response.message || '無法獲取獎學金資料')
-            setEligibleScholarships([])
-            return
-          }
+        if (response.success && response.data) {
+          scholarshipData = response.data
         } else {
-          console.error('Invalid scholarship response:', response) // Debug log
-          setScholarshipsError('無法獲取獎學金資料')
+          setScholarshipsError(response.message || '無法獲取獎學金資料')
           setEligibleScholarships([])
           return
         }
@@ -141,6 +121,11 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         } else {
           setEligibleScholarships(scholarshipData)
           setScholarshipsError(null)
+          
+          // 自動載入每個獎學金的申請資訊
+          scholarshipData.forEach(scholarship => {
+            fetchScholarshipApplicationInfo(scholarship.code)
+          })
         }
       } catch (error) {
         console.error('Error fetching scholarships:', error) // Debug log
@@ -152,7 +137,62 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     }
 
     fetchEligibleScholarships()
-  }, []) // Empty dependency array
+  }, [])
+
+  // 獲取獎學金申請資訊（表單欄位和文件要求）
+  const fetchScholarshipApplicationInfo = async (scholarshipType: string) => {
+    // 如果已經載入過，直接返回
+    if (scholarshipApplicationInfo[scholarshipType] && !scholarshipApplicationInfo[scholarshipType].isLoading) {
+      return scholarshipApplicationInfo[scholarshipType]
+    }
+
+    // 設置載入狀態
+    setScholarshipApplicationInfo(prev => ({
+      ...prev,
+      [scholarshipType]: {
+        ...prev[scholarshipType],
+        isLoading: true,
+        error: null
+      }
+    }))
+
+    try {
+      const response = await api.applicationFields.getFormConfig(scholarshipType)
+      
+      if (response.success && response.data) {
+        setScholarshipApplicationInfo(prev => ({
+          ...prev,
+          [scholarshipType]: {
+            fields: response.data?.fields || [],
+            documents: response.data?.documents || [],
+            isLoading: false,
+            error: null
+          }
+        }))
+      } else {
+        setScholarshipApplicationInfo(prev => ({
+          ...prev,
+          [scholarshipType]: {
+            fields: [],
+            documents: [],
+            isLoading: false,
+            error: response.message || '無法獲取申請資訊'
+          }
+        }))
+      }
+    } catch (error) {
+      console.error(`Failed to fetch application info for ${scholarshipType}:`, error)
+      setScholarshipApplicationInfo(prev => ({
+        ...prev,
+        [scholarshipType]: {
+          fields: [],
+          documents: [],
+          isLoading: false,
+          error: error instanceof Error ? error.message : '獲取申請資訊時發生錯誤'
+        }
+      }))
+    }
+  }
 
   // Try to fetch student data on component mount (optional)
   useEffect(() => {
@@ -183,149 +223,80 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
   }, [])
 
   // Form state for new application
-  const [newApplicationData, setNewApplicationData] = useState({
+  const [newApplicationData, setNewApplicationData] = useState<ApplicationCreate>({
     scholarship_type: '',
   })
   
-  // File upload state
+  // Dynamic form state
+  const [dynamicFormData, setDynamicFormData] = useState<Record<string, any>>({})
+  const [dynamicFileData, setDynamicFileData] = useState<Record<string, File[]>>({})
+  
+  // File upload state (for backwards compatibility)
   const [uploadedFiles, setUploadedFiles] = useState<{ [documentType: string]: File[] }>({})
   const [selectedScholarship, setSelectedScholarship] = useState<ScholarshipType | null>(null)
   
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formProgress, setFormProgress] = useState(0)
 
-  // Calculate form completion progress (only based on documents)
+  // Calculate form completion progress (based on dynamic form configuration)
   useEffect(() => {
-    // Progress is only based on required documents upload
-    const scholarship = selectedScholarship
-    let documentProgress = 0
-    if (scholarship?.required_documents && scholarship.required_documents.length > 0) {
-      const uploadedDocsCount = scholarship.required_documents.filter(docType => 
-        uploadedFiles[docType] && uploadedFiles[docType].length > 0
-      ).length
-      documentProgress = Math.round((uploadedDocsCount / scholarship.required_documents.length) * 100)
-    } else {
-      // If no required documents, consider complete when scholarship is selected
-      documentProgress = newApplicationData.scholarship_type ? 100 : 0
+    if (!newApplicationData.scholarship_type) {
+      setFormProgress(0)
+      return
     }
-    
-    setFormProgress(documentProgress)
-  }, [newApplicationData.scholarship_type, uploadedFiles, selectedScholarship])
 
-  const getStatusColor = (status: ApplicationStatus): BadgeVariant => {
-    const statusMap: Record<ApplicationStatus, BadgeVariant> = {
-      draft: "secondary",
-      submitted: "default", 
-      under_review: "outline",
-      pending_recommendation: "outline",
-      recommended: "outline",
-      approved: "default",
-      rejected: "destructive",
-      returned: "secondary",
-      withdrawn: "secondary",
-      cancelled: "secondary",
-    }
-    return statusMap[status]
-  }
+    // Get form configuration to calculate proper progress
+    const calculateProgress = async () => {
+      try {
+        const response = await api.applicationFields.getFormConfig(newApplicationData.scholarship_type)
+        if (!response.success || !response.data) {
+          setFormProgress(0)
+          return
+        }
 
-  const getStatusName = (status: ApplicationStatus) => {
-    const statusNames = {
-      zh: {
-        draft: "草稿",
-        submitted: "已提交",
-        under_review: "審核中",
-        pending_recommendation: "待教授推薦",
-        recommended: "已推薦",
-        approved: "已核准", 
-        rejected: "已拒絕",
-        returned: "已退回",
-        withdrawn: "已撤回",
-        cancelled: "已取消",
-      },
-      en: {
-        draft: "Draft",
-        submitted: "Submitted",
-        under_review: "Under Review",
-        pending_recommendation: "Pending Recommendation",
-        recommended: "Recommended",
-        approved: "Approved",
-        rejected: "Rejected",
-        returned: "Returned", 
-        withdrawn: "Withdrawn",
-        cancelled: "Cancelled",
+        const { fields, documents } = response.data
+        
+        // Calculate total required items
+        const requiredFields = fields.filter(f => f.is_active && f.is_required)
+        const requiredDocuments = documents.filter(d => d.is_active && d.is_required)
+        const totalRequired = requiredFields.length + requiredDocuments.length
+        
+        if (totalRequired === 0) {
+          setFormProgress(100) // No requirements means 100% complete
+          return
+        }
+
+        let completedItems = 0
+
+        // Check required fields completion
+        requiredFields.forEach(field => {
+          const fieldValue = dynamicFormData[field.field_name]
+          if (fieldValue !== undefined && fieldValue !== null && fieldValue !== '') {
+            completedItems++
+          }
+        })
+
+        // Check required documents completion
+        requiredDocuments.forEach(doc => {
+          const docFiles = dynamicFileData[doc.document_name]
+          if (docFiles && docFiles.length > 0) {
+            completedItems++
+          }
+        })
+
+        // Calculate percentage
+        const progress = Math.round((completedItems / totalRequired) * 100)
+        setFormProgress(progress)
+      } catch (error) {
+        console.error('Error calculating progress:', error)
+        setFormProgress(0)
       }
-    } as const
-    return statusNames[locale][status]
-  }
-
-  const getApplicationTimeline = (application: Application) => {
-    type TimelineStep = {
-      id: string
-      title: string
-      status: "completed" | "current" | "pending" | "rejected"
-      date: string
     }
 
-    const formatDate = (dateString: string | null | undefined) => {
-      if (!dateString) return ""
-      const date = new Date(dateString)
-      return date.toLocaleDateString(locale === "zh" ? "zh-TW" : "en-US")
-    }
+    calculateProgress()
+  }, [newApplicationData.scholarship_type, dynamicFormData, dynamicFileData])
 
-    const status = application.status as string
 
-    const steps: TimelineStep[] = [
-      {
-        id: "1",
-        title: locale === "zh" ? "提交申請" : "Submit Application",
-        status: status === "draft" ? "current" : "completed",
-        date: status === "draft" ? "" : formatDate(application.submitted_at || application.created_at),
-      },
-      {
-        id: "2",
-        title: locale === "zh" ? "初步審核" : "Initial Review",
-        status: status === "draft" 
-          ? "pending" 
-          : status === "submitted" || status === "pending_recommendation"
-            ? "current"
-            : status === "rejected"
-              ? "rejected"
-              : "completed",
-        date: status === "draft" || status === "submitted" || status === "pending_recommendation"
-          ? "" 
-          : formatDate(application.reviewed_at),
-      },
-      {
-        id: "3",
-        title: locale === "zh" ? "委員會審核" : "Committee Review",
-        status: status === "draft" || status === "submitted" || status === "pending_recommendation"
-          ? "pending"
-          : status === "under_review" || status === "recommended"
-            ? "current"
-            : status === "rejected"
-              ? "rejected"
-              : "completed",
-        date: status === "draft" || status === "submitted" || status === "pending_recommendation" || status === "under_review" || status === "recommended"
-          ? ""
-          : formatDate(application.reviewed_at),
-      },
-      {
-        id: "4",
-        title: locale === "zh" ? "核定結果" : "Final Decision",
-        status: status === "approved" 
-          ? "completed" 
-          : status === "rejected" 
-            ? "rejected" 
-            : "pending",
-        date: status === "approved" 
-          ? formatDate(application.approved_at)
-          : status === "rejected"
-            ? formatDate(application.reviewed_at)
-            : "",
-      },
-    ]
-    return steps
-  }
 
   // Helper function to build application data with available information
   const buildApplicationData = () => {
@@ -347,6 +318,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       semester: truncateString(semester, 10), // Max 10 chars
       contact_email: user.email, // Always available from user
       agree_terms: true, // Default to true
+      // Include dynamic form data
+      ...dynamicFormData,
       // Optional fields from studentData (if available)
       ...(studentData?.gpa && { gpa: studentData.gpa }),
       ...(studentData?.phone_number && { 
@@ -359,6 +332,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     }
     
     console.log('Built application data:', applicationData)
+    console.log('Dynamic form data:', dynamicFormData)
     console.log('Student data available:', !!studentData)
     console.log('Field lengths:', {
       scholarship_type: applicationData.scholarship_type?.length || 0,
@@ -375,14 +349,6 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
   // 新增狀態用於詳情對話框
   const [selectedApplicationForDetails, setSelectedApplicationForDetails] = useState<Application | null>(null)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
-  
-  // 申請文件狀態
-  const [applicationFiles, setApplicationFiles] = useState<{ [applicationId: number]: any[] }>({})
-  const [isLoadingFiles, setIsLoadingFiles] = useState(false)
-  
-  // 文件預覽狀態
-  const [previewFile, setPreviewFile] = useState<{ url: string; filename: string; type: string } | null>(null)
-  const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false)
 
   const handleSubmitApplication = async () => {
     if (!newApplicationData.scholarship_type) {
@@ -409,8 +375,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         await updateApplication(editingApplication.id, applicationData)
         console.log('Application updated:', editingApplication.id)
         
-        // Step 2: Upload new files if any
-        for (const [docType, files] of Object.entries(uploadedFiles)) {
+        // Step 2: Upload new files if any (from dynamic form)
+        for (const [docType, files] of Object.entries(dynamicFileData)) {
           if (files && files.length > 0) {
             for (const file of files) {
               // 只上傳新文件（沒有isUploaded標記的）
@@ -446,8 +412,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
           throw new Error('Failed to create application')
         }
         
-        // Step 2: Upload files if any
-        for (const [docType, files] of Object.entries(uploadedFiles)) {
+        // Step 2: Upload files if any (from dynamic form)
+        for (const [docType, files] of Object.entries(dynamicFileData)) {
           if (files && files.length > 0) {
             for (const file of files) {
               try {
@@ -471,19 +437,14 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         }
       }
       
-      // 清除對應申請的文件緩存，確保查看詳情時會重新獲取最新文件
-      if (editingApplication) {
-        setApplicationFiles(prev => {
-          const newFiles = { ...prev }
-          delete newFiles[editingApplication.id]
-          return newFiles
-        })
-      }
+
       
       // Reset form
       setNewApplicationData({
         scholarship_type: '',
       })
+      setDynamicFormData({})
+      setDynamicFileData({})
       setUploadedFiles({})
       setSelectedScholarship(null)
       setEditingApplication(null)
@@ -562,8 +523,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         // If successful, upload files to the created application
         const applicationId = application.id
         
-        // Upload files for each document type
-        for (const [docType, files] of Object.entries(uploadedFiles)) {
+        // Upload files for each document type (from dynamic form)
+        for (const [docType, files] of Object.entries(dynamicFileData)) {
           if (files && files.length > 0) {
             for (const file of files) {
               try {
@@ -607,126 +568,28 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     }
   }
 
-  // Helper functions for document labels and descriptions
-  const getDocumentLabel = (docType: string, locale: Locale) => {
-    const labels: Record<string, Record<string, string>> = {
-      transcript: {
-        zh: "成績單",
-        en: "Academic Transcript"
-      },
-      research_proposal: {
-        zh: "研究計畫書",
-        en: "Research Proposal"
-      },
-      budget_plan: {
-        zh: "預算計畫",
-        en: "Budget Plan"
-      },
-      bank_account: {
-        zh: "銀行帳戶證明",
-        en: "Bank Account Verification"
-      },
-      recommendation_letter: {
-        zh: "推薦信",
-        en: "Recommendation Letter"
-      },
-      cv: {
-        zh: "履歷表",
-        en: "Curriculum Vitae"
-      },
-      portfolio: {
-        zh: "作品集",
-        en: "Portfolio"
-      }
-    }
-    return labels[docType]?.[locale] || docType
-  }
 
-  const getDocumentDescription = (docType: string, locale: Locale) => {
-    const descriptions: Record<string, Record<string, string>> = {
-      transcript: {
-        zh: "請上傳最新的成績單，支援 PDF、JPG、PNG 格式",
-        en: "Please upload your latest academic transcript in PDF, JPG, or PNG format"
-      },
-      research_proposal: {
-        zh: "請上傳研究計畫書，詳細說明研究目標與方法",
-        en: "Please upload your research proposal with detailed objectives and methodology"
-      },
-      budget_plan: {
-        zh: "請上傳詳細的預算計畫，包含支出項目與金額",
-        en: "Please upload a detailed budget plan including expenditure items and amounts"
-      },
-      bank_account: {
-        zh: "請上傳銀行帳戶證明文件",
-        en: "Please upload bank account verification documents"
-      },
-      recommendation_letter: {
-        zh: "請上傳推薦信，由指導教授或相關人員簽署",
-        en: "Please upload recommendation letter signed by supervisor or relevant personnel"
-      },
-      cv: {
-        zh: "請上傳個人履歷表",
-        en: "Please upload your curriculum vitae"
-      },
-      portfolio: {
-        zh: "請上傳相關作品集或證明文件",
-        en: "Please upload relevant portfolio or supporting documents"
-      }
-    }
-    return descriptions[docType]?.[locale] || "請上傳相關文件"
-  }
 
-  // 獲取申請文件
-  const fetchApplicationFiles = async (applicationId: number) => {
-    if (applicationFiles[applicationId]) {
-      return applicationFiles[applicationId] // Already loaded
-    }
-    
-    try {
-      setIsLoadingFiles(true)
-      // 先嘗試從申請詳情獲取文件
-      const appResponse = await api.applications.getApplicationById(applicationId)
-      if (appResponse.success && appResponse.data?.files) {
-        const files = appResponse.data.files
-        setApplicationFiles(prev => ({
-          ...prev,
-          [applicationId]: files
-        }))
-        return files
-      }
-      
-      // 如果申請詳情沒有文件，嘗試專門的文件API
-      const filesResponse = await api.applications.getApplicationFiles(applicationId)
-      if (filesResponse.success && filesResponse.data) {
-        const files = filesResponse.data
-        setApplicationFiles(prev => ({
-          ...prev,
-          [applicationId]: files
-        }))
-        return files
-      }
-      
-      return []
-    } catch (error) {
-      console.error('Failed to fetch application files:', error)
-      return []
-    } finally {
-      setIsLoadingFiles(false)
-    }
-  }
+
 
   // 查看詳情處理函數
   const handleViewDetails = async (application: Application) => {
+    try {
+      // 從後端獲取完整的申請詳情，包括 form_data
+      const response = await api.applications.getApplicationById(application.id)
+      if (response.success && response.data) {
+        setSelectedApplicationForDetails(response.data)
+      } else {
+        // 如果獲取失敗，使用原始的申請資料
+        setSelectedApplicationForDetails(application)
+      }
+    } catch (error) {
+      console.error('Failed to fetch application details:', error)
+      // 如果獲取失敗，使用原始的申請資料
     setSelectedApplicationForDetails(application)
-    setIsDetailsDialogOpen(true)
+    }
     
-    // 清除緩存並重新載入申請文件，確保獲取最新數據
-    setApplicationFiles(prev => {
-      const newFiles = { ...prev }
-      delete newFiles[application.id]
-      return newFiles
-    })
-    await fetchApplicationFiles(application.id)
+    setIsDetailsDialogOpen(true)
   }
 
   // 編輯處理函數
@@ -734,57 +597,17 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     // 設置編輯模式
     setEditingApplication(application)
     
-    // 載入申請資料到表單
+    // 載入申請資料到表單，只使用 Application 介面中存在的欄位
     setNewApplicationData({
       scholarship_type: application.scholarship_type,
+      personal_statement: application.personal_statement || '',
     })
+    
     setSelectedScholarship(eligibleScholarships.find(s => s.code === application.scholarship_type) || null)
-    
-    // 載入已上傳的文件
-    await fetchApplicationFiles(application.id)
-    const files = applicationFiles[application.id] || []
-    
-    // 將已上傳的文件轉換為前端格式
-    const uploadedFilesByType: { [key: string]: File[] } = {}
-    files.forEach((file: any) => {
-      if (file.file_type && file.filename) {
-        // 創建模擬的File對象來表示已上傳的文件
-        // 使用原始文件大小，如果沒有則使用 1024 作為默認值（避免顯示 0 bytes）
-        const fileSize = file.file_size || file.size || 1024
-        
-        // 創建一個包含適當大小的模擬 File 對象
-        const mockBlob = new Blob([''], { type: file.mime_type || 'application/octet-stream' })
-        const mockFile = new File([mockBlob], file.filename || file.original_filename, { 
-          type: file.mime_type || 'application/octet-stream' 
-        })
-        
-        // 手動設置文件大小（這是一個 hack，但是必要的）
-        Object.defineProperty(mockFile, 'size', {
-          value: fileSize,
-          writable: false,
-          configurable: false
-        })
-        
-        // 添加額外屬性來標識這是已上傳的文件
-        ;(mockFile as any).isUploaded = true
-        ;(mockFile as any).downloadUrl = file.file_path || file.url
-        ;(mockFile as any).fileId = file.id
-        ;(mockFile as any).originalSize = fileSize
-        
-        if (!uploadedFilesByType[file.file_type]) {
-          uploadedFilesByType[file.file_type] = []
-        }
-        uploadedFilesByType[file.file_type].push(mockFile)
-      }
-    })
-    
-    setUploadedFiles(uploadedFilesByType)
     
     // 切換到新增申請頁面
     setActiveTab("new-application")
   }
-
-
 
   // Loading state
   if (isLoadingScholarships || isLoadingStudentData) {
@@ -849,7 +672,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         <CardTitle className="flex items-center justify-between">
           <span>{application.scholarship_type}</span>
           <Badge variant={getStatusColor(application.status as ApplicationStatus)}>
-            {getStatusName(application.status as ApplicationStatus)}
+            {getStatusName(application.status as ApplicationStatus, locale)}
           </Badge>
         </CardTitle>
         <CardDescription>
@@ -857,7 +680,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <ProgressTimeline steps={getApplicationTimeline(application)} />
+        <ProgressTimeline steps={getApplicationTimeline(application, locale)} />
         {application.status === "draft" && (
           <div className="mt-4 flex justify-end space-x-2">
             <Button variant="outline" onClick={() => handleWithdrawApplication(application.id)}>
@@ -875,66 +698,292 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
   return (
     <div className="space-y-6">
       {/* Scholarship Info Cards */}
-      {eligibleScholarships.map((scholarship) => (
-        <Card key={scholarship.id} className="border-primary/20 bg-primary/5">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-xl">{scholarship.name}</CardTitle>
-                <CardDescription className="mt-1">{scholarship.description}</CardDescription>
+      {eligibleScholarships.map((scholarship) => {
+        const applicationInfo = scholarshipApplicationInfo[scholarship.code]
+        const isEligible = Array.isArray(scholarship.eligible_sub_types) && scholarship.eligible_sub_types.length > 0
+        
+        return (
+        <Card 
+          key={scholarship.id} 
+          className={clsx(
+            "border border-gray-100",
+            isEligible 
+              ? "bg-white hover:border-primary/30 transition-colors" 
+              : "bg-gray-50/50 border-gray-100 hover:bg-gray-50/80 transition-colors"
+          )}
+        >
+          <CardHeader className="pb-2">
+            {/* Title and Status Badge */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-xl">
+                  {locale === "zh" ? scholarship.name : (scholarship.name_en || scholarship.name)}
+                </CardTitle>
+                {isEligible ? (
+                  <Badge variant="outline" className="bg-emerald-50 text-emerald-600 border-emerald-100">
+                    <Check className="h-3 w-3 mr-1" />
+                    {locale === "zh" ? "可申請" : "Eligible"}
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-100">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    {locale === "zh" ? "不符合申請資格" : "Not Eligible"}
+                  </Badge>
+                )}
               </div>
-              <Badge variant="outline" className="text-lg px-3 py-1">
+              <Badge variant="outline" className="text-lg px-3 py-1 bg-white">
                 {scholarship.amount} {scholarship.currency}
               </Badge>
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-start gap-2">
-                <Info className="h-4 w-4 text-blue-500 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium">{locale === "zh" ? "申請資格" : "Eligibility"}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {locale === "zh"
-                      ? `僅限白名單內學生申請，${scholarship.eligible_student_types?.join("、")}`
-                      : `Whitelist-only application, ${scholarship.eligible_student_types?.join(", ")}`}
+
+            <CardDescription className="text-sm pb-3">
+              {locale === "zh" ? scholarship.description : (scholarship.description_en || scholarship.description)}
+            </CardDescription>
+
+            {/* Eligible Programs Section */}
+            {scholarship.eligible_sub_types && scholarship.eligible_sub_types.length > 0 && scholarship.eligible_sub_types[0] !== "general" && (
+              <div className="mt-3 bg-indigo-50/30 rounded-lg border border-indigo-100/50 divide-y divide-indigo-100/50">
+                <div className="px-3 py-2">
+                  <p className="text-sm font-medium text-indigo-900">
+                    {getTranslation(locale, "scholarship_sections.eligible_programs")}
                   </p>
                 </div>
+                <div className="px-3 py-2 flex flex-wrap gap-1.5">
+                  {scholarship.eligible_sub_types.map((subType) => (
+                    <Badge 
+                      key={subType} 
+                      variant="outline" 
+                      className="bg-white text-indigo-600 border-indigo-100 shadow-sm"
+                    >
+                      {getTranslation(locale, `scholarship_subtypes.${subType}`)}
+                    </Badge>
+                  ))}
+                </div>
               </div>
+            )}
+          </CardHeader>
 
-              {/* Required Documents Info */}
-              {scholarship.required_documents && scholarship.required_documents.length > 0 && (
-                <div className="flex items-start gap-2">
-                  <FileText className="h-4 w-4 text-green-500 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">{locale === "zh" ? "必要文件" : "Required Documents"}</p>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {scholarship.required_documents.map((docType) => (
-                        <Badge key={docType} variant="outline" className="text-xs">
-                          {getDocumentLabel(docType, locale)}
+          <CardContent>
+            <div className="grid grid-cols-2 gap-6">
+              {/* Left Column - Eligibility & Period */}
+              <div className="space-y-4">
+                {/* 申請資格 */}
+                <div className="rounded-lg border border-gray-100 overflow-hidden">
+                  <div className="bg-sky-50/50 px-3 py-2 border-b border-gray-100">
+                    <div className="flex items-center gap-2">
+                      <Info className="h-4 w-4 text-sky-500" />
+                      <p className="text-sm font-medium text-sky-700">
+                        {getTranslation(locale, "scholarship_sections.eligibility")}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="p-3 space-y-3">
+                    {/* Basic eligibility tags */}
+                    <div className="flex flex-wrap gap-1">
+                      {scholarship.passed?.filter(rule => !rule.sub_type).map((rule) => (
+                        <Badge 
+                          key={rule.rule_id} 
+                          variant="outline" 
+                          className="bg-emerald-50 text-emerald-600 border-emerald-100"
+                        >
+                          {getTranslation(locale, `eligibility_tags.${rule.tag}`)}
                         </Badge>
                       ))}
                     </div>
+
+                    {/* Sub-type specific rules */}
+                    {["nstc", "moe_1w", "moe_2w"].map(subType => {
+                      const rulesForType = scholarship.passed?.filter(rule => rule.sub_type === subType);
+                      if (!rulesForType?.length) return null;
+                      
+                      return (
+                        <div key={subType} className="pl-2 border-l-2 border-gray-200">
+                          <p className="text-sm text-gray-600 mb-1">
+                            {getTranslation(locale, `rule_types.${subType}`)}:
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {rulesForType.map((rule) => (
+                              <Badge 
+                                key={rule.rule_id} 
+                                variant="outline" 
+                                className="bg-emerald-50 text-emerald-600 border-emerald-100"
+                              >
+                                {getTranslation(locale, `eligibility_tags.${rule.tag}`)}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Warnings */}
+                    {scholarship.warnings && scholarship.warnings.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {scholarship.warnings?.map((rule) => (
+                          <Badge 
+                            key={rule.rule_id} 
+                            variant="outline" 
+                            className="bg-amber-50 text-amber-600 border-amber-100"
+                          >
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            {getTranslation(locale, `eligibility_tags.${rule.tag}`)}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Errors */}
+                    {scholarship.errors && scholarship.errors.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {scholarship.errors?.map((rule) => (
+                          <Badge 
+                            key={rule.rule_id} 
+                            variant="outline" 
+                            className="bg-rose-50 text-rose-600 border-rose-100"
+                          >
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            {getTranslation(locale, `eligibility_tags.${rule.tag}`)}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
 
-              {/* Application Period */}
-              {scholarship.application_start_date && scholarship.application_end_date && (
-                <div className="flex items-start gap-2">
-                  <Calendar className="h-4 w-4 text-orange-500 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">{locale === "zh" ? "申請期間" : "Application Period"}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {new Date(scholarship.application_start_date).toLocaleDateString()} - {new Date(scholarship.application_end_date).toLocaleDateString()}
+                {/* 申請期間 */}
+                {scholarship.application_start_date && scholarship.application_end_date && (
+                  <div className="rounded-lg border border-gray-100 overflow-hidden">
+                    <div className="bg-amber-50/50 px-3 py-2 border-b border-gray-100">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-amber-500" />
+                        <p className="text-sm font-medium text-amber-700">
+                          {getTranslation(locale, "scholarship_sections.period")}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="p-3">
+                      <p className="text-sm text-gray-600">
+                        {new Date(scholarship.application_start_date).toLocaleDateString()} - {new Date(scholarship.application_end_date).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Right Column - Application Fields & Documents */}
+              <div className="space-y-4">
+                {/* Loading State */}
+                {applicationInfo?.isLoading && (
+                  <div className="rounded-lg border border-gray-100 p-3">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-sky-500" />
+                      <p className="text-sm font-medium">{locale === "zh" ? "申請資訊" : "Application Info"}</p>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-2">
+                      {locale === "zh" ? "載入中..." : "Loading..."}
                     </p>
                   </div>
-                </div>
-              )}
+                )}
+
+                {/* Error State */}
+                {applicationInfo?.error && (
+                  <div className="rounded-lg border border-rose-100 bg-rose-50/50 p-3">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-rose-500" />
+                      <p className="text-sm font-medium text-rose-700">{locale === "zh" ? "載入錯誤" : "Load Error"}</p>
+                    </div>
+                    <p className="text-sm text-rose-600 mt-2">{applicationInfo.error}</p>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => fetchScholarshipApplicationInfo(scholarship.code)}
+                      className="mt-2"
+                    >
+                      {locale === "zh" ? "重試" : "Retry"}
+                    </Button>
+                  </div>
+                )}
+
+                {/* Application Fields */}
+                {applicationInfo && !applicationInfo.isLoading && !applicationInfo.error && (
+                  <div className="rounded-lg border border-gray-100 overflow-hidden">
+                    <div className="bg-violet-50/50 px-3 py-2 border-b border-gray-100">
+                      <div className="flex items-center gap-2">
+                        <Edit className="h-4 w-4 text-violet-500" />
+                        <p className="text-sm font-medium text-violet-700">
+                          {getTranslation(locale, "scholarship_sections.fields")}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="p-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {applicationInfo.fields
+                          .filter(field => field.is_active)
+                          .map((field) => (
+                            <Badge key={field.id} variant="outline" className="text-xs bg-white text-gray-600 border-gray-200">
+                              {locale === "zh" ? field.field_label : (field.field_label_en || field.field_label)}
+                            </Badge>
+                          ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Required Documents */}
+                {applicationInfo && !applicationInfo.isLoading && !applicationInfo.error && (
+                  <div className="rounded-lg border border-gray-100 overflow-hidden">
+                    <div className="bg-emerald-50/50 px-3 py-2 border-b border-gray-100">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-emerald-500" />
+                        <p className="text-sm font-medium text-emerald-700">
+                          {getTranslation(locale, "scholarship_sections.required_docs")}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="p-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {applicationInfo.documents
+                          .filter(doc => doc.is_required && doc.is_active)
+                          .map((doc) => (
+                            <Badge key={doc.id} variant="outline" className="text-xs bg-white text-gray-600 border-gray-200">
+                              {locale === "zh" ? doc.document_name : (doc.document_name_en || doc.document_name)}
+                            </Badge>
+                          ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Optional Documents */}
+                {applicationInfo && !applicationInfo.isLoading && !applicationInfo.error && applicationInfo.documents.filter(doc => !doc.is_required && doc.is_active).length > 0 && (
+                  <div className="rounded-lg border border-gray-100 overflow-hidden">
+                    <div className="bg-sky-50/50 px-3 py-2 border-b border-gray-100">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-sky-500" />
+                        <p className="text-sm font-medium text-sky-700">
+                          {getTranslation(locale, "scholarship_sections.optional_docs")}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="p-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {applicationInfo.documents
+                          .filter(doc => !doc.is_required && doc.is_active)
+                          .map((doc) => (
+                            <Badge key={doc.id} variant="outline" className="text-xs bg-white text-gray-600 border-gray-200">
+                              {locale === "zh" ? doc.document_name : (doc.document_name_en || doc.document_name)}
+                            </Badge>
+                          ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
-      ))}
+        )
+      })}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
@@ -988,7 +1037,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                           </p>
                         </div>
                         <Badge variant={getStatusColor(app.status as ApplicationStatus)}>
-                          {getStatusName(app.status as ApplicationStatus)}
+                          {getStatusName(app.status as ApplicationStatus, locale)}
                         </Badge>
                       </div>
 
@@ -1001,7 +1050,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                           </CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <ProgressTimeline steps={getApplicationTimeline(app)} orientation="horizontal" />
+                          <ProgressTimeline steps={getApplicationTimeline(app, locale)} orientation="horizontal" />
                         </CardContent>
                       </Card>
 
@@ -1064,26 +1113,13 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                       setNewApplicationData(prev => ({ ...prev, scholarship_type: value }))
                       const scholarship = eligibleScholarships.find(s => s.code === value)
                       setSelectedScholarship(scholarship || null)
-                      // Only reset files if scholarship has different required documents
-                      const newScholarship = scholarship
-                      const currentRequiredDocs = selectedScholarship?.required_documents || []
-                      const newRequiredDocs = newScholarship?.required_documents || []
                       
-                      // Check if the required documents are different
-                      const docsChanged = JSON.stringify(currentRequiredDocs.sort()) !== JSON.stringify(newRequiredDocs.sort())
+                      // Reset dynamic form data when scholarship type changes
+                      setDynamicFormData({})
+                      setDynamicFileData({})
                       
-                      if (docsChanged) {
-                        // Only clear files for documents that are no longer required
-                        setUploadedFiles(prev => {
-                          const filtered: { [key: string]: File[] } = {}
-                          for (const docType of newRequiredDocs) {
-                            if (prev[docType]) {
-                              filtered[docType] = prev[docType]
-                            }
-                          }
-                          return filtered
-                        })
-                      }
+                      // Clear legacy uploaded files
+                      setUploadedFiles({})
                     }}
                   >
                     <SelectTrigger>
@@ -1099,47 +1135,20 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                   </Select>
                 </div>
 
-
-
-                {/* Required Documents Section */}
-                {selectedScholarship?.required_documents && selectedScholarship.required_documents.length > 0 && (
-                  <div className="space-y-4">
-                    <Label className="text-base font-medium">
-                      {locale === "zh" ? "必要文件" : "Required Documents"}
-                    </Label>
-                    
-                    {selectedScholarship.required_documents.map((docType) => (
-                      <div key={docType} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label htmlFor={`doc-${docType}`} className="text-sm">
-                            {getDocumentLabel(docType, locale)} *
-                          </Label>
-                          {uploadedFiles[docType] && uploadedFiles[docType].length > 0 && (
-                            <Badge variant="secondary" className="text-xs">
-                              {uploadedFiles[docType].length} 個檔案
-                            </Badge>
-                          )}
-                        </div>
-                        <FileUpload
-                          key={`upload-${docType}`} // Static key per document type
-                          onFilesChange={(files) => {
-                            setUploadedFiles(prev => ({
-                              ...prev,
-                              [docType]: files
-                            }))
-                          }}
-                          acceptedTypes={[".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"]}
-                          maxSize={10 * 1024 * 1024} // 10MB
-                          maxFiles={3}
-                          initialFiles={uploadedFiles[docType] || []}
-                          fileType={docType}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          {getDocumentDescription(docType, locale)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
+                {/* Dynamic Application Form */}
+                {newApplicationData.scholarship_type && (
+                  <DynamicApplicationForm
+                    scholarshipType={newApplicationData.scholarship_type}
+                    locale={locale}
+                    onFieldChange={(fieldName, value) => {
+                      setDynamicFormData(prev => ({ ...prev, [fieldName]: value }))
+                    }}
+                    onFileChange={(documentType, files) => {
+                      setDynamicFileData(prev => ({ ...prev, [documentType]: files }))
+                    }}
+                    initialValues={dynamicFormData}
+                    initialFiles={dynamicFileData}
+                  />
                 )}
               </div>
 
@@ -1157,49 +1166,31 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                 </div>
               </div>
 
-              <div className="flex justify-between">
-                <div className="flex gap-2">
-                  {/* Save Draft Button */}
-                  <Button 
-                    variant="outline"
-                    onClick={handleSaveDraft}
-                    disabled={isSubmitting || !newApplicationData.scholarship_type}
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        {locale === "zh" ? "保存中..." : "Saving..."}
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4 mr-2" />
-                        {locale === "zh" ? "保存草稿" : "Save Draft"}
-                      </>
-                    )}
-                  </Button>
-                  
-                  {/* Cancel Edit Button */}
-                  {editingApplication && (
-                    <Button 
-                      variant="outline"
-                      onClick={() => {
-                        setEditingApplication(null)
-                        setNewApplicationData({ scholarship_type: "" })
-                        setSelectedScholarship(null)
-                        setUploadedFiles({})
-                        setActiveTab("applications")
-                      }}
-                      disabled={isSubmitting}
-                    >
-                      {locale === "zh" ? "取消編輯" : "Cancel Edit"}
-                    </Button>
+              {/* Action buttons */}
+              <div className="flex gap-3 pt-4">
+                <Button 
+                  variant="outline"
+                  onClick={handleSaveDraft}
+                  disabled={isSubmitting}
+                  className="flex-1"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      {locale === "zh" ? "儲存中..." : "Saving..."}
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      {locale === "zh" ? "儲存草稿" : "Save Draft"}
+                    </>
                   )}
-                </div>
-
-                {/* Submit Button */}
+                </Button>
+                
                 <Button 
                   onClick={handleSubmitApplication}
                   disabled={isSubmitting || formProgress < 100}
+                  className="flex-1 nycu-gradient text-white"
                 >
                   {isSubmitting ? (
                     <>
@@ -1219,6 +1210,17 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                   )}
                 </Button>
               </div>
+              
+              {formProgress < 100 && (
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">
+                    {locale === "zh" 
+                      ? `請完成所有必填項目 (${formProgress}%)` 
+                      : `Please complete all required fields (${formProgress}%)`
+                    }
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1259,10 +1261,6 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                           ? locale === "zh"
                             ? "博士"
                             : "PhD"
-                          : user.studentType === "direct_phd"
-                            ? locale === "zh"
-                              ? "逕博"
-                              : "Direct PhD"
                           : locale === "zh"
                             ? "錯誤"
                             : "Error"
@@ -1283,211 +1281,15 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         </TabsContent>
       </Tabs>
 
-      {/* 查看詳情對話框 */}
-      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {locale === "zh" ? "申請詳情" : "Application Details"}
-            </DialogTitle>
-            <DialogDescription>
-              {selectedApplicationForDetails && (
-                <span>
-                  {locale === "zh" ? "申請編號" : "Application ID"}: {selectedApplicationForDetails.app_id || `APP-${selectedApplicationForDetails.id}`}
-                </span>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedApplicationForDetails && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="font-medium">{locale === "zh" ? "獎學金類型" : "Scholarship Type"}</Label>
-                  <p className="text-sm">{getScholarshipTypeName(selectedApplicationForDetails.scholarship_type)}</p>
-                </div>
-                <div>
-                  <Label className="font-medium">{locale === "zh" ? "申請狀態" : "Status"}</Label>
-                  <Badge variant={getStatusColor(selectedApplicationForDetails.status as ApplicationStatus)}>
-                    {getStatusName(selectedApplicationForDetails.status as ApplicationStatus)}
-                  </Badge>
-                </div>
-                <div>
-                  <Label className="font-medium">{locale === "zh" ? "建立時間" : "Created At"}</Label>
-                  <p className="text-sm">{new Date(selectedApplicationForDetails.created_at).toLocaleDateString(locale === "zh" ? "zh-TW" : "en-US")}</p>
-                </div>
-                {selectedApplicationForDetails.submitted_at && (
-                  <div>
-                    <Label className="font-medium">{locale === "zh" ? "提交時間" : "Submitted At"}</Label>
-                    <p className="text-sm">{new Date(selectedApplicationForDetails.submitted_at).toLocaleDateString(locale === "zh" ? "zh-TW" : "en-US")}</p>
-                  </div>
-                )}
-              </div>
-              
-              {selectedApplicationForDetails.personal_statement && (
-                <div>
-                  <Label className="font-medium">{locale === "zh" ? "個人陳述" : "Personal Statement"}</Label>
-                  <p className="text-sm mt-1 p-2 bg-muted rounded">{selectedApplicationForDetails.personal_statement}</p>
-                </div>
-              )}
-              
-              <div>
-                <Label className="font-medium">{locale === "zh" ? "審核進度" : "Review Progress"}</Label>
-                <div className="mt-2">
-                  <ProgressTimeline steps={getApplicationTimeline(selectedApplicationForDetails)} />
-                </div>
-              </div>
-              
-              {/* 顯示已上傳的文件 */}
-              <div>
-                <Label className="font-medium">{locale === "zh" ? "已上傳文件" : "Uploaded Files"}</Label>
-                {isLoadingFiles ? (
-                  <div className="flex items-center gap-2 mt-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="text-sm text-muted-foreground">
-                      {locale === "zh" ? "載入文件中..." : "Loading files..."}
-                    </span>
-                  </div>
-                ) : applicationFiles[selectedApplicationForDetails.id] && applicationFiles[selectedApplicationForDetails.id].length > 0 ? (
-                  <div className="mt-2 space-y-2">
-                                      {applicationFiles[selectedApplicationForDetails.id].map((file: any, index: number) => (
-                    <div key={file.id || index} className="flex items-center justify-between p-2 bg-muted rounded-md">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4" />
-                          <div>
-                            <p className="text-sm font-medium">{file.filename || file.original_filename}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {file.file_type ? getDocumentLabel(file.file_type, locale) : 'Other'} • 
-                              {file.file_size ? ` ${Math.round(file.file_size / 1024)}KB` : ''}
-                            </p>
-                          </div>
-                        </div>
-                        {file.file_path && (
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => {
-                              // Smart MIME type detection based on filename if mime_type is empty
-                              const detectMimeType = (filename: string, mimeType?: string) => {
-                                if (mimeType && mimeType !== 'application/octet-stream') {
-                                  return mimeType;
-                                }
-                                
-                                const extension = filename.toLowerCase().split('.').pop();
-                                switch (extension) {
-                                  case 'pdf':
-                                    return 'application/pdf';
-                                  case 'jpg':
-                                  case 'jpeg':
-                                    return 'image/jpeg';
-                                  case 'png':
-                                    return 'image/png';
-                                  case 'gif':
-                                    return 'image/gif';
-                                  case 'doc':
-                                    return 'application/msword';
-                                  case 'docx':
-                                    return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-                                  default:
-                                    return 'application/octet-stream';
-                                }
-                              };
-                              
-                              const filename = file.filename || file.original_filename;
-                              const detectedType = detectMimeType(filename, file.mime_type);
-                              
-                              setPreviewFile({
-                                url: file.file_path,
-                                filename: filename,
-                                type: detectedType
-                              })
-                              setIsPreviewDialogOpen(true)
-                            }}
-                          >
-                            <Eye className="h-4 w-4 mr-1" />
-                            {locale === "zh" ? "預覽" : "Preview"}
-                          </Button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {locale === "zh" ? "尚未上傳任何文件" : "No files uploaded yet"}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* 申請詳情對話框 */}
+      <ApplicationDetailDialog
+        application={selectedApplicationForDetails}
+        isOpen={isDetailsDialogOpen}
+        onClose={() => setIsDetailsDialogOpen(false)}
+        locale={locale}
+      />
 
 
-
-      {/* 文件預覽對話框 */}
-      <Dialog open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
-          <DialogHeader>
-            <DialogTitle>
-              {locale === "zh" ? "文件預覽" : "File Preview"}
-            </DialogTitle>
-            <DialogDescription>
-              {previewFile?.filename}
-            </DialogDescription>
-          </DialogHeader>
-          
-          {previewFile && (
-            <div className="flex-1 overflow-hidden">
-              {previewFile.type.includes('pdf') ? (
-                <iframe
-                  src={previewFile.url}
-                  className="w-full h-[70vh] border rounded"
-                  title={previewFile.filename}
-                />
-              ) : previewFile.type.includes('image') ? (
-                <div className="flex justify-center items-center h-[70vh] bg-muted rounded">
-                  <img
-                    src={previewFile.url}
-                    alt={previewFile.filename}
-                    className="max-w-full max-h-full object-contain"
-                  />
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-[70vh] bg-muted rounded">
-                  <FileText className="h-16 w-16 text-muted-foreground mb-4" />
-                  <p className="text-lg font-medium mb-2">{previewFile.filename}</p>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    {locale === "zh" ? "此文件類型無法預覽" : "This file type cannot be previewed"}
-                  </p>
-                  <Button
-                    onClick={() => window.open(previewFile.url, '_blank')}
-                    variant="outline"
-                  >
-                    <Eye className="h-4 w-4 mr-2" />
-                    {locale === "zh" ? "在新視窗開啟" : "Open in New Window"}
-                  </Button>
-                </div>
-              )}
-              
-              <div className="flex justify-between items-center mt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => window.open(previewFile.url, '_blank')}
-                >
-                  <Eye className="h-4 w-4 mr-2" />
-                  {locale === "zh" ? "在新視窗開啟" : "Open in New Window"}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsPreviewDialogOpen(false)}
-                >
-                  {locale === "zh" ? "關閉" : "Close"}
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

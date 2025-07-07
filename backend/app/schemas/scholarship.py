@@ -1,54 +1,179 @@
 """
-Scholarship schemas for API requests and responses
+Scholarship type and rule schemas for API requests and responses
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
+from enum import Enum
+
+class ScholarshipStatusEnum(str, Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    DRAFT = "draft"
 
 
-class ScholarshipTypeResponse(BaseModel):
-    """Scholarship type response schema"""
-    id: int
+class ScholarshipCategoryEnum(str, Enum):
+    UNDERGRADUATE_FRESHMAN = "undergraduate_freshman"  # 學士班新生獎學金
+    PHD = "phd"  # 國科會/教育部博士生獎學金
+    DIRECT_PHD = "direct_phd"  # 逕升博士獎學金
+
+
+class ScholarshipSubTypeEnum(str, Enum):
+    NSTC = "nstc"  # 國科會
+    MOE_1W = "moe_1w"  # 教育部+指導教授配合款一萬
+    MOE_2W = "moe_2w"  # 教育部+指導教授配合款兩萬
+
+
+class ScholarshipTypeBase(BaseModel):
     code: str
     name: str
     name_en: Optional[str] = None
     description: Optional[str] = None
     description_en: Optional[str] = None
+    category: ScholarshipCategoryEnum
+    sub_type_list: Optional[List[str]] = None  # ["nstc", "moe_1w", "moe_2w"]
     amount: Decimal
-    currency: str
-    eligible_student_types: Optional[List[str]] = None
-    min_gpa: Optional[Decimal] = None
-    max_ranking_percent: Optional[Decimal] = None
-    max_completed_terms: Optional[int] = None
-    required_documents: Optional[List[str]] = None
+    currency: str = "TWD"
+    whitelist_enabled: bool = False
+    whitelist_student_ids: Optional[List[int]] = None
     application_start_date: Optional[datetime] = None
     application_end_date: Optional[datetime] = None
-    status: str
-    requires_professor_recommendation: bool
-    requires_research_proposal: bool
-    created_at: datetime
+    review_deadline: Optional[datetime] = None
+    status: ScholarshipStatusEnum = ScholarshipStatusEnum.ACTIVE
+    max_applications_per_year: int = 1
+    requires_professor_recommendation: bool = False
+    requires_college_review: bool = False
+    review_workflow: Optional[Dict[str, Any]] = None
+    auto_approval_rules: Optional[Dict[str, Any]] = None
+
+    @validator('sub_type_list')
+    def validate_sub_type_list(cls, v):
+        if v is not None:
+            valid_types = [e.value for e in ScholarshipSubTypeEnum]
+            for sub_type in v:
+                if sub_type not in valid_types:
+                    raise ValueError(f"Invalid sub_type: {sub_type}")
+        return v
     
+    @validator('application_end_date')
+    def validate_date_range(cls, v, values):
+        if v and 'application_start_date' in values and values['application_start_date']:
+            if v <= values['application_start_date']:
+                raise ValueError("application_end_date must be after application_start_date")
+        return v
+    
+    @validator('amount')
+    def validate_amount(cls, v):
+        if v <= 0:
+            raise ValueError("Amount must be greater than 0")
+        return v
+
+
+class ScholarshipTypeCreate(ScholarshipTypeBase):
+    pass
+
+
+class ScholarshipTypeUpdate(BaseModel):
+    name: Optional[str] = None
+    name_en: Optional[str] = None
+    description: Optional[str] = None
+    description_en: Optional[str] = None
+    amount: Optional[Decimal] = None
+    currency: Optional[str] = None
+    whitelist_enabled: Optional[bool] = None
+    whitelist_student_ids: Optional[List[int]] = None
+    application_start_date: Optional[datetime] = None
+    application_end_date: Optional[datetime] = None
+    review_deadline: Optional[datetime] = None
+    status: Optional[ScholarshipStatusEnum] = None
+    max_applications_per_year: Optional[int] = None
+    requires_professor_recommendation: Optional[bool] = None
+    requires_college_review: Optional[bool] = None
+    sub_type_list: Optional[List[str]] = None
+
+
+class ScholarshipTypeResponse(ScholarshipTypeBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    created_by: Optional[int] = None
+    updated_by: Optional[int] = None
+
     class Config:
         from_attributes = True
 
 
-class ScholarshipRuleResponse(BaseModel):
-    """Scholarship rule response schema"""
-    id: int
+class ScholarshipRuleBase(BaseModel):
     rule_name: str
     rule_type: str
+    tag: Optional[str] = None
     description: Optional[str] = None
-    condition_field: Optional[str] = None
-    operator: Optional[str] = None
-    expected_value: Optional[str] = None
-    error_message: Optional[str] = None
-    error_message_en: Optional[str] = None
-    is_required: bool
-    weight: Decimal
-    priority: int
-    is_active: bool
+    condition_field: str
+    operator: str
+    expected_value: str
+    message: Optional[str] = None
+    message_en: Optional[str] = None
+    is_hard_rule: bool = False
+    is_warning: bool = False
+    priority: int = 0
+    is_active: bool = True
+    sub_type: Optional[str] = None
+
+
+class ScholarshipRuleCreate(ScholarshipRuleBase):
+    scholarship_type_id: int
+
+
+class ScholarshipRuleUpdate(ScholarshipRuleBase):
+    pass
+
+
+class ScholarshipRule(ScholarshipRuleBase):
+    scholarship_type_id: int
+
+
+class ScholarshipRuleResponse(ScholarshipRuleBase):
+    id: int
+    scholarship_type_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class RuleMessage(BaseModel):
+    rule_id: int
+    rule_name: str
+    rule_type: str
+    tag: Optional[str] = None
+    message: str
+    message_en: Optional[str] = None
+    sub_type: Optional[str] = None
+    priority: int = 0
+    is_warning: bool = False
+    is_hard_rule: bool = False
+
+
+class EligibleScholarshipResponse(BaseModel):
+    id: int
+    code: str
+    name: str
+    name_en: str
+    eligible_sub_types: List[str]
+    category: str
+    description: Optional[str] = None
+    description_en: Optional[str] = None
+    amount: Decimal
+    currency: str
+    application_start_date: Optional[datetime] = None
+    application_end_date: Optional[datetime] = None
+    passed: List[RuleMessage]
+    warnings: List[RuleMessage]
+    errors: List[RuleMessage]
+    created_at: datetime
     
     class Config:
-        from_attributes = True 
+        from_attributes = True
