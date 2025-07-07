@@ -33,15 +33,6 @@ import { SSOLoginPage } from "@/components/sso-login-page"
 import { useAdminDashboard } from "@/hooks/use-admin"
 import { apiClient } from "@/lib/api"
 
-// Update User interface to include studentType
-interface User {
-  id: string
-  name: string
-  email: string
-  role: "student" | "professor" | "college" | "admin" | "super_admin"
-  studentType?: "undergraduate" | "phd" | "direct_phd"
-}
-
 export default function ScholarshipManagementSystem() {
   const [locale, setLocale] = useState<"zh" | "en">("zh")
   const [activeTab, setActiveTab] = useState("main")
@@ -149,9 +140,8 @@ export default function ScholarshipManagementSystem() {
       
       const typeMap = {
         'undergraduate_freshman': '學士班新生獎學金',
-        'phd_nstc': '國科會博士生獎學金',
-        'phd_moe': '教育部博士生獎學金',
-        'direct_phd': '逕博獎學金'
+        'phd': '博士生獎學金',
+        'direct_phd': '逕升博士獎學金'
       }
       return typeMap[type as keyof typeof typeMap] || type
     }

@@ -234,11 +234,11 @@ export function ProfessorInterface({ user }: ProfessorInterfaceProps) {
                                     <label className="flex items-center gap-2">
                                       <input
                                         type="checkbox"
-                                        value="phd_nstc"
-                                        checked={selectedAwards.includes("phd_nstc")}
-                                        onChange={e => {
-                                          if (e.target.checked) setSelectedAwards([...selectedAwards, "phd_nstc"])
-                                          else setSelectedAwards(selectedAwards.filter(a => a !== "phd_nstc"))
+                                        value="phd"
+                                        checked={selectedAwards.includes("phd")}
+                                        onChange={(e) => {
+                                          if (e.target.checked) setSelectedAwards([...selectedAwards, "phd"])
+                                          else setSelectedAwards(selectedAwards.filter(a => a !== "phd"))
                                         }}
                                       />
                                       國科會博士生獎學金

@@ -1,122 +1,63 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List, Optional
+from typing import List
 from app.core.deps import get_db
-from app.core.security import require_student, require_admin
-from app.models.user import User
-from app.models.student import Student
-from app.models.scholarship import ScholarshipType
-from app.schemas.scholarship import ScholarshipTypeResponse, CombinedScholarshipCreate, ScholarshipTypeCreate
-from app.services.scholarship_service import ScholarshipService
 from app.core.config import settings
+from app.core.security import require_admin, get_current_user
+from app.models.user import User, UserRole
+from app.models.scholarship import ScholarshipType
+from app.schemas.scholarship import ScholarshipTypeResponse, EligibleScholarshipResponse
 from app.schemas.response import ApiResponse
+from datetime import datetime, timezone, timedelta
+from sqlalchemy.orm import joinedload
 
 router = APIRouter()
 
-@router.get("/eligible", response_model=List[ScholarshipTypeResponse])
-async def get_eligible_scholarships(
-    current_user: User = Depends(require_student),
+@router.get("/", response_model=List[EligibleScholarshipResponse])
+async def get_all_scholarships(
     db: AsyncSession = Depends(get_db)
 ):
+    """Get all scholarships"""
+    stmt = select(ScholarshipType)
+    result = await db.execute(stmt)
+    scholarships = result.scalars().all()
+    return scholarships
+
+# 學生查看自己可以申請的獎學金
+@router.get("/eligible", response_model=List[EligibleScholarshipResponse])
+async def get_scholarship_eligibility(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Get scholarships that the current student is eligible for"""
-    # Import the utility function
     from app.services.application_service import get_student_from_user
+    from app.services.scholarship_service import get_eligible_scholarships
     
-    # Get student profile
     student = await get_student_from_user(current_user, db)
-    
     if not student:
         raise HTTPException(
             status_code=404, 
             detail=f"Student profile not found for user {current_user.username}"
         )
-    
-    service = ScholarshipService(db)
-    return await service.get_eligible_scholarships(student)
 
+    eligible_scholarships = await get_eligible_scholarships(student, db, include_validation_details=False)
+    return eligible_scholarships
+    
 @router.get("/{scholarship_id}", response_model=ScholarshipTypeResponse)
 async def get_scholarship_detail(
     scholarship_id: int,
     db: AsyncSession = Depends(get_db)
 ):
-    """Get scholarship details including sub-scholarships for combined types"""
-    service = ScholarshipService(db)
-    scholarship = await service.get_scholarship_with_sub_types(scholarship_id)
-    
+    """Get scholarship details"""
+    stmt = select(ScholarshipType).options(
+        joinedload(ScholarshipType.rules)
+    ).where(ScholarshipType.id == scholarship_id)
+    result = await db.execute(stmt)
+    scholarship = result.scalar_one_or_none()
     if not scholarship:
         raise HTTPException(status_code=404, detail="Scholarship not found")
-    
     return scholarship
-
-@router.post("/combined/doctoral", response_model=ScholarshipTypeResponse)
-async def create_combined_doctoral_scholarship(
-    data: CombinedScholarshipCreate,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Create a combined doctoral scholarship (MOST + MOE)"""
-    service = ScholarshipService(db)
-    
-    # 預設的子獎學金設定
-    if not data.sub_scholarships:
-        data.sub_scholarships = [
-            {
-                "code": "doctoral_most",
-                "name": "國科會博士生獎學金",
-                "name_en": "MOST Doctoral Scholarship",
-                "description": "國科會提供的博士生研究獎學金",
-                "description_en": "Doctoral research scholarship provided by MOST",
-                "sub_type": "most",
-                "amount": 40000,
-                "min_gpa": 3.7,
-                "max_ranking_percent": 20,
-                "required_documents": ["transcript", "research_proposal", "recommendation_letter"],
-                "application_start_date": data.application_start_date,
-                "application_end_date": data.application_end_date
-            },
-            {
-                "code": "doctoral_moe",
-                "name": "教育部博士生獎學金",
-                "name_en": "MOE Doctoral Scholarship",
-                "description": "教育部提供的博士生學術獎學金",
-                "description_en": "Doctoral academic scholarship provided by MOE",
-                "sub_type": "moe",
-                "amount": 35000,
-                "min_gpa": 3.5,
-                "max_ranking_percent": 30,
-                "required_documents": ["transcript", "research_proposal"],
-                "application_start_date": data.application_start_date,
-                "application_end_date": data.application_end_date
-            }
-        ]
-    
-    scholarship = await service.create_combined_doctoral_scholarship(data)
-    
-    return ApiResponse(
-        success=True,
-        message="Combined doctoral scholarship created successfully",
-        data=scholarship
-    )
-
-@router.get("/combined/list", response_model=List[ScholarshipTypeResponse])
-async def get_combined_scholarships(
-    db: AsyncSession = Depends(get_db)
-):
-    """Get all combined scholarships"""
-    stmt = select(ScholarshipType).where(ScholarshipType.is_combined == True)
-    result = await db.execute(stmt)
-    scholarships = result.scalars().all()
-    
-    # Load sub-scholarships for each combined scholarship
-    for scholarship in scholarships:
-        sub_stmt = select(ScholarshipType).where(
-            ScholarshipType.parent_scholarship_id == scholarship.id
-        )
-        sub_result = await db.execute(sub_stmt)
-        scholarship.sub_scholarships = sub_result.scalars().all()
-    
-    return scholarships
 
 @router.post("/dev/reset-application-periods")
 async def reset_application_periods(
@@ -126,23 +67,16 @@ async def reset_application_periods(
     """Reset all scholarship application periods for testing (dev only)"""
     if not settings.debug:
         raise HTTPException(status_code=403, detail="Only available in development mode")
-    
-    from datetime import datetime, timezone, timedelta
-    
     now = datetime.now(timezone.utc)
     start_date = now - timedelta(days=30)
     end_date = now + timedelta(days=30)
-    
     stmt = select(ScholarshipType)
     result = await db.execute(stmt)
     scholarships = result.scalars().all()
-    
     for scholarship in scholarships:
         scholarship.application_start_date = start_date
         scholarship.application_end_date = end_date
-    
     await db.commit()
-    
     return ApiResponse(
         success=True,
         message=f"Reset {len(scholarships)} scholarship application periods",
@@ -163,20 +97,15 @@ async def toggle_scholarship_whitelist(
     """Toggle scholarship whitelist for testing (dev only)"""
     if not settings.debug:
         raise HTTPException(status_code=403, detail="Only available in development mode")
-    
     stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_id)
     result = await db.execute(stmt)
     scholarship = result.scalar_one_or_none()
-    
     if not scholarship:
         raise HTTPException(status_code=404, detail="Scholarship not found")
-    
     scholarship.whitelist_enabled = enable
     if not enable:
         scholarship.whitelist_student_ids = []
-    
     await db.commit()
-    
     return ApiResponse(
         success=True,
         message=f"Whitelist {'enabled' if enable else 'disabled'} for {scholarship.name}",
@@ -197,25 +126,19 @@ async def add_student_to_whitelist(
     """Add student to scholarship whitelist (dev only)"""
     if not settings.debug:
         raise HTTPException(status_code=403, detail="Only available in development mode")
-    
     stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_id)
     result = await db.execute(stmt)
     scholarship = result.scalar_one_or_none()
-    
     if not scholarship:
         raise HTTPException(status_code=404, detail="Scholarship not found")
-    
-    # 確保白名單是列表
+    # Ensure whitelist_student_ids is a list
     if not scholarship.whitelist_student_ids:
         scholarship.whitelist_student_ids = []
-    
-    # 加入學生ID（如果不存在）
+    # Add student_id if not present
     if student_id not in scholarship.whitelist_student_ids:
         scholarship.whitelist_student_ids.append(student_id)
         scholarship.whitelist_enabled = True
-    
     await db.commit()
-    
     return ApiResponse(
         success=True,
         message=f"Student {student_id} added to {scholarship.name} whitelist",
@@ -224,4 +147,4 @@ async def add_student_to_whitelist(
             "student_id": student_id,
             "whitelist_size": len(scholarship.whitelist_student_ids)
         }
-    ) 
+    )

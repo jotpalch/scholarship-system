@@ -20,7 +20,7 @@ interface UserType {
   email: string
   role: string
   studentId?: string
-  studentType: "undergraduate" | "phd" | "direct_phd"
+  studentType: "phd" | "master" | "undergraduate" | "other"
 }
 
 interface StudentPortalProps {
@@ -50,8 +50,8 @@ export function StudentPortal({ user, locale }: StudentPortalProps) {
         }
       case "phd":
         return {
-          type: "phd_research",
-          name: t("scholarships.phd_research"),
+          type: "phd",
+          name: t("scholarships.phd"),
           description:
             locale === "zh" ? "適用於博士班在學學生，需提供研究計畫" : "For PhD students, requires research proposal",
           eligibility:
@@ -179,7 +179,7 @@ export function StudentPortal({ user, locale }: StudentPortalProps) {
       ]
     }
 
-    if (type === "phd_research") {
+    if (type === "phd") {
       return [
         ...baseSteps,
         {
@@ -282,7 +282,7 @@ export function StudentPortal({ user, locale }: StudentPortalProps) {
       amount:
         scholarshipInfo?.type === "undergraduate_freshman"
           ? 50000
-          : scholarshipInfo?.type === "phd_research"
+          : scholarshipInfo?.type === "phd"
             ? 120000
             : 150000,
       timeline: getTimelineSteps(scholarshipInfo?.type || "", "under_review"),

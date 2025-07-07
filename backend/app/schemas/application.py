@@ -45,10 +45,6 @@ class ApplicationCreate(BaseModel):
     budget_plan: Optional[str] = Field(None, description="Budget plan")
     milestone_plan: Optional[str] = Field(None, description="Milestone plan")
     agree_terms: Optional[bool] = Field(False, description="Agreement to terms")
-    
-    # 新增欄位支持前端
-    personal_statement: Optional[str] = Field(None, description="Personal statement")
-    expected_graduation_date: Optional[str] = Field(None, description="Expected graduation date")
 
 
 class ApplicationUpdate(BaseModel):
@@ -154,6 +150,11 @@ class ApplicationResponse(BaseModel):
     approved_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime
+    
+    # 新增動態表單資料欄位
+    form_data: Optional[Dict[str, Any]] = Field(None, description="Dynamic form data")
+    meta_data: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    
     files: List[ApplicationFileResponse] = []
     reviews: List[ApplicationReviewResponse] = []
     professor_reviews: List[ProfessorReviewResponse] = []

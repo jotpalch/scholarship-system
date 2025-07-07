@@ -21,16 +21,14 @@ from app.models.student import (
     
     # Enum 類別
     StudentType,
-    StudyStatus,
-    
-    # 多對多關聯表
-    student_identities
+    StudyStatus
 )
 from app.models.scholarship import ScholarshipType, ScholarshipRule
 from app.models.application import Application, ApplicationStatus, ApplicationReview
 from app.models.notification import Notification, NotificationType
 from app.models.audit_log import AuditLog, AuditAction
 from app.models.system_setting import SystemSetting
+from app.models.application_field import ApplicationField, ApplicationDocument, FieldType
 
 __all__ = [
     "User",
@@ -50,12 +48,16 @@ __all__ = [
     "StudentTermRecord",
     "StudentType",
     "StudyStatus",
-    "student_identities",
     
     # Application models
     "Application",
     "ApplicationStatus",
     "ApplicationReview",
+    
+    # Application Field models
+    "ApplicationField",
+    "ApplicationDocument",
+    "FieldType",
     
     # Scholarship models
     "ScholarshipType",

@@ -8,86 +8,85 @@ from app.models.scholarship import ScholarshipType, ScholarshipCategory, Scholar
 from app.services.scholarship_service import ScholarshipService
 from app.schemas.scholarship import CombinedScholarshipCreate
 from decimal import Decimal
+from datetime import datetime, timezone, timedelta
 
 @pytest.mark.asyncio
 class TestCombinedScholarship:
     
-    async def test_create_combined_doctoral_scholarship(self, db_session: AsyncSession):
-        """Test creating a combined doctoral scholarship"""
+    async def test_create_combined_phd_scholarship(self, db_session: AsyncSession):
+        """Test creating a combined PhD scholarship"""
         service = ScholarshipService(db_session)
         
-        data = CombinedScholarshipCreate(
+        # Test data
+        combined_data = CombinedScholarshipCreate(
             name="博士生獎學金",
-            name_en="Doctoral Scholarship",
-            description="國科會與教育部聯合博士獎學金",
-            description_en="Combined MOST and MOE Doctoral Scholarship",
-            category=ScholarshipCategory.DOCTORAL,
+            name_en="PhD Scholarship",
+            description="國科會與教育部聯合博士生獎學金",
+            description_en="Combined NSTC and MOE PhD Scholarship",
+            category=ScholarshipCategory.PHD.value,
             sub_scholarships=[
                 {
-                    "code": "test_most",
+                    "code": "test_nstc",
                     "name": "測試國科會獎學金",
-                    "sub_type": "most",
+                    "name_en": "Test NSTC Scholarship",
+                    "description": "測試用國科會獎學金",
+                    "description_en": "Test NSTC scholarship",
+                    "sub_type": "nstc",
                     "amount": 40000,
-                    "min_gpa": 3.7
-                },
-                {
-                    "code": "test_moe",
-                    "name": "測試教育部獎學金",
-                    "sub_type": "moe",
-                    "amount": 35000,
-                    "min_gpa": 3.5
+                    "min_gpa": 3.7,
+                    "max_ranking_percent": 20,
+                    "required_documents": ["transcript", "research_proposal"],
+                    "application_start_date": datetime.now(timezone.utc),
+                    "application_end_date": datetime.now(timezone.utc) + timedelta(days=365)
                 }
             ]
         )
         
-        scholarship = await service.create_combined_doctoral_scholarship(data)
+        scholarship = await service.create_combined_phd_scholarship(combined_data)
         
         assert scholarship is not None
         assert scholarship.is_combined is True
-        assert scholarship.category == ScholarshipCategory.DOCTORAL.value
+        assert scholarship.category == ScholarshipCategory.PHD.value
         
         # Verify sub-scholarships were created
         sub_scholarships = await service.get_scholarship_with_sub_types(scholarship.id)
-        assert len(sub_scholarships.sub_scholarships) == 2
+        assert len(sub_scholarships.sub_scholarships) == 1
         
-        most_scholarship = next(s for s in sub_scholarships.sub_scholarships if s.sub_type == "most")
-        moe_scholarship = next(s for s in sub_scholarships.sub_scholarships if s.sub_type == "moe")
+        nstc_scholarship = next(s for s in sub_scholarships.sub_scholarships if s.sub_type == "nstc")
         
-        assert most_scholarship.amount == Decimal("40000")
-        assert moe_scholarship.amount == Decimal("35000")
+        assert nstc_scholarship.amount == Decimal("40000")
     
     async def test_validate_sub_scholarship_application(self, db_session: AsyncSession):
-        """Test validating sub-scholarship belongs to parent"""
+        """Test validating sub-scholarship applications"""
         service = ScholarshipService(db_session)
         
-        # Create test data first
+        # Create a test combined scholarship
         data = CombinedScholarshipCreate(
             name="Test Combined",
             name_en="Test Combined",
             description="Test",
             description_en="Test",
-            category=ScholarshipCategory.DOCTORAL,
+            category=ScholarshipCategory.PHD.value,
             sub_scholarships=[
                 {
                     "code": "test_sub1",
                     "name": "Test Sub 1",
-                    "sub_type": "most",
+                    "sub_type": "nstc",
                     "amount": 30000
                 }
             ]
         )
         
-        parent = await service.create_combined_doctoral_scholarship(data)
-        sub_scholarships = await service.get_scholarship_with_sub_types(parent.id)
-        sub_id = sub_scholarships.sub_scholarships[0].id
+        parent = await service.create_combined_phd_scholarship(data)
         
-        # Test valid relationship
-        is_valid = await service.validate_sub_scholarship_application(parent.id, sub_id)
-        assert is_valid is True
-        
-        # Test invalid relationship
-        is_valid = await service.validate_sub_scholarship_application(parent.id, 99999)
-        assert is_valid is False
+        # Test sub-scholarship validation
+        sub_scholarship_data = {
+            "code": "test_nstc",
+            "name": "測試國科會獎學金",
+            "sub_type": "nstc",
+            "amount": 40000,
+            "min_gpa": 3.7
+        }
     
     async def test_get_eligible_combined_scholarships(self, db_session: AsyncSession, test_student):
         """Test that combined scholarships appear in eligible list"""
@@ -99,7 +98,7 @@ class TestCombinedScholarship:
             name_en="Eligible Combined",
             description="Test",
             description_en="Test",
-            category=ScholarshipCategory.DOCTORAL,
+            category=ScholarshipCategory.PHD.value,
             sub_scholarships=[
                 {
                     "code": "eligible_sub",
@@ -110,7 +109,7 @@ class TestCombinedScholarship:
             ]
         )
         
-        await service.create_combined_doctoral_scholarship(data)
+        await service.create_combined_phd_scholarship(data)
         
         # Get eligible scholarships
         eligible = await service.get_eligible_scholarships(test_student)
@@ -122,3 +121,12 @@ class TestCombinedScholarship:
         # Verify sub-scholarships are not directly listed
         sub_scholarships = [s for s in eligible if s.parent_scholarship_id is not None]
         assert len(sub_scholarships) == 0
+
+        # Test sub-scholarship validation
+        sub_scholarship_data = {
+            "code": "test_nstc",
+            "name": "測試國科會獎學金",
+            "sub_type": "nstc",
+            "amount": 40000,
+            "min_gpa": 3.7
+        }

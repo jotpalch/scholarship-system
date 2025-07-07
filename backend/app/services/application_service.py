@@ -382,6 +382,15 @@ class ApplicationService:
             if hasattr(application, field):
                 setattr(application, field, value)
         
+        # Update form_data to include any dynamic fields
+        if update_dict:
+            # Get current form_data
+            current_form_data = application.form_data or {}
+            # Update with new data
+            current_form_data.update(update_dict)
+            # Update the form_data field
+            application.form_data = self._serialize_for_json(current_form_data)
+        
         await self.db.commit()
         await self.db.refresh(application)
         

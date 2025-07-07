@@ -9,8 +9,8 @@
 ### 1. 獎學金類型表 (scholarship_types)
 
 新增欄位：
-- `category` - 獎學金大類別（doctoral/undergraduate/master/special）
-- `sub_type` - 子類型（most/moe/general）
+- `category` - 獎學金大類別（phd/undergraduate/master/special）
+- `sub_type` - 子類型（nstc/moe/general）
 - `is_combined` - 是否為合併獎學金
 - `parent_scholarship_id` - 父獎學金ID（用於關聯子獎學金）
 
@@ -39,8 +39,8 @@ python -m app.core.init_combined_scholarships
 ```
 
 這會創建：
-- 主獎學金：博士生獎學金（Doctoral Scholarship）
-- 子獎學金1：國科會博士生獎學金（MOST Doctoral Scholarship）
+- 主獎學金：博士生獎學金（PhD Scholarship）
+- 子獎學金1：國科會博士生獎學金（NSTC Doctoral Scholarship）
   - 金額：NT$40,000/月
   - 最低GPA：3.7
   - 最高名次百分比：20%
@@ -62,22 +62,22 @@ GET /api/v1/scholarships/combined/list
 [
   {
     "id": 1,
-    "code": "doctoral_combined",
+    "code": "phd",
     "name": "博士生獎學金",
-    "category": "doctoral",
+    "category": "phd",
     "sub_type": "general",
     "is_combined": true,
     "sub_scholarships": [
       {
         "id": 2,
-        "code": "doctoral_most",
+        "code": "phd_nstc",
         "name": "國科會博士生獎學金",
-        "sub_type": "most",
+        "sub_type": "nstc",
         "amount": 40000
       },
       {
         "id": 3,
-        "code": "doctoral_moe",
+        "code": "phd_moe",
         "name": "教育部博士生獎學金",
         "sub_type": "moe",
         "amount": 35000
@@ -102,7 +102,7 @@ POST /api/v1/applications/
 請求內容：
 ```json
 {
-  "scholarship_type": "doctoral_combined",
+  "scholarship_type": "phd",
   "scholarship_type_id": 1,
   "sub_scholarship_type_id": 2,  // 選擇國科會或教育部
   "personal_statement": "...",

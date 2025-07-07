@@ -66,23 +66,34 @@ export interface Application {
   updated_at: string
   files?: ApplicationFile[]  // 關聯的文件
   
-  // Extended properties for dashboard display
+  // 動態表單資料
+  form_data?: Record<string, any>  // 動態表單資料
+  meta_data?: Record<string, any>  // 額外的元資料
+  
+  // 後端 ApplicationListResponse 實際返回的欄位
+  user_id?: number
+  scholarship_name?: string
+  amount?: number
+  status_name?: string
+  student_name?: string
+  student_no?: string
+  gpa?: number
+  department?: string
+  nationality?: string
+  class_ranking_percent?: number
+  dept_ranking_percent?: number
+  days_waiting?: number
+  
+  // Extended properties for dashboard display (保留向後兼容)
   user?: User  // 關聯的使用者資訊
   student?: Student  // 關聯的學生資訊
   scholarship?: ScholarshipType  // 關聯的獎學金資訊
-  
-  // Computed properties for UI
-  amount?: number  // 從 scholarship 獲取
-  gpa?: number  // 從 student 獲取
-  department?: string  // 從 student 獲取
-  nationality?: string  // 從 student 獲取
-  days_waiting?: number  // 計算得出 - 與後端保持一致
 }
 
 export interface ApplicationCreate {
   scholarship_type: string
   scholarship_type_id?: number  // 主獎學金ID
-  sub_scholarship_type_id?: number  // 子獎學金ID (用於合併獎學金)
+  sub_scholarship_type_id?: number  // 子獎學金ID
   academic_year?: string
   semester?: string
   gpa?: number
@@ -99,6 +110,7 @@ export interface ApplicationCreate {
   agree_terms?: boolean
   personal_statement?: string
   expected_graduation_date?: string
+  [key: string]: any  // 允許動態欄位
 }
 
 export interface DashboardStats {
@@ -173,34 +185,69 @@ export interface ScholarshipType {
   code: string
   name: string
   name_en?: string
-  description?: string
+  description: string
   description_en?: string
-  category: 'doctoral' | 'undergraduate' | 'master' | 'special'
-  sub_type: 'most' | 'moe' | 'general'
-  is_combined: boolean
-  parent_scholarship_id?: number
-  amount: number
+  amount: string
   currency: string
-  eligible_student_types?: string[]
-  min_gpa?: number
-  max_ranking_percent?: number
-  max_completed_terms?: number
-  required_documents?: string[]
-  application_start_date?: string
-  application_end_date?: string
-  review_deadline?: string
-  status: string
-  max_applications_per_year?: number
-  requires_professor_recommendation: boolean
-  requires_research_proposal: boolean
-  review_workflow?: any
-  auto_approval_rules?: any
+  application_start_date: string
+  application_end_date: string
+  eligible_sub_types: string[]
+  passed: Array<{
+    rule_id: number
+    rule_name: string
+    rule_type: string
+    tag: string
+    message: string
+    message_en: string
+    sub_type: string | null
+    priority: number
+    is_warning: boolean
+    is_hard_rule: boolean
+  }>
+  warnings: Array<{
+    rule_id: number
+    rule_name: string
+    rule_type: string
+    tag: string
+    message: string
+    message_en: string
+    sub_type: string | null
+    priority: number
+    is_warning: boolean
+    is_hard_rule: boolean
+  }>
+  errors: Array<{
+    rule_id: number
+    rule_name: string
+    rule_type: string
+    tag: string
+    message: string
+    message_en: string
+    sub_type: string | null
+    priority: number
+    is_warning: boolean
+    is_hard_rule: boolean
+  }>
+  created_at: string
+}
+
+export interface ScholarshipRule {
+  id: number
+  scholarship_type_id: number
+  sub_type?: string
+  rule_name: string
+  rule_type: string
+  condition_field: string
+  operator: string
+  expected_value: string
+  error_message: string
+  error_message_en: string
+  is_required: boolean
+  weight: number
+  priority: number
+  is_active: boolean
   created_at: string
   updated_at: string
-  created_by?: number
-  updated_by?: number
-  sub_scholarships?: ScholarshipType[]
-  parent_scholarship?: ScholarshipType
 }
 
 // User management types
@@ -218,6 +265,29 @@ export interface UserListResponse {
   created_at: string
   updated_at?: string
   last_login_at?: string
+}
+
+export interface UserResponse {
+  id: number
+  email: string
+  username: string
+  full_name: string
+  chinese_name?: string
+  english_name?: string
+  role: string
+  is_active: boolean
+  is_verified: boolean
+  student_no?: string
+  created_at: string
+  updated_at?: string
+  last_login_at?: string
+}
+
+export interface PaginatedResponse<T> {
+  items: T[]
+  total: number
+  page: number
+  size: number
 }
 
 export interface UserCreate {
@@ -250,6 +320,175 @@ export interface UserStats {
   active_users: number
   inactive_users: number
   recent_registrations: number
+}
+
+// Application Fields Configuration interfaces
+export interface ApplicationField {
+  id: number
+  scholarship_type: string
+  field_name: string
+  field_label: string
+  field_label_en?: string
+  field_type: string
+  is_required: boolean
+  placeholder?: string
+  placeholder_en?: string
+  max_length?: number
+  min_value?: number
+  max_value?: number
+  step_value?: number
+  field_options?: Array<{value: string, label: string, label_en?: string}>
+  display_order: number
+  is_active: boolean
+  help_text?: string
+  help_text_en?: string
+  validation_rules?: Record<string, any>
+  conditional_rules?: Record<string, any>
+  created_at: string
+  updated_at: string
+  created_by?: number
+  updated_by?: number
+}
+
+export interface ApplicationFieldCreate {
+  scholarship_type: string
+  field_name: string
+  field_label: string
+  field_label_en?: string
+  field_type: string
+  is_required?: boolean
+  placeholder?: string
+  placeholder_en?: string
+  max_length?: number
+  min_value?: number
+  max_value?: number
+  step_value?: number
+  field_options?: Array<{value: string, label: string, label_en?: string}>
+  display_order?: number
+  is_active?: boolean
+  help_text?: string
+  help_text_en?: string
+  validation_rules?: Record<string, any>
+  conditional_rules?: Record<string, any>
+}
+
+export interface ApplicationFieldUpdate {
+  field_label?: string
+  field_label_en?: string
+  field_type?: string
+  is_required?: boolean
+  placeholder?: string
+  placeholder_en?: string
+  max_length?: number
+  min_value?: number
+  max_value?: number
+  step_value?: number
+  field_options?: Array<{value: string, label: string, label_en?: string}>
+  display_order?: number
+  is_active?: boolean
+  help_text?: string
+  help_text_en?: string
+  validation_rules?: Record<string, any>
+  conditional_rules?: Record<string, any>
+}
+
+export interface ApplicationDocument {
+  id: number
+  scholarship_type: string
+  document_name: string
+  document_name_en?: string
+  description?: string
+  description_en?: string
+  is_required: boolean
+  accepted_file_types: string[]
+  max_file_size: string
+  max_file_count: number
+  display_order: number
+  is_active: boolean
+  upload_instructions?: string
+  upload_instructions_en?: string
+  validation_rules?: Record<string, any>
+  created_at: string
+  updated_at: string
+  created_by?: number
+  updated_by?: number
+}
+
+export interface ApplicationDocumentCreate {
+  scholarship_type: string
+  document_name: string
+  document_name_en?: string
+  description?: string
+  description_en?: string
+  is_required?: boolean
+  accepted_file_types?: string[]
+  max_file_size?: string
+  max_file_count?: number
+  display_order?: number
+  is_active?: boolean
+  upload_instructions?: string
+  upload_instructions_en?: string
+  validation_rules?: Record<string, any>
+}
+
+export interface ApplicationDocumentUpdate {
+  document_name?: string
+  document_name_en?: string
+  description?: string
+  description_en?: string
+  is_required?: boolean
+  accepted_file_types?: string[]
+  max_file_size?: string
+  max_file_count?: number
+  display_order?: number
+  is_active?: boolean
+  upload_instructions?: string
+  upload_instructions_en?: string
+  validation_rules?: Record<string, any>
+}
+
+export interface ScholarshipFormConfig {
+  scholarship_type: string
+  fields: ApplicationField[]
+  documents: ApplicationDocument[]
+}
+
+export interface FormConfigSaveRequest {
+  fields: Array<{
+    field_name: string
+    field_label: string
+    field_label_en?: string
+    field_type: string
+    is_required?: boolean
+    placeholder?: string
+    placeholder_en?: string
+    max_length?: number
+    min_value?: number
+    max_value?: number
+    step_value?: number
+    field_options?: Array<{value: string, label: string, label_en?: string}>
+    display_order?: number
+    is_active?: boolean
+    help_text?: string
+    help_text_en?: string
+    validation_rules?: Record<string, any>
+    conditional_rules?: Record<string, any>
+  }>
+  documents: Array<{
+    document_name: string
+    document_name_en?: string
+    description?: string
+    description_en?: string
+    is_required?: boolean
+    accepted_file_types?: string[]
+    max_file_size?: string
+    max_file_count?: number
+    display_order?: number
+    is_active?: boolean
+    upload_instructions?: string
+    upload_instructions_en?: string
+    validation_rules?: Record<string, any>
+  }>
 }
 
 class ApiClient {
@@ -546,32 +785,33 @@ class ApiClient {
       return this.request('/scholarships/combined/list')
     },
     
-    // Create combined doctoral scholarship
-    createCombinedDoctoral: async (data: {
+    // Create combined PhD scholarship
+    createCombinedPhd: async (data: {
       name: string
       name_en: string
       description: string
       description_en: string
-      application_start_date?: string
-      application_end_date?: string
-      sub_scholarships?: Array<{
+      category: ScholarshipCategory
+      sub_scholarships: Array<{
         code: string
         name: string
-        name_en?: string
-        description?: string
-        description_en?: string
-        sub_type: 'most' | 'moe'
+        name_en: string
+        description: string
+        description_en: string
+        sub_type: 'nstc' | 'moe'
         amount: number
         min_gpa?: number
         max_ranking_percent?: number
         required_documents?: string[]
+        application_start_date?: string
+        application_end_date?: string
       }>
     }): Promise<ApiResponse<ScholarshipType>> => {
-      return this.request('/scholarships/combined/doctoral', {
+      return this.request('/scholarships/combined/phd', {
         method: 'POST',
-        body: JSON.stringify(data)
+        body: JSON.stringify(data),
       })
-    }
+    },
   }
 
   // Application management endpoints
@@ -865,8 +1105,66 @@ class ApiClient {
       })
     },
   }
+
+  // Application Fields Configuration
+  applicationFields = {
+    // Form configuration
+    getFormConfig: (scholarshipType: string, includeInactive: boolean = false) => 
+      this.request<ScholarshipFormConfig>(`/application-fields/form-config/${scholarshipType}?include_inactive=${includeInactive}`),
+    
+    saveFormConfig: (scholarshipType: string, config: FormConfigSaveRequest) => 
+      this.request<ScholarshipFormConfig>(`/application-fields/form-config/${scholarshipType}`, {
+        method: 'POST',
+        body: JSON.stringify(config)
+      }),
+    
+    // Fields management
+    getFields: (scholarshipType: string) => 
+      this.request<ApplicationField[]>(`/application-fields/fields/${scholarshipType}`),
+    
+    createField: (fieldData: ApplicationFieldCreate) => 
+      this.request<ApplicationField>('/application-fields/fields', {
+        method: 'POST',
+        body: JSON.stringify(fieldData)
+      }),
+    
+    updateField: (fieldId: number, fieldData: ApplicationFieldUpdate) => 
+      this.request<ApplicationField>(`/application-fields/fields/${fieldId}`, {
+        method: 'PUT',
+        body: JSON.stringify(fieldData)
+      }),
+    
+    deleteField: (fieldId: number) => 
+      this.request<boolean>(`/application-fields/fields/${fieldId}`, {
+        method: 'DELETE'
+      }),
+    
+    // Documents management
+    getDocuments: (scholarshipType: string) => 
+      this.request<ApplicationDocument[]>(`/application-fields/documents/${scholarshipType}`),
+    
+    createDocument: (documentData: ApplicationDocumentCreate) => 
+      this.request<ApplicationDocument>('/application-fields/documents', {
+        method: 'POST',
+        body: JSON.stringify(documentData)
+      }),
+    
+    updateDocument: (documentId: number, documentData: ApplicationDocumentUpdate) => 
+      this.request<ApplicationDocument>(`/application-fields/documents/${documentId}`, {
+        method: 'PUT',
+        body: JSON.stringify(documentData)
+      }),
+    
+    deleteDocument: (documentId: number) => 
+      this.request<boolean>(`/application-fields/documents/${documentId}`, {
+        method: 'DELETE'
+      }),
+  }
 }
 
 // Create and export a singleton instance
 export const apiClient = new ApiClient()
-export default apiClient 
+export default apiClient
+
+// Alias for backward compatibility
+export const api = apiClient 

@@ -1,12 +1,12 @@
 export enum ScholarshipCategory {
-  DOCTORAL = "doctoral",
+  PHD = "phd",
   UNDERGRADUATE = "undergraduate", 
   MASTER = "master",
   SPECIAL = "special"
 }
 
 export enum ScholarshipSubType {
-  MOST = "most",  // 國科會
+  NSTC = "nstc",  // 國科會
   MOE = "moe",    // 教育部
   GENERAL = "general"  // 一般
 }

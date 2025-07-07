@@ -46,6 +46,9 @@ class FileType(enum.Enum):
     RESEARCH_PROPOSAL = "research_proposal"  # 研究計畫
     RECOMMENDATION_LETTER = "recommendation_letter"  # 推薦信
     CERTIFICATE = "certificate"  # 證書
+    INSURANCE_RECORD = "insurance_record"  # 投保紀錄
+    AGREEMENT = "agreement"  # 切結書
+    BANK_ACCOUNT_COVER = "bank_account_cover"  # 銀行帳號封面
     OTHER = "other"  # 其他
 
 
@@ -61,36 +64,20 @@ class Application(Base):
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
     
     # 獎學金類型
-    scholarship_type = Column(String(50), nullable=False)
-    scholarship_name = Column(String(200))
     scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=True)  # 主獎學金ID
-    sub_scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=True)  # 子獎學金ID（用於合併獎學金）
-    amount = Column(Numeric(10, 2))
+    scholarship_subtype_list = Column(JSON, nullable=True, default=[])
     
     # 申請狀態
     status = Column(String(50), default=ApplicationStatus.DRAFT.value)
     status_name = Column(String(100))
     
     # 學期資訊 (申請當時的學期)
-    academic_year = Column(String(10))  # trm_year
+    academic_year = Column(String(10))  # trm_year 民國年
     semester = Column(String(10))  # trm_term
     
-    # 成績資訊 (申請當時)
-    gpa = Column(Numeric(4, 2))  # trm_ascore_gpa
-    class_ranking_percent = Column(Numeric(5, 2))  # trm_placingsrate
-    dept_ranking_percent = Column(Numeric(5, 2))  # trm_depplacingrate
-    completed_terms = Column(Integer)  # trm_termcount
-    
-    # 聯絡資訊 (申請時填寫)
-    contact_phone = Column(String(20))
-    contact_email = Column(String(255))
-    contact_address = Column(Text)
-    bank_account = Column(String(20))
-    
-    # 申請內容
-    research_proposal = Column(Text)  # 研究計畫
-    budget_plan = Column(Text)  # 經費規劃
-    milestone_plan = Column(Text)  # 里程碑規劃
+    # 申請資料 (申請當時)
+    student_data = Column(JSON)  # Student 資料
+    submitted_form_data = Column(JSON)  # Field, Document 資料
     
     # 同意條款
     agree_terms = Column(Boolean, default=False)
@@ -113,7 +100,6 @@ class Application(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # 其他資訊
-    form_data = Column(JSON)  # 儲存完整表單資料
     meta_data = Column(JSON)  # 額外的元資料
     
     # 關聯
@@ -125,7 +111,6 @@ class Application(Base):
     
     # 獎學金關聯
     scholarship = relationship("ScholarshipType", foreign_keys=[scholarship_type_id])
-    sub_scholarship = relationship("ScholarshipType", foreign_keys=[sub_scholarship_type_id])
     
     files = relationship("ApplicationFile", back_populates="application", cascade="all, delete-orphan")
     reviews = relationship("ApplicationReview", back_populates="application", cascade="all, delete-orphan")
@@ -164,7 +149,6 @@ class ApplicationFile(Base):
     # 檔案資訊
     filename = Column(String(255), nullable=False)
     original_filename = Column(String(255))
-    file_path = Column(String(500))  # For backward compatibility
     object_name = Column(String(500))  # MinIO object name
     file_size = Column(Integer)
     mime_type = Column(String(100))

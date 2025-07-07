@@ -122,6 +122,41 @@ export const translations = {
       AUS: "澳洲",
       OTHER: "其他",
     },
+
+    scholarship_subtypes: {
+      general: "一般獎學金",
+      nstc: "國科會博士生獎學金",
+      moe_1w: "教育部博士生獎學金 (指導教授配合款一萬)",
+      moe_2w: "教育部博士生獎學金 (指導教授配合款兩萬)"
+    },
+
+    eligibility_tags: {
+      // Basic eligibility
+      "博士生": "博士生",
+      "碩士生": "碩士生",
+      "學士生": "學士生",
+      "在學生": "在學生",
+      "非在職生": "非在職生",
+      "非陸生": "非陸生",
+      "中華民國國籍": "中華民國國籍",
+      "三年級以下": "三年級以下",
+      "一般生": "一般生",
+      "逕博生": "逕升博士生",
+      "第一學年": "第一學年"
+    },
+    rule_types: {
+      "nstc": "國科會",
+      "moe_1w": "教育部(1萬)",
+      "moe_2w": "教育部(2萬)"
+    },
+    scholarship_sections: {
+      "eligible_programs": "可申請項目",
+      "eligibility": "申請資格",
+      "period": "申請期間",
+      "fields": "申請欄位",
+      "required_docs": "必要文件",
+      "optional_docs": "選填文件"
+    }
   },
 
   en: {
@@ -243,6 +278,41 @@ export const translations = {
       AUS: "Australia",
       OTHER: "Other",
     },
+
+    scholarship_subtypes: {
+      general: "General Scholarship",
+      nstc: "NSTC PHD Scholarship",
+      moe_1w: "MOE PHD Scholarship (Professor Match 10K)",
+      moe_2w: "MOE PHD Scholarship (Professor Match 20K)"
+    },
+
+    eligibility_tags: {
+      // Basic eligibility
+      "碩士生": "Master Student",
+      "學士生": "Undergraduate Student",
+      "博士生": "PhD Student",
+      "在學生": "Current Student",
+      "非在職生": "Full-time Student",
+      "非陸生": "Non-Mainland Student",
+      "中華民國國籍": "ROC Nationality",
+      "三年級以下": "Below 3rd Year",
+      "一般生": "Regular Student",
+      "逕博生": "Direct PhD Student",
+      "第一學年": "First Academic Year"
+    },
+    rule_types: {
+      "nstc": "NSTC",
+      "moe_1w": "MOE (10K)",
+      "moe_2w": "MOE (20K)"
+    },
+    scholarship_sections: {
+      "eligible_programs": "Eligible Programs",
+      "eligibility": "Eligibility",
+      "period": "Application Period",
+      "fields": "Required Fields",
+      "required_docs": "Required Documents",
+      "optional_docs": "Optional Documents"
+    }
   },
 }
 

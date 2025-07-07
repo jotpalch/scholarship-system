@@ -1,238 +1,371 @@
+"""
+Scholarship service for scholarship management
+"""
+
+from dataclasses import dataclass
+from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
-from datetime import datetime, timezone
-import logging
-from decimal import Decimal
-from app.models.scholarship import ScholarshipType, ScholarshipStatus, ScholarshipCategory, ScholarshipSubType
-from app.models.student import Student, StudentTermRecord
-from app.core.exceptions import ValidationError, NotFoundError
-from app.core.config import settings, DEV_SCHOLARSHIP_SETTINGS
-from app.schemas.scholarship import CombinedScholarshipCreate, ScholarshipTypeCreate
-from typing import List, Union, Optional, Dict, Any
+from sqlalchemy import select
 
-logger = logging.getLogger(__name__)
+from app.models.scholarship import ScholarshipType, ScholarshipRule, ScholarshipStatus
+from app.models.student import Student
+from app.schemas.scholarship import EligibleScholarshipResponse, RuleMessage
 
-class ScholarshipService:
-    def __init__(self, db: AsyncSession):
-        self.db = db
-    
-    async def create_combined_doctoral_scholarship(self, data: CombinedScholarshipCreate) -> ScholarshipType:
-        """Create a combined doctoral scholarship with MOST and MOE sub-types"""
-        try:
-            # Create parent scholarship
-            parent_scholarship = ScholarshipType(
-                code="doctoral_combined",
-                name=data.name,
-                name_en=data.name_en,
-                description=data.description,
-                description_en=data.description_en,
-                category=ScholarshipCategory.DOCTORAL.value,
-                sub_type=ScholarshipSubType.GENERAL.value,
-                is_combined=True,
-                amount=Decimal("0"),  # 總金額將由子獎學金決定
-                eligible_student_types=["phd", "direct_phd"],
-                status=ScholarshipStatus.ACTIVE.value
-            )
-            
-            self.db.add(parent_scholarship)
-            await self.db.flush()
-            
-            # Create sub-scholarships
-            sub_scholarships = []
-            for sub_data in data.sub_scholarships:
-                sub_scholarship = ScholarshipType(
-                    code=sub_data['code'],
-                    name=sub_data['name'],
-                    name_en=sub_data.get('name_en'),
-                    description=sub_data.get('description'),
-                    description_en=sub_data.get('description_en'),
-                    category=ScholarshipCategory.DOCTORAL.value,
-                    sub_type=sub_data['sub_type'],  # MOST or MOE
-                    is_combined=False,
-                    parent_scholarship_id=parent_scholarship.id,
-                    amount=Decimal(str(sub_data['amount'])),
-                    min_gpa=Decimal(str(sub_data.get('min_gpa', 3.5))),
-                    max_ranking_percent=Decimal(str(sub_data.get('max_ranking_percent', 30))),
-                    required_documents=sub_data.get('required_documents', []),
-                    eligible_student_types=["phd", "direct_phd"],
-                    status=ScholarshipStatus.ACTIVE.value,
-                    application_start_date=sub_data.get('application_start_date'),
-                    application_end_date=sub_data.get('application_end_date')
-                )
-                
-                self.db.add(sub_scholarship)
-                sub_scholarships.append(sub_scholarship)
-            
-            await self.db.commit()
-            await self.db.refresh(parent_scholarship)
-            
-            return parent_scholarship
-            
-        except Exception as e:
-            await self.db.rollback()
-            logger.error(f"Error creating combined scholarship: {e}")
-            raise ValidationError(f"Failed to create combined scholarship: {str(e)}")
-    
-    async def get_scholarship_with_sub_types(self, scholarship_id: int) -> Optional[ScholarshipType]:
-        """Get scholarship with its sub-scholarships if it's a combined type"""
-        stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_id)
-        result = await self.db.execute(stmt)
-        scholarship = result.scalar_one_or_none()
-        
-        if not scholarship:
-            raise NotFoundError(f"Scholarship with ID {scholarship_id} not found")
-        
-        # If it's a combined scholarship, load sub-scholarships
-        if scholarship.is_combined:
-            sub_stmt = select(ScholarshipType).where(
-                ScholarshipType.parent_scholarship_id == scholarship_id
-            )
-            sub_result = await self.db.execute(sub_stmt)
-            scholarship.sub_scholarships = sub_result.scalars().all()
-        
-        return scholarship
-    
-    async def validate_sub_scholarship_application(self, parent_id: int, sub_id: int) -> bool:
-        """Validate that sub_scholarship belongs to parent scholarship"""
-        sub_stmt = select(ScholarshipType).where(
-            and_(
-                ScholarshipType.id == sub_id,
-                ScholarshipType.parent_scholarship_id == parent_id
-            )
+@dataclass
+class RuleValidationResult:
+    passed: bool
+    rule_id: int
+    rule_name: str
+    rule_type: str
+    message: str
+    tag: Optional[str] = None
+    message_en: Optional[str] = None
+    sub_type: Optional[str] = None
+    priority: int = 0
+    is_warning: bool = False
+    is_hard_rule: bool = False
+
+async def get_active_scholarships(db: AsyncSession) -> List[ScholarshipType]:
+    """Get all active scholarships"""
+    result = await db.execute(
+        select(ScholarshipType)
+        .where(ScholarshipType.status == ScholarshipStatus.ACTIVE.value)
+    )
+    return result.scalars().all()
+
+async def get_scholarship_rules(db: AsyncSession, scholarship_id: int) -> List[ScholarshipRule]:
+    """Get all rules for a scholarship ordered by priority"""
+    result = await db.execute(
+        select(ScholarshipRule)
+        .where(
+            ScholarshipRule.scholarship_type_id == scholarship_id,
+            ScholarshipRule.is_active == True
         )
-        result = await self.db.execute(sub_stmt)
-        sub_scholarship = result.scalar_one_or_none()
-        
-        return sub_scholarship is not None
+        .order_by(ScholarshipRule.priority)
+    )
+    return result.scalars().all()
+
+def separate_rules(rules: List[ScholarshipRule]) -> tuple[List[ScholarshipRule], Dict[str, List[ScholarshipRule]]]:
+    """Separate rules into common rules and subtype-specific rules"""
+    common_rules = []
+    subtype_rules: Dict[str, List[ScholarshipRule]] = {}
     
-    def _safe_gpa_to_decimal(self, gpa: Union[str, int, float, Decimal]) -> Decimal:
-        """Safely convert GPA to Decimal for comparison"""
-        try:
-            if isinstance(gpa, str):
-                return Decimal(gpa)
-            elif isinstance(gpa, (int, float)):
-                return Decimal(str(gpa))
-            elif isinstance(gpa, Decimal):
-                return gpa
-            else:
-                logger.warning(f"Unexpected GPA type: {type(gpa)}, value: {gpa}")
-                return Decimal("0.0")
-        except Exception as e:
-            logger.error(f"Error converting GPA '{gpa}' to Decimal: {e}")
-            return Decimal("0.0")
-    
-    def _is_dev_mode(self) -> bool:
-        """Check if running in development mode"""
-        return settings.debug or settings.environment == "development"
-    
-    def _should_bypass_application_period(self) -> bool:
-        """Check if should bypass application period in dev mode"""
-        return (self._is_dev_mode() and 
-                DEV_SCHOLARSHIP_SETTINGS.get("ALWAYS_OPEN_APPLICATION", False))
-    
-    def _should_bypass_whitelist(self) -> bool:
-        """Check if should bypass whitelist in dev mode"""
-        return (self._is_dev_mode() and 
-                DEV_SCHOLARSHIP_SETTINGS.get("BYPASS_WHITELIST", False))
-    
-    async def get_eligible_scholarships(self, student: Student) -> List[ScholarshipType]:
-        """Get scholarships that the student is eligible for, including combined scholarships"""
-        # Get all active scholarships (only parent scholarships)
-        stmt = select(ScholarshipType).where(
-            and_(
-                ScholarshipType.status == ScholarshipStatus.ACTIVE.value,
-                ScholarshipType.parent_scholarship_id.is_(None)  # Only get parent scholarships
-            )
-        )
-        result = await self.db.execute(stmt)
-        scholarships = result.scalars().all()
-        
-        logger.info(f"Found {len(scholarships)} active parent scholarships")
-        
-        # Get student's academic record to determine type
-        from app.models.student import StudentAcademicRecord, StudentType
-        stmt = select(StudentAcademicRecord).where(
-            StudentAcademicRecord.studentId == student.id
-        ).order_by(StudentAcademicRecord.createdAt.desc())
-        result = await self.db.execute(stmt)
-        academic_record = result.scalar_one_or_none()
-        
-        # Determine student type based on academic record
-        if academic_record:
-            if academic_record.degree == 1:  # 學士
-                student_type = StudentType.UNDERGRADUATE
-            elif academic_record.degree == 2:  # 碩士
-                student_type = StudentType.GRADUATE
-            elif academic_record.degree == 3:  # 博士
-                if student.stdNo and student.stdNo.startswith('D'):
-                    student_type = StudentType.DIRECT_PHD
-                else:
-                    student_type = StudentType.PHD
-            else:
-                student_type = StudentType.UNDERGRADUATE
+    for rule in rules:
+        if rule.sub_type:
+            if rule.sub_type not in subtype_rules:
+                subtype_rules[rule.sub_type] = []
+            subtype_rules[rule.sub_type].append(rule)
         else:
-            student_type = StudentType.UNDERGRADUATE
+            common_rules.append(rule)
+    
+    return common_rules, subtype_rules
+
+def get_field_value(student: Student, field_path: str) -> Any:
+    """Get value from student object using dot notation field path"""
+    obj = student
+    for field in field_path.split('.'):
+        if field == "academicRecords":
+            obj = obj.currentAcademicRecord
+            if obj is None:
+                return None
+        elif field == "studyingStatus" and hasattr(obj, field):
+            # Convert studying status to int for comparison
+            value = getattr(obj, field)
+            return int(value) if value is not None else None
+        elif field == "nationality" and hasattr(obj, field):
+            # Convert nationality to int for comparison
+            value = getattr(obj, field)
+            return int(value) if value is not None else None
+        elif field == "schoolIdentity" and hasattr(obj, field):
+            # Convert school identity to int for comparison
+            value = getattr(obj, field)
+            return int(value) if value is not None else None
+        elif hasattr(obj, field):
+            obj = getattr(obj, field)
+        else:
+            return None
+    return obj
+
+def compare_values(value: str, expected_value: str, operator: str) -> bool:
+    """Compare two values using the specified operator"""
+    if operator == "==":
+        return value == expected_value
+    elif operator == "!=":
+        return value != expected_value
+    elif operator == ">=":
+        try:
+            return float(value) >= float(expected_value)
+        except (ValueError, TypeError):
+            return False
+    elif operator == "<=":
+        try:
+            return float(value) <= float(expected_value)
+        except (ValueError, TypeError):
+            return False
+    elif operator == "in":
+        expected_values = [str(v).strip() for v in expected_value.split(",")]
+        return value in expected_values
+    elif operator == "not_in":
+        expected_values = [str(v).strip() for v in expected_value.split(",")]
+        return value not in expected_values
+    return True  # Unknown operator
+
+def create_validation_result(
+    passed: bool,
+    rule: ScholarshipRule,
+    message: Optional[str] = None,
+    message_en: Optional[str] = None
+) -> RuleValidationResult:
+    """Create a validation result object"""
+    if passed:
+        return RuleValidationResult(
+            passed=True,
+            rule_id=rule.id,
+            rule_name=rule.rule_name,
+            rule_type=rule.rule_type,
+            tag=rule.tag,
+            message="",
+            message_en="",
+            sub_type=rule.sub_type,
+            is_warning=rule.is_warning,
+            priority=rule.priority
+        )
+    
+    msg = message or rule.message or f"Failed validation for {rule.rule_name}"
+    msg_en = message_en or rule.message_en or f"Failed validation for {rule.rule_name}"
+    
+    return RuleValidationResult(
+        passed=False,
+        rule_id=rule.id,
+        rule_name=rule.rule_name,
+        rule_type=rule.rule_type,
+        tag=rule.tag,
+        message=msg,
+        message_en=msg_en,
+        sub_type=rule.sub_type,
+        is_warning=rule.is_warning,
+        priority=rule.priority
+    )
+
+def validate_rule(student: Student, rule: ScholarshipRule) -> RuleValidationResult:
+    """Validate a single rule against student data"""
+    # Special handling for enrollType validation
+    if rule.condition_field == "enrollTypeId":
+        academic_record = student.currentAcademicRecord
+        if academic_record is None or academic_record.degree is None:
+            return create_validation_result(
+                False,
+                rule,
+                "Student academic record or degree not found"
+            )
         
-        # Get student's latest term record
-        stmt = select(StudentTermRecord).where(
-            StudentTermRecord.studentId == student.id
-        ).order_by(StudentTermRecord.academicYear.desc(), StudentTermRecord.semester.desc())
-        result = await self.db.execute(stmt)
-        latest_term = result.scalar_one_or_none()
-        
-        if not latest_term:
-            logger.warning(f"No term records found for student {student.stdNo}")
-            return []
+        # Get the enrollment type code
+        enroll_type = get_field_value(student, rule.condition_field)
+        if enroll_type is None:
+            return create_validation_result(
+                False,
+                rule,
+                "Enrollment type not found"
+            )
             
-        completed_terms = latest_term.completedTerms
-        logger.info(f"Student {student.stdNo} has {completed_terms} completed terms")
-        logger.info(f"Student type: {student_type.value}")
-        logger.info(f"Student GPA: {latest_term.gpa}")
-        
-        eligible_scholarships = []
-        for scholarship in scholarships:
-            try:
-                logger.info(f"\nChecking eligibility for scholarship: {scholarship.name}")
-                logger.info(f"Application period: {scholarship.application_start_date} to {scholarship.application_end_date}")
-                logger.info(f"Current time: {datetime.now(timezone.utc)}")
-                logger.info(f"Eligible student types: {scholarship.eligible_student_types}")
-                logger.info(f"Min GPA required: {scholarship.min_gpa}")
-                logger.info(f"Max completed terms: {scholarship.max_completed_terms}")
-                
-                # Check if scholarship is in application period
-                if not self._should_bypass_application_period() and not scholarship.is_application_period:
-                    logger.info(f"Skipping {scholarship.name}: Not in application period")
-                    continue
-                elif self._should_bypass_application_period():
-                    logger.info(f"DEV MODE: Bypassing application period check for {scholarship.name}")
-                    
-                # Check student type eligibility
-                if scholarship.eligible_student_types and student_type.value not in scholarship.eligible_student_types:
-                    logger.info(f"Skipping {scholarship.name}: Student type {student_type.value} not in eligible types {scholarship.eligible_student_types}")
-                    continue
-                
-                # Check whitelist eligibility - PRIMARY REQUIREMENT
-                # Changed: Only whitelisted students can apply (regardless of GPA)
-                if not self._should_bypass_whitelist():
-                    if not scholarship.is_student_in_whitelist(student.id):
-                        logger.info(f"Skipping {scholarship.name}: Student {student.stdNo} not in whitelist")
-                        continue
-                    else:
-                        logger.info(f"Student {student.stdNo} found in whitelist for {scholarship.name}")
-                elif self._should_bypass_whitelist():
-                    logger.info(f"DEV MODE: Bypassing whitelist check for {scholarship.name}")
-                
-                # Optional: Check term count requirement (keeping this as additional validation)
-                if scholarship.max_completed_terms and completed_terms > scholarship.max_completed_terms:
-                    logger.info(f"Skipping {scholarship.name}: Completed terms {completed_terms} exceeds max {scholarship.max_completed_terms}")
-                    continue
-                
-                # If all checks pass, add to eligible scholarships
-                logger.info(f"Scholarship {scholarship.name} is eligible!")
-                eligible_scholarships.append(scholarship)
-            except ValidationError as e:
-                logger.error(f"Validation error for scholarship {scholarship.name}: {str(e)}")
-                continue
-        
-        logger.info(f"Found {len(eligible_scholarships)} eligible scholarships")
-        return eligible_scholarships 
+        # Compare enrollment type code
+        passed = compare_values(str(enroll_type), str(rule.expected_value), rule.operator)
+        return create_validation_result(passed, rule)
+    
+    # Normal validation for other fields
+    field_value = get_field_value(student, rule.condition_field)
+    
+    if field_value is None:
+        return create_validation_result(
+            False,
+            rule,
+            f"Field {rule.condition_field} not found"
+        )
+    
+    # Compare values
+    passed = compare_values(str(field_value), str(rule.expected_value), rule.operator)
+    return create_validation_result(passed, rule)
+
+def validate_common_rules(
+    student: Student,
+    rules: List[ScholarshipRule],
+) -> tuple[List[RuleValidationResult], List[RuleValidationResult], List[RuleValidationResult]]:
+    """Validate common rules that apply to all subtypes"""
+    passed_rules = []
+    failed_rules = []
+    warnings_rules = []
+    for rule in rules:
+        result = validate_rule(student, rule)
+        if result.is_warning and result.passed:
+            warnings_rules.append(result)
+        if not result.passed and not result.is_warning:
+            failed_rules.append(result)
+            # If it's a hard rule and validation failed, return immediately
+            if rule.is_hard_rule:
+                return [], failed_rules, warnings_rules
+        else:
+            passed_rules.append(result)
+    
+    # Return True if no hard rules failed, even if there are warning rules that failed
+    return passed_rules, failed_rules, warnings_rules
+
+def validate_subtype_rules(
+    student: Student,
+    subtype: str,
+    rules: List[ScholarshipRule],
+) -> tuple[List[RuleValidationResult], List[RuleValidationResult], List[RuleValidationResult]]:
+    """Validate rules for a specific subtype"""
+    passed_rules = []
+    failed_rules = []
+    warnings_rules = []
+    
+    for rule in rules:
+        result = validate_rule(student, rule)
+        if result.is_warning and result.passed:
+            warnings_rules.append(result)
+        if not result.passed and not result.is_warning:
+            failed_rules.append(result)
+        else:
+            passed_rules.append(result)
+    
+    return passed_rules, failed_rules, warnings_rules
+
+async def check_scholarship_basic_eligibility(
+    student: Student,
+    scholarship: ScholarshipType,
+    db: AsyncSession
+) -> bool:
+    """Check basic eligibility for a scholarship"""
+    # Check if scholarship is active
+    if not scholarship.is_active:
+        return False
+
+    # Check if student is in whitelist if whitelist is enabled
+    if scholarship.whitelist_enabled and student.id not in scholarship.whitelist_student_ids:
+        return False
+
+    return True
+
+def create_eligibility_response(
+    scholarship: ScholarshipType,
+    eligible_sub_types: List[str],
+    passed_rules: Optional[List[RuleValidationResult]] = None,
+    failed_rules: Optional[List[RuleValidationResult]] = None,
+    warnings_rules: Optional[List[RuleValidationResult]] = None
+) -> EligibleScholarshipResponse:
+    """Create a structured response for eligible scholarship, including rule validation details."""
+    # Avoid mutable default arguments
+    passed_rules = passed_rules or []
+    failed_rules = failed_rules or []
+    warnings_rules = warnings_rules or []
+
+    def sort_by_priority(rules: List[RuleValidationResult]) -> List[RuleValidationResult]:
+        return sorted(rules, key=lambda x: x.priority, reverse=False)
+
+    sorted_passed = sort_by_priority(passed_rules)
+    sorted_failed = sort_by_priority(failed_rules)
+    sorted_warnings = sort_by_priority(warnings_rules)
+
+    def to_rule_message(rule: RuleValidationResult) -> RuleMessage:
+        return RuleMessage(
+            rule_id=rule.rule_id,
+            rule_name=rule.rule_name,
+            rule_type=rule.rule_type,
+            tag=rule.tag,
+            message=rule.message,
+            message_en=rule.message_en,
+            sub_type=rule.sub_type,
+            priority=rule.priority,
+            is_warning=rule.is_warning,
+            is_hard_rule=rule.is_hard_rule
+        )
+
+    return EligibleScholarshipResponse(
+        id=scholarship.id,
+        code=scholarship.code,
+        eligible_sub_types=eligible_sub_types,
+        name=scholarship.name,
+        name_en=scholarship.name_en,
+        category=scholarship.category,
+        description=scholarship.description,
+        description_en=scholarship.description_en,
+        amount=scholarship.amount,
+        currency=scholarship.currency,
+        application_start_date=scholarship.application_start_date,
+        application_end_date=scholarship.application_end_date,
+        created_at=scholarship.created_at,
+        passed=[to_rule_message(rule) for rule in sorted_passed],
+        warnings=[to_rule_message(rule) for rule in sorted_warnings],
+        errors=[to_rule_message(rule) for rule in sorted_failed]
+    )
+
+async def get_eligible_scholarships(
+    student: Student, 
+    db: AsyncSession,
+    include_validation_details: bool = True
+) -> List[EligibleScholarshipResponse]:
+    """Get list of scholarships that student is eligible for"""
+    
+    # 預先加載所有需要的關係
+    await db.refresh(student, [
+        'academicRecords',
+        'contacts',
+        'termRecords'
+    ])
+    
+    # 獲取所有活躍的獎學金
+    result = await db.execute(
+        select(ScholarshipType)
+        .where(ScholarshipType.status == ScholarshipStatus.ACTIVE.value)
+    )
+    scholarships = result.scalars().all()
+    eligible_scholarships = []
+    
+    for scholarship in scholarships:
+        # Check basic eligibility
+        if not await check_scholarship_basic_eligibility(student, scholarship, db):
+            continue
+            
+        # Get and separate rules
+        rules = await get_scholarship_rules(db, scholarship.id)
+        common_rules, subtype_rules = separate_rules(rules)
+
+        # Validate common rules first
+        passed_common, failed_common, warnings_common = validate_common_rules(student, common_rules)
+
+        # hard rule failed, skip
+        if not passed_common:
+            continue
+
+        if failed_common:
+            eligible_sub_types = []
+        else:
+            eligible_sub_types = scholarship.sub_type_list
+
+        all_passed_rules = passed_common.copy()
+        all_failed_rules = failed_common.copy()
+        all_warnings_rules = warnings_common.copy()
+
+        for subtype in eligible_sub_types:
+            if subtype in subtype_rules:
+                passed_subtype, failed_subtype, warnings_subtype = validate_subtype_rules(
+                    student, subtype, subtype_rules[subtype]
+                )
+                if failed_subtype:
+                    eligible_sub_types.remove(subtype)
+
+                all_passed_rules.extend(passed_subtype)
+                all_failed_rules.extend(failed_subtype)
+                all_warnings_rules.extend(warnings_subtype)
+
+        eligible_scholarships.append(
+            create_eligibility_response(
+                scholarship, 
+                eligible_sub_types,
+                all_passed_rules,
+                all_failed_rules,
+                all_warnings_rules
+            )
+        )
+    
+    return eligible_scholarships
