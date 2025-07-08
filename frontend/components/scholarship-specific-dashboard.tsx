@@ -27,6 +27,7 @@ import {
 } from "lucide-react"
 import { useScholarshipSpecificApplications } from "@/hooks/use-admin"
 import { ApplicationDetailDialog } from "@/components/application-detail-dialog"
+import { ScholarshipManagementPanel } from "@/components/scholarship-management-panel"
 import { Locale } from "@/lib/validators"
 import { api } from "@/lib/api"
 
@@ -646,7 +647,6 @@ export function ScholarshipSpecificDashboard() {
           </TabsContent>
         ))}
       </Tabs>
-
       {/* 申請詳情 Modal */}
       <ApplicationDetailDialog
         isOpen={showApplicationDetail}
@@ -657,6 +657,16 @@ export function ScholarshipSpecificDashboard() {
         application={selectedApplicationForDetail ? selectedApplicationForDetail as Application : null}
         locale={locale}
       />
+
+      {/* 獎學金管理面板 */}
+      {activeTab && (
+        <div className="mt-8">
+          <ScholarshipManagementPanel 
+            type={activeTab as any} 
+            className="border-t pt-6"
+          />
+        </div>
+      )}
     </div>
   )
 }
