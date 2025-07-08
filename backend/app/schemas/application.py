@@ -53,7 +53,7 @@ class DocumentData(BaseModel):
     document_type: str = Field(..., description="文件類型")
     file_path: str = Field(..., description="檔案路徑")
     original_filename: str = Field(..., description="原始檔名")
-    upload_time: datetime = Field(..., description="上傳時間")
+    upload_time: str = Field(..., description="上傳時間 (ISO format string)")
     file_size: Optional[int] = Field(None, description="檔案大小")
     mime_type: Optional[str] = Field(None, description="檔案類型")
 
@@ -126,6 +126,10 @@ class ApplicationCreate(BaseModel):
         ..., 
         description="表單資料"
     )
+    agree_terms: Optional[bool] = Field(
+        False,
+        description="同意條款"
+    )
     
     class Config:
         json_encoders = {
@@ -135,6 +139,7 @@ class ApplicationCreate(BaseModel):
             "example": {
                 "scholarship_type": "undergraduate_freshman",
                 "scholarship_subtype_list": ["general"],
+                "agree_terms": True,
                 "form_data": {
                     "fields": {
                         "bank_account": {
@@ -162,6 +167,7 @@ class ApplicationUpdate(BaseModel):
     """更新申請"""
     form_data: Optional[ApplicationFormData] = Field(None, description="表單資料")
     status: Optional[str] = Field(None, description="申請狀態")
+    agree_terms: Optional[bool] = Field(None, description="同意條款")
 
     class Config:
         json_encoders = {
@@ -290,6 +296,7 @@ class ApplicationListResponse(BaseModel):
     scholarship_type: str
     scholarship_type_id: int
     scholarship_type_zh: Optional[str] = None  # 中文獎學金類型名稱
+    scholarship_subtype_list: Optional[List[str]] = []  # 獎學金子類型列表
     status: str
     status_name: Optional[str]
     academic_year: str

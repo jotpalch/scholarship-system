@@ -3,6 +3,7 @@ Administration API endpoints
 """
 
 from typing import List, Optional, Dict, Any
+from datetime import datetime
 from fastapi import APIRouter, Depends, status, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, update, delete
@@ -45,6 +46,9 @@ async def get_all_applications(
     # Apply filters
     if status:
         stmt = stmt.where(Application.status == status)
+    else:
+        # Default: exclude draft applications for admin view
+        stmt = stmt.where(Application.status != ApplicationStatus.DRAFT.value)
     
     if search:
         stmt = stmt.where(
@@ -78,19 +82,31 @@ async def get_all_applications(
             "user_id": app.user_id,
             "student_id": app.student_id,
             "scholarship_type": scholarship_type.code if scholarship_type else "unknown",
-            "scholarship_name": scholarship_type.name if scholarship_type else "Unknown Scholarship",
-            "amount": scholarship_type.amount if scholarship_type else None,
+            "scholarship_type_id": app.scholarship_type_id or (scholarship_type.id if scholarship_type else None),
+            "scholarship_type_zh": scholarship_type.name if scholarship_type else "Unknown Scholarship",
+            "scholarship_subtype_list": app.scholarship_subtype_list or [],
             "status": app.status,
             "status_name": app.status_name,
+            "academic_year": app.academic_year or str(datetime.now().year),
+            "semester": app.semester or "1",
+            "student_data": app.student_data or {},
+            "submitted_form_data": app.submitted_form_data or {},
+            "agree_terms": app.agree_terms or False,
+            "professor_id": app.professor_id,
+            "reviewer_id": app.reviewer_id,
+            "final_approver_id": app.final_approver_id,
+            "review_score": app.review_score,
+            "review_comments": app.review_comments,
+            "rejection_reason": app.rejection_reason,
             "submitted_at": app.submitted_at,
+            "reviewed_at": app.reviewed_at,
+            "approved_at": app.approved_at,
             "created_at": app.created_at,
             "updated_at": app.updated_at,
+            "meta_data": app.meta_data,
+            # Additional fields for display
             "student_name": user.full_name if user else None,
             "student_no": getattr(user, 'student_no', None),
-            "department": None,
-            "nationality": None,
-            "scholarship_type_zh": None,
-            "scholarship_subtype_list": app.scholarship_subtype_list or [],
             "days_waiting": None
         }
         
@@ -313,6 +329,8 @@ async def get_recent_applications(
         User, Application.user_id == User.id
     ).outerjoin(
         ScholarshipType, Application.scholarship_type_id == ScholarshipType.id
+    ).where(
+        Application.status != ApplicationStatus.DRAFT.value
     ).order_by(desc(Application.created_at)).limit(limit)
     
     result = await db.execute(stmt)
@@ -337,22 +355,34 @@ async def get_recent_applications(
             "user_id": app.user_id,
             "student_id": app.student_id,
             "scholarship_type": scholarship_type.code if scholarship_type else "unknown",
-            "scholarship_name": scholarship_type.name if scholarship_type else "Unknown Scholarship",
-            "amount": scholarship_type.amount if scholarship_type else None,
-            "status": app.status,
-            "status_name": app.status_name,
-            "submitted_at": app.submitted_at,
-            "created_at": app.created_at,
-            "updated_at": app.updated_at,
-            "student_name": user.full_name if user else None,
-            "student_no": getattr(user, 'student_no', None),
-            "department": None,
-            "nationality": None,
+            "scholarship_type_id": app.scholarship_type_id or (scholarship_type.id if scholarship_type else None),
             "scholarship_type_zh": scholarship_type_zh.get(
                 scholarship_type.code if scholarship_type else "unknown", 
                 scholarship_type.code if scholarship_type else "unknown"
             ),
             "scholarship_subtype_list": app.scholarship_subtype_list or [],
+            "status": app.status,
+            "status_name": app.status_name,
+            "academic_year": app.academic_year or str(datetime.now().year),
+            "semester": app.semester or "1",
+            "student_data": app.student_data or {},
+            "submitted_form_data": app.submitted_form_data or {},
+            "agree_terms": app.agree_terms or False,
+            "professor_id": app.professor_id,
+            "reviewer_id": app.reviewer_id,
+            "final_approver_id": app.final_approver_id,
+            "review_score": app.review_score,
+            "review_comments": app.review_comments,
+            "rejection_reason": app.rejection_reason,
+            "submitted_at": app.submitted_at,
+            "reviewed_at": app.reviewed_at,
+            "approved_at": app.approved_at,
+            "created_at": app.created_at,
+            "updated_at": app.updated_at,
+            "meta_data": app.meta_data,
+            # Additional fields for display
+            "student_name": user.full_name if user else None,
+            "student_no": getattr(user, 'student_no', None),
             "days_waiting": None
         }
         
@@ -801,13 +831,18 @@ async def get_applications_by_scholarship(
     if not scholarship:
         raise HTTPException(status_code=404, detail="Scholarship not found")
     
-    # Build query with joins
-    stmt = select(Application, User).join(
+    # Build query with joins and load files
+    stmt = select(Application, User).options(
+        selectinload(Application.files)
+    ).join(
         User, Application.user_id == User.id
     ).where(Application.scholarship_type_id == scholarship.id)
     
+    # Default: exclude draft applications for admin view
     if status:
         stmt = stmt.where(Application.status == status)
+    else:
+        stmt = stmt.where(Application.status != ApplicationStatus.DRAFT.value)
     
     if sub_type:
         # Filter by sub-type in scholarship_subtype_list
@@ -822,6 +857,37 @@ async def get_applications_by_scholarship(
     for app_tuple in application_tuples:
         app, user = app_tuple
         
+        # Process submitted_form_data to include file URLs
+        processed_form_data = app.submitted_form_data or {}
+        if processed_form_data and app.files:
+            # Generate file access token
+            from app.core.config import settings
+            from app.core.security import create_access_token
+            
+            token_data = {"sub": str(current_user.id)}
+            access_token = create_access_token(token_data)
+            
+            # Update documents in submitted_form_data with file URLs
+            if 'documents' in processed_form_data:
+                existing_docs = processed_form_data['documents']
+                for existing_doc in existing_docs:
+                    # Find matching file record
+                    matching_file = next((f for f in app.files if f.file_type == existing_doc.get('document_id')), None)
+                    if matching_file:
+                        # Update existing file information with URLs
+                        base_url = f"http://localhost:8000{settings.api_v1_str}"
+                        existing_doc.update({
+                            "file_id": matching_file.id,
+                            "filename": matching_file.filename,
+                            "original_filename": matching_file.original_filename,
+                            "file_size": matching_file.file_size,
+                            "mime_type": matching_file.mime_type or matching_file.content_type,
+                            "file_path": f"{base_url}/files/applications/{app.id}/files/{matching_file.id}?token={access_token}",
+                            "download_url": f"{base_url}/files/applications/{app.id}/files/{matching_file.id}/download?token={access_token}",
+                            "is_verified": matching_file.is_verified,
+                            "object_name": matching_file.object_name
+                        })
+        
         # Create response data with proper field mapping
         app_data = {
             "id": app.id,
@@ -829,19 +895,31 @@ async def get_applications_by_scholarship(
             "user_id": app.user_id,
             "student_id": app.student_id,
             "scholarship_type": scholarship.code,
-            "scholarship_name": scholarship.name,
-            "amount": scholarship.amount,
+            "scholarship_type_id": app.scholarship_type_id or scholarship.id,
+            "scholarship_type_zh": scholarship.name,
+            "scholarship_subtype_list": app.scholarship_subtype_list or [],
             "status": app.status,
             "status_name": app.status_name,
+            "academic_year": app.academic_year or str(datetime.now().year),
+            "semester": app.semester or "1",
+            "student_data": app.student_data or {},
+            "submitted_form_data": processed_form_data,
+            "agree_terms": app.agree_terms or False,
+            "professor_id": app.professor_id,
+            "reviewer_id": app.reviewer_id,
+            "final_approver_id": app.final_approver_id,
+            "review_score": app.review_score,
+            "review_comments": app.review_comments,
+            "rejection_reason": app.rejection_reason,
             "submitted_at": app.submitted_at,
+            "reviewed_at": app.reviewed_at,
+            "approved_at": app.approved_at,
             "created_at": app.created_at,
             "updated_at": app.updated_at,
+            "meta_data": app.meta_data,
+            # Additional fields for display
             "student_name": user.full_name if user else None,
             "student_no": getattr(user, 'student_no', None),
-            "department": None,
-            "nationality": None,
-            "scholarship_type_zh": None,
-            "scholarship_subtype_list": app.scholarship_subtype_list or [],
             "days_waiting": None
         }
         

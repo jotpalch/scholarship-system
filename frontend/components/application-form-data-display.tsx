@@ -27,6 +27,9 @@ export function ApplicationFormDataDisplay({ formData, locale, fieldLabels }: Ap
   const [formattedData, setFormattedData] = useState<Record<string, any>>({})
   const [isLoading, setIsLoading] = useState(true)
 
+  // Debug logging
+  console.log('ApplicationFormDataDisplay received formData:', formData)
+
   useEffect(() => {
     const formatData = async () => {
       setIsLoading(true)

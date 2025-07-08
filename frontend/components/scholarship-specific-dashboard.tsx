@@ -51,12 +51,150 @@ interface DashboardApplication {
   app_id?: string
   student_id?: string
   scholarship_type?: string
+  scholarship_type_id?: number
   created_at?: string
+  updated_at?: string
   gpa?: number
   class_ranking_percent?: number
   dept_ranking_percent?: number
   personal_statement?: string
   form_data?: Record<string, any>
+  submitted_form_data?: {
+    fields?: Record<string, any>
+    documents?: Array<{
+      file_id?: string | number
+      id?: string | number
+      filename?: string
+      original_filename?: string
+      file_path?: string
+      file_type?: string
+      document_type?: string
+      mime_type?: string
+      file_size?: number
+      download_url?: string
+      upload_time?: string
+      document_id?: string
+    }>
+  }
+  agree_terms?: boolean
+  professor_id?: number
+  reviewer_id?: number
+  final_approver_id?: number
+  review_score?: number
+  review_comments?: string
+  rejection_reason?: string
+  reviewed_at?: string
+  approved_at?: string
+  academic_year?: string
+  semester?: string
+  meta_data?: any
+  // API response structure
+  student_data?: {
+    id: number
+    stdNo: string
+    stdCode: string
+    pid: string
+    cname: string
+    ename: string
+    sex: string
+    birthDate: string
+    contacts: {
+      cellphone: string
+      email: string
+      zipCode: string
+      address: string
+    }
+    academic: {
+      degree: number
+      identity: number
+      studyingStatus: number
+      schoolIdentity: number
+      termCount: number
+      depId: number
+      academyId: number
+      enrollTypeCode: number
+      enrollYear: number
+      enrollTerm: number
+      highestSchoolName: string
+      nationality: number
+    }
+  }
+}
+
+// Data transformation function to map API response to expected format
+const transformApplicationData = (app: any): DashboardApplication => {
+  console.log('Transforming application data:', app)
+  
+  // Ensure submitted_form_data has the correct structure for file preview
+  let submittedFormData = app.submitted_form_data
+  if (submittedFormData && submittedFormData.documents) {
+    // Transform documents to include necessary file properties for preview
+    submittedFormData = {
+      ...submittedFormData,
+      documents: submittedFormData.documents.map((doc: any) => ({
+        ...doc,
+        // Map API response fields to expected format for ApplicationDetailDialog
+        id: doc.file_id || doc.id || doc.document_id, // Use document_id as fallback
+        file_id: doc.file_id || doc.id || doc.document_id,
+        filename: doc.filename || doc.original_filename,
+        original_filename: doc.original_filename,
+        file_path: doc.file_path,
+        file_type: doc.document_type || doc.file_type,
+        mime_type: doc.mime_type,
+        file_size: doc.file_size,
+        download_url: doc.download_url,
+        upload_time: doc.upload_time,
+        // Keep original fields for compatibility
+        document_id: doc.document_id,
+        document_type: doc.document_type
+      }))
+    }
+  }
+  
+  const transformed = {
+    id: app.id,
+    app_id: app.app_id,
+    student_id: app.student_id,
+    scholarship_type: app.scholarship_type,
+    scholarship_type_id: app.scholarship_type_id,
+    scholarship_subtype_list: app.scholarship_subtype_list || [],
+    status: app.status,
+    status_name: app.status_name,
+    submitted_at: app.submitted_at,
+    days_waiting: app.days_waiting,
+    created_at: app.created_at,
+    updated_at: app.updated_at,
+    form_data: app.submitted_form_data || app.form_data,
+    submitted_form_data: submittedFormData, // Use the enhanced version
+    student_data: app.student_data,
+    // Map student information from nested structure
+    student_name: app.student_name || app.student_data?.cname || '未知',
+    student_no: app.student_no || app.student_data?.stdNo || 'N/A',
+    user: app.user || {
+      email: app.student_data?.contacts?.email || 'N/A'
+    },
+    // Additional fields that might be needed by ApplicationDetailDialog
+    gpa: app.gpa,
+    class_ranking_percent: app.class_ranking_percent,
+    dept_ranking_percent: app.dept_ranking_percent,
+    personal_statement: app.personal_statement,
+    agree_terms: app.agree_terms,
+    professor_id: app.professor_id,
+    reviewer_id: app.reviewer_id,
+    final_approver_id: app.final_approver_id,
+    review_score: app.review_score,
+    review_comments: app.review_comments,
+    rejection_reason: app.rejection_reason,
+    reviewed_at: app.reviewed_at,
+    approved_at: app.approved_at,
+    academic_year: app.academic_year,
+    semester: app.semester,
+    meta_data: app.meta_data
+  }
+  
+  console.log('Transformed result:', transformed)
+  console.log('Documents in transformed data:', transformed.submitted_form_data?.documents)
+  return transformed
 }
 
 export function ScholarshipSpecificDashboard() {
@@ -97,7 +235,17 @@ export function ScholarshipSpecificDashboard() {
   const [selectedApplicationForDetail, setSelectedApplicationForDetail] = useState<DashboardApplication | null>(null)
 
   // 動態獲取各類型申請資料
-  const getApplicationsByType = (type: string) => applicationsByType[type] || []
+  const getApplicationsByType = (type: string) => {
+    const rawApplications = applicationsByType[type] || []
+    const transformedApplications = rawApplications.map(transformApplicationData)
+    
+    // Debug logging
+    if (transformedApplications.length > 0) {
+      console.log(`Transformed applications for ${type}:`, transformedApplications[0])
+    }
+    
+    return transformedApplications
+  }
   
   // 獲取當前選擇的獎學金類型的子類型（從後端獲取）
   const getCurrentScholarshipSubTypes = () => {
@@ -140,7 +288,7 @@ export function ScholarshipSpecificDashboard() {
   }, [subTypeTranslations])
 
   // 搜尋和篩選邏輯
-  const filterApplications = (applications: Application[]) => {
+  const filterApplications = (applications: DashboardApplication[]) => {
     let filtered = applications
 
     // 狀態篩選
@@ -154,7 +302,10 @@ export function ScholarshipSpecificDashboard() {
       filtered = filtered.filter(app => 
         app.student_name?.toLowerCase().includes(term) ||
         app.student_no?.toLowerCase().includes(term) ||
-        app.user?.email.toLowerCase().includes(term)
+        app.user?.email.toLowerCase().includes(term) ||
+        app.student_data?.cname?.toLowerCase().includes(term) ||
+        app.student_data?.stdNo?.toLowerCase().includes(term) ||
+        app.student_data?.contacts?.email?.toLowerCase().includes(term)
       )
     }
 
@@ -193,7 +344,7 @@ export function ScholarshipSpecificDashboard() {
   }
 
   // 渲染統計卡片
-  const renderStatsCards = (applications: Application[]) => {
+  const renderStatsCards = (applications: DashboardApplication[]) => {
     const totalApplications = applications.length
     const pendingApplications = applications.filter(app => 
       ['submitted', 'under_review'].includes(app.status)
@@ -255,7 +406,7 @@ export function ScholarshipSpecificDashboard() {
   }
 
   // 渲染申請列表
-  const renderApplicationsTable = (applications: Application[], showSubTypes: boolean = false) => {
+  const renderApplicationsTable = (applications: DashboardApplication[], showSubTypes: boolean = false) => {
     const filteredApplications = filterApplications(applications)
 
     return (
@@ -423,7 +574,7 @@ export function ScholarshipSpecificDashboard() {
   }
 
   // 過濾申請數據根據選擇的子類型
-  const filterApplicationsBySubTypes = (applications: Application[]) => {
+  const filterApplicationsBySubTypes = (applications: DashboardApplication[]) => {
     if (selectedSubTypes.length === 0) {
       return applications // 如果沒有選擇子類型，顯示全部
     }
@@ -440,7 +591,7 @@ export function ScholarshipSpecificDashboard() {
   }
 
   // 渲染子類型多選標籤頁
-  const renderSubTypeTabs = (applications: Application[]) => {
+  const renderSubTypeTabs = (applications: DashboardApplication[]) => {
     const subTypes = getCurrentScholarshipSubTypes()
     
     if (subTypes.length === 0) {

@@ -87,6 +87,7 @@ export interface Application {
   dept_ranking_percent?: number
   days_waiting?: number
   scholarship_subtype_list?: string[]
+  agree_terms?: boolean  // 同意條款
   
   // Extended properties for dashboard display (保留向後兼容)
   user?: User  // 關聯的使用者資訊
@@ -96,24 +97,23 @@ export interface Application {
 
 export interface ApplicationCreate {
   scholarship_type: string
-  scholarship_type_id?: number  // 主獎學金ID
-  sub_scholarship_type_id?: number  // 子獎學金ID
-  academic_year?: string
-  semester?: string
-  gpa?: number
-  class_ranking_percent?: number
-  dept_ranking_percent?: number
-  completed_terms?: number
-  contact_phone?: string
-  contact_email?: string
-  contact_address?: string
-  bank_account?: string
-  research_proposal?: string
-  budget_plan?: string
-  milestone_plan?: string
+  scholarship_subtype_list?: string[]
+  form_data: {
+    fields: Record<string, {
+      field_id: string
+      field_type: string
+      value: string
+      required: boolean
+    }>
+    documents: Array<{
+      document_id: string
+      document_type: string
+      file_path: string
+      original_filename: string
+      upload_time: string
+    }>
+  }
   agree_terms?: boolean
-  personal_statement?: string
-  expected_graduation_date?: string
   [key: string]: any  // 允許動態欄位
 }
 
@@ -861,8 +861,9 @@ class ApiClient {
       return this.request(`/applications/review/list${queryString ? `?${queryString}` : ''}`)
     },
 
-    createApplication: async (applicationData: ApplicationCreate): Promise<ApiResponse<Application>> => {
-      return this.request('/applications/', {
+    createApplication: async (applicationData: ApplicationCreate, isDraft: boolean = false): Promise<ApiResponse<Application>> => {
+      const url = isDraft ? '/applications/?is_draft=true' : '/applications/'
+      return this.request(url, {
         method: 'POST',
         body: JSON.stringify(applicationData)
       })
@@ -903,6 +904,12 @@ class ApiClient {
       })
     },
 
+    deleteApplication: async (applicationId: number): Promise<ApiResponse<{ success: boolean; message: string }>> => {
+      return this.request(`/applications/${applicationId}`, {
+        method: 'DELETE',
+      })
+    },
+
     withdrawApplication: async (applicationId: number): Promise<ApiResponse<Application>> => {
       return this.request(`/applications/${applicationId}/withdraw`, {
         method: 'POST',
@@ -926,7 +933,7 @@ class ApiClient {
 
     // 新增暫存申請功能
     saveApplicationDraft: async (applicationData: ApplicationCreate): Promise<ApiResponse<Application>> => {
-      const response = await this.request('/applications/draft/', {
+      const response = await this.request('/applications/?is_draft=true', {
         method: 'POST',
         body: JSON.stringify(applicationData),
       })

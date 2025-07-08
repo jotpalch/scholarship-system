@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Checkbox } from "@/components/ui/checkbox"
 import { ProgressTimeline } from "@/components/progress-timeline"
 import { FileUpload } from "@/components/file-upload"
 import { DynamicApplicationForm } from "@/components/dynamic-application-form"
@@ -51,6 +52,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
   const [editingApplication, setEditingApplication] = useState<Application | null>(null)
   const [selectedSubTypes, setSelectedSubTypes] = useState<Record<string, string[]>>({})
   
+
+  
   const getScholarshipTypeName = (scholarshipType: string): string => {
     const scholarship = eligibleScholarships.find(s => s.code === scholarshipType)
     if (scholarship) {
@@ -79,7 +82,8 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     submitApplication: submitApplicationApi,
     withdrawApplication,
     uploadDocument,
-    updateApplication
+    updateApplication,
+    deleteApplication
   } = useApplications()
 
   // State for eligible scholarships
@@ -194,11 +198,18 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
   // Form state for new application
   const [newApplicationData, setNewApplicationData] = useState<ApplicationCreate>({
     scholarship_type: '',
+    form_data: {
+      fields: {},
+      documents: []
+    }
   })
   
   // Dynamic form state
   const [dynamicFormData, setDynamicFormData] = useState<Record<string, any>>({})
   const [dynamicFileData, setDynamicFileData] = useState<Record<string, File[]>>({})
+  
+  // Terms agreement state
+  const [agreeTerms, setAgreeTerms] = useState(false)
   
   // File upload state (for backwards compatibility)
   const [uploadedFiles, setUploadedFiles] = useState<{ [documentType: string]: File[] }>({})
@@ -238,6 +249,9 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
           totalRequired += 1
         }
         
+        // Add terms agreement as a required item
+        totalRequired += 1
+        
         if (totalRequired === 0) {
           setFormProgress(100) // No requirements means 100% complete
           return
@@ -269,6 +283,11 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
             completedItems++
           }
         }
+        
+        // Check terms agreement completion
+        if (agreeTerms) {
+          completedItems++
+        }
 
         // Calculate percentage
         const progress = Math.round((completedItems / totalRequired) * 100)
@@ -280,7 +299,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     }
 
     calculateProgress()
-  }, [newApplicationData.scholarship_type, dynamicFormData, dynamicFileData, selectedScholarship, selectedSubTypes])
+  }, [newApplicationData.scholarship_type, dynamicFormData, dynamicFileData, selectedScholarship, selectedSubTypes, agreeTerms])
 
   // 新增狀態用於詳情對話框
   const [selectedApplicationForDetails, setSelectedApplicationForDetails] = useState<Application | null>(null)
@@ -289,6 +308,11 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
   const handleSubmitApplication = async () => {
     if (!newApplicationData.scholarship_type) {
       alert(locale === "zh" ? "請選擇獎學金類型" : "Please select scholarship type")
+      return
+    }
+
+    if (!agreeTerms) {
+      alert(locale === "zh" ? "您必須同意申請條款才能提交申請" : "You must agree to the terms and conditions to submit the application")
       return
     }
 
@@ -331,6 +355,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         scholarship_subtype_list: selectedSubTypes[newApplicationData.scholarship_type]?.length 
           ? selectedSubTypes[newApplicationData.scholarship_type] 
           : ["general"],
+        agree_terms: agreeTerms,
         form_data: {
           fields: formFields,
           documents: documents
@@ -338,7 +363,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       }
       
       if (editingApplication) {
-        // 編輯模式
+        // 編輯模式 - 更新草稿然後提交
         console.log('Updating application with data:', applicationData)
         await updateApplication(editingApplication.id, applicationData)
         
@@ -351,11 +376,12 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
           }
         }
         
+        // 提交編輯後的申請
         await submitApplicationApi(editingApplication.id)
       } else {
-        // 新建模式
-        console.log('Creating application with data:', applicationData)
-        const createdApplication = await createApplication(applicationData)
+        // 新建模式 - 先創建草稿，然後提交
+        console.log('Creating application as draft with data:', applicationData)
+        const createdApplication = await createApplication(applicationData, true) // 創建為草稿
         
         if (!createdApplication || !createdApplication.id) {
           throw new Error('Failed to create application')
@@ -368,16 +394,24 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
           }
         }
         
+        // 提交草稿
         await submitApplicationApi(createdApplication.id)
       }
 
       // 重置表單
-      setNewApplicationData({ scholarship_type: '' })
+      setNewApplicationData({ 
+        scholarship_type: '',
+        form_data: {
+          fields: {},
+          documents: []
+        }
+      })
       setDynamicFormData({})
       setDynamicFileData({})
       setUploadedFiles({})
       setSelectedScholarship(null)
       setEditingApplication(null)
+      setAgreeTerms(false)
       
       // 重新載入申請列表
       await fetchApplications()
@@ -403,46 +437,103 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     try {
       setIsSubmitting(true)
       
-      // 整合表單資料，使用整合後的文件結構
+      // Format form fields according to backend requirements
+      const formFields: Record<string, {
+        field_id: string,
+        field_type: string,
+        value: string,
+        required: boolean
+      }> = {}
+
+      // Convert dynamic form data to required format
+      Object.entries(dynamicFormData).forEach(([fieldName, value]) => {
+        formFields[fieldName] = {
+          field_id: fieldName,
+          field_type: "text", // You might need to get this from field configuration
+          value: String(value),
+          required: true // This should come from field configuration
+        }
+      })
+
+      // Format documents according to backend requirements
+      const documents = Object.entries(dynamicFileData).map(([docType, files]) => {
+        const file = files[0] // Assuming single file per document type
+        return {
+          document_id: docType,
+          document_type: docType,
+          file_path: file.name, // This should be the server path after upload
+          original_filename: file.name,
+          upload_time: new Date().toISOString()
+        }
+      })
+
+      // Prepare the application data according to backend format
       const applicationData = {
         scholarship_type: newApplicationData.scholarship_type,
-        selected_sub_types: selectedSubTypes[newApplicationData.scholarship_type]?.length 
+        scholarship_subtype_list: selectedSubTypes[newApplicationData.scholarship_type]?.length 
           ? selectedSubTypes[newApplicationData.scholarship_type] 
           : ["general"],
-        // 保持原有的動態表單資料格式
-        ...dynamicFormData,
-        // 將整個表單資料也放入 submitted_form_data，使用整合後的文件結構
-        submitted_form_data: {
-          form_fields: dynamicFormData,
-          selected_sub_types: selectedSubTypes[newApplicationData.scholarship_type]?.length 
-            ? selectedSubTypes[newApplicationData.scholarship_type] 
-            : ["general"],
-          documents: Object.entries(dynamicFileData).map(([docType, files]) => ({
-            document_id: docType,
-            document_type: docType,
-            file_path: files[0]?.name || '',
-            original_filename: files[0]?.name || '',
-            upload_time: new Date().toISOString()
-          }))
+        agree_terms: agreeTerms,
+        form_data: {
+          fields: formFields,
+          documents: documents
         }
       }
 
-      console.log('Saving draft with data:', applicationData)
-      const application = await saveApplicationDraft(applicationData)
-      
-      if (application && application.id) {
-        // 上傳文件
+      if (editingApplication) {
+        // 編輯模式 - 更新現有申請
+        console.log('Updating draft application with data:', applicationData)
+        await updateApplication(editingApplication.id, applicationData)
+        
+        // 上傳新文件
         for (const [docType, files] of Object.entries(dynamicFileData)) {
           for (const file of files) {
             if (!(file as any).isUploaded) {
-              await uploadDocument(application.id, file, docType)
+              await uploadDocument(editingApplication.id, file, docType)
             }
           }
         }
         
-        alert(locale === "zh" ? "草稿已保存，您可以繼續編輯" : "Draft saved successfully. You can continue editing.")
+        alert(locale === "zh" ? "草稿已更新" : "Draft updated successfully")
       } else {
-        throw new Error('Invalid application response')
+        // 新建模式 - 創建新草稿
+        console.log('Saving new draft with data:', applicationData)
+        const application = await saveApplicationDraft(applicationData)
+        
+        if (application && application.id) {
+          // 上傳文件
+          for (const [docType, files] of Object.entries(dynamicFileData)) {
+            for (const file of files) {
+              if (!(file as any).isUploaded) {
+                await uploadDocument(application.id, file, docType)
+              }
+            }
+          }
+          
+          alert(locale === "zh" ? "草稿已保存，您可以繼續編輯" : "Draft saved successfully. You can continue editing.")
+        } else {
+          alert(locale === "zh" ? "儲存草稿失敗" : "Failed to save draft")
+          return
+        }
+      }
+      
+      // 重新載入申請列表
+      await fetchApplications()
+      
+      // 如果是編輯模式，保持在編輯狀態；如果是新建模式，重置表單
+      if (!editingApplication) {
+        // Reset form only for new applications
+        setNewApplicationData({ 
+          scholarship_type: "",
+          form_data: {
+            fields: {},
+            documents: []
+          }
+        })
+        setDynamicFormData({})
+        setDynamicFileData({})
+        setAgreeTerms(false)
+        setSelectedSubTypes({})
       }
     } catch (error) {
       console.error('Failed to save draft:', error)
@@ -458,6 +549,20 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       await withdrawApplication(applicationId)
     } catch (error) {
       console.error('Failed to withdraw application:', error)
+    }
+  }
+
+  const handleDeleteApplication = async (applicationId: number) => {
+    if (!confirm(locale === "zh" ? "確定要刪除此草稿嗎？此操作無法復原。" : "Are you sure you want to delete this draft? This action cannot be undone.")) {
+      return
+    }
+
+    try {
+      await deleteApplication(applicationId)
+      alert(locale === "zh" ? "草稿已成功刪除" : "Draft deleted successfully")
+    } catch (error) {
+      console.error('Failed to delete application:', error)
+      alert(locale === "zh" ? "刪除草稿時發生錯誤" : "Error occurred while deleting draft")
     }
   }
 
@@ -481,18 +586,153 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     setIsDetailsDialogOpen(true)
   }
 
+  // 取消編輯函數
+  const handleCancelEdit = () => {
+    setEditingApplication(null)
+    setNewApplicationData({ 
+      scholarship_type: '',
+      form_data: {
+        fields: {},
+        documents: []
+      }
+    })
+    setDynamicFormData({})
+    setDynamicFileData({})
+    setUploadedFiles({})
+    setSelectedScholarship(null)
+    setAgreeTerms(false)
+    setSelectedSubTypes({})
+    setActiveTab("applications")
+  }
+
   // 編輯處理函數
   const handleEditApplication = async (application: Application) => {
     // 設置編輯模式
     setEditingApplication(application)
     
-    // 載入申請資料到表單，只使用 Application 介面中存在的欄位
+    // 先設置獎學金類型，這樣可以確保 selectedScholarship 正確設置
+    const scholarship = eligibleScholarships.find(s => s.code === application.scholarship_type) || null
+    setSelectedScholarship(scholarship)
+    
+    // 載入申請資料到表單
     setNewApplicationData({
       scholarship_type: application.scholarship_type,
       personal_statement: application.personal_statement || '',
+      form_data: {
+        fields: {},
+        documents: []
+      }
     })
     
-    setSelectedScholarship(eligibleScholarships.find(s => s.code === application.scholarship_type) || null)
+    // 載入同意條款狀態
+    setAgreeTerms(application.agree_terms || false)
+    
+    // 載入現有的表單資料
+    const existingFormData: Record<string, any> = {}
+    const existingFileData: Record<string, File[]> = {}
+    
+    // 處理 submitted_form_data 或 form_data
+    const formData = application.submitted_form_data || application.form_data || {}
+    
+    // 處理欄位資料
+    if (formData.fields) {
+      // 後端格式：{ fields: { field_id: { value: "..." } } }
+      Object.entries(formData.fields).forEach(([fieldId, fieldData]: [string, any]) => {
+        if (fieldData && typeof fieldData === 'object' && 'value' in fieldData) {
+          existingFormData[fieldId] = fieldData.value
+        }
+      })
+    } else {
+      // 前端格式：直接是欄位資料
+      Object.entries(formData).forEach(([key, value]) => {
+        if (key !== 'documents' && key !== 'files' && value !== undefined && value !== null && value !== '') {
+          existingFormData[key] = value
+        }
+      })
+    }
+    
+    // 處理文件資料
+    if (formData.documents) {
+      // 後端格式：{ documents: [{ document_id: "...", ... }] }
+      formData.documents.forEach((doc: any) => {
+        if (doc.document_id && doc.original_filename) {
+          // 直接使用後端返回的文件數據，轉換為 FileUpload 組件期望的格式
+          const fileData = {
+            id: doc.file_id,
+            filename: doc.filename || doc.original_filename,
+            original_filename: doc.original_filename,
+            file_size: doc.file_size,
+            mime_type: doc.mime_type,
+            file_type: doc.document_type,
+            file_path: doc.file_path,
+            download_url: doc.download_url,
+            is_verified: doc.is_verified,
+            uploaded_at: doc.upload_time,
+                      // 添加 FileUpload 組件需要的屬性
+          name: doc.original_filename,
+          size: doc.file_size || 0,
+          originalSize: doc.file_size || 0, // FileUpload 組件使用這個屬性
+          type: doc.mime_type || 'application/octet-stream',
+          // 標記為已上傳的文件
+          isUploaded: true
+          }
+          existingFileData[doc.document_id] = [fileData as any]
+        }
+      })
+    }
+    
+    // 載入子類型選擇 - 確保在設置 selectedScholarship 之後
+    // 檢查獎學金是否有特殊的子類型（不是只有 general）
+    const hasSpecialSubTypes = scholarship?.eligible_sub_types && 
+      scholarship.eligible_sub_types.length > 0 && 
+      scholarship.eligible_sub_types[0] !== "general"
+    
+    console.log('Debug handleEditApplication:', {
+      applicationId: application.id,
+      scholarshipType: application.scholarship_type,
+      scholarshipSubtypeList: application.scholarship_subtype_list,
+      hasSpecialSubTypes,
+      eligibleSubTypes: scholarship?.eligible_sub_types
+    })
+    
+    if (hasSpecialSubTypes) {
+      // 只有當獎學金有特殊子類型時才載入子類型選擇
+      if (application.scholarship_subtype_list && application.scholarship_subtype_list.length > 0) {
+        console.log('Loading from scholarship_subtype_list:', application.scholarship_subtype_list)
+        setSelectedSubTypes(prev => ({
+          ...prev,
+          [application.scholarship_type]: application.scholarship_subtype_list as string[]
+        }))
+      } else {
+        // 如果沒有子類型列表，嘗試從表單資料中獲取
+        const formData = application.submitted_form_data || application.form_data || {}
+        if (formData.scholarship_subtype_list && formData.scholarship_subtype_list.length > 0) {
+          console.log('Loading from form data:', formData.scholarship_subtype_list)
+          setSelectedSubTypes(prev => ({
+            ...prev,
+            [application.scholarship_type]: formData.scholarship_subtype_list as string[]
+          }))
+        } else {
+          // 如果都沒有，設置為空陣列
+          console.log('No subtype data found, setting empty array')
+          setSelectedSubTypes(prev => ({
+            ...prev,
+            [application.scholarship_type]: []
+          }))
+        }
+      }
+    } else {
+      // 如果獎學金只有 general 類型，設置為空陣列（不顯示子類型選擇）
+      console.log('Scholarship has only general type, setting empty array')
+      setSelectedSubTypes(prev => ({
+        ...prev,
+        [application.scholarship_type]: []
+      }))
+    }
+    
+    // 設置動態表單資料
+    setDynamicFormData(existingFormData)
+    setDynamicFileData(existingFileData)
     
     // 切換到新增申請頁面
     setActiveTab("new-application")
@@ -945,10 +1185,21 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                           {locale === "zh" ? "查看詳情" : "View Details"}
                         </Button>
                         {app.status === "draft" && (
-                          <Button variant="outline" size="sm" onClick={() => handleEditApplication(app)}>
-                            <Edit className="h-4 w-4 mr-1" />
-                            {locale === "zh" ? "編輯" : "Edit"}
-                          </Button>
+                          <>
+                            <Button variant="outline" size="sm" onClick={() => handleEditApplication(app)}>
+                              <Edit className="h-4 w-4 mr-1" />
+                              {locale === "zh" ? "編輯" : "Edit"}
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => handleDeleteApplication(app.id)}
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              {locale === "zh" ? "刪除草稿" : "Delete Draft"}
+                            </Button>
+                          </>
                         )}
                         {app.status === "submitted" && (
                           <Button variant="outline" size="sm" onClick={() => handleWithdrawApplication(app.id)}>
@@ -968,11 +1219,17 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         <TabsContent value="new-application" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>
+              <CardTitle className="flex items-center gap-2">
                 {editingApplication ? (
-                  locale === "zh" ? "編輯申請" : "Edit Application"
+                  <>
+                    <Edit className="h-5 w-5" />
+                    {locale === "zh" ? "編輯申請" : "Edit Application"}
+                  </>
                 ) : (
-                  locale === "zh" ? `申請獎學金` : `Apply for Scholarship`
+                  <>
+                    <FileText className="h-5 w-5" />
+                    {locale === "zh" ? `申請獎學金` : `Apply for Scholarship`}
+                  </>
                 )}
               </CardTitle>
               <CardDescription>
@@ -1015,7 +1272,11 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                       
                       // Clear legacy uploaded files
                       setUploadedFiles({})
+                      
+                      // Reset terms agreement when scholarship type changes
+                      setAgreeTerms(false)
                     }}
+                    disabled={editingApplication !== null}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder={locale === "zh" ? "選擇獎學金類型" : "Select scholarship type"} />
@@ -1033,17 +1294,32 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                         ))}
                     </SelectContent>
                   </Select>
+                  {editingApplication && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {locale === "zh" ? "編輯模式下無法更改獎學金類型" : "Cannot change scholarship type in edit mode"}
+                    </p>
+                  )}
                 </div>
 
                 {/* Sub-type selection UI */}
                 {newApplicationData.scholarship_type && selectedScholarship?.eligible_sub_types && 
-                 selectedScholarship.eligible_sub_types[0] !== "general" && 
-                 selectedScholarship.eligible_sub_types.length > 0 && (
+                 selectedScholarship.eligible_sub_types.length > 0 && 
+                 selectedScholarship.eligible_sub_types[0] !== "general" && (
                   <div className="space-y-2">
                     <Label>{locale === "zh" ? "申請欄位" : "Application Fields"} *</Label>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {(() => {
+                        console.log('Debug sub-type selection:', {
+                          scholarshipType: newApplicationData.scholarship_type,
+                          eligibleSubTypes: selectedScholarship.eligible_sub_types,
+                          selectedSubTypes: selectedSubTypes[newApplicationData.scholarship_type],
+                          editingApplication: editingApplication?.id
+                        })
+                        return null
+                      })()}
                       {selectedScholarship.eligible_sub_types.map((subType) => {
                         const isSelected = selectedSubTypes[newApplicationData.scholarship_type]?.includes(subType)
+                        console.log(`Subtype ${subType} isSelected:`, isSelected)
                         return (
                           <Card
                             key={subType}
@@ -1119,8 +1395,33 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                 </div>
               </div>
 
+              {/* Terms Agreement */}
+              <div className="flex items-center space-x-2 pt-4">
+                <Checkbox
+                  id="agree_terms"
+                  checked={agreeTerms}
+                  onCheckedChange={(checked) => setAgreeTerms(checked as boolean)}
+                />
+                <Label htmlFor="agree_terms" className="text-sm">
+                  {locale === "zh"
+                    ? `我已閱讀並同意${selectedScholarship?.name || '獎學金'}申請相關條款與規定`
+                    : `I have read and agree to the terms and conditions for ${selectedScholarship?.name || 'scholarship'} application`}
+                </Label>
+              </div>
+
               {/* Action buttons */}
               <div className="flex gap-3 pt-4">
+                {editingApplication && (
+                  <Button 
+                    variant="outline"
+                    onClick={handleCancelEdit}
+                    disabled={isSubmitting}
+                    className="flex-1"
+                  >
+                    {locale === "zh" ? "取消編輯" : "Cancel Edit"}
+                  </Button>
+                )}
+                
                 <Button 
                   variant="outline"
                   onClick={handleSaveDraft}
@@ -1135,7 +1436,11 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                   ) : (
                     <>
                       <Save className="h-4 w-4 mr-2" />
-                      {locale === "zh" ? "儲存草稿" : "Save Draft"}
+                      {editingApplication ? (
+                        locale === "zh" ? "更新草稿" : "Update Draft"
+                      ) : (
+                        locale === "zh" ? "儲存草稿" : "Save Draft"
+                      )}
                     </>
                   )}
                 </Button>

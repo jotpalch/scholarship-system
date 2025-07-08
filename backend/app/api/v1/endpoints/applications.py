@@ -24,11 +24,12 @@ router = APIRouter()
 @router.post("/", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
 async def create_application(
     application_data: ApplicationCreate,
+    is_draft: bool = Query(False, description="Save as draft"),
     current_user: User = Depends(require_student),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create a new scholarship application"""
-    print(f"[API Debug] Received application creation request from user: {current_user.id}")
+    """Create a new scholarship application (draft or submitted)"""
+    print(f"[API Debug] Received application creation request from user: {current_user.id}, is_draft: {is_draft}")
     print(f"[API Debug] Raw request data: {application_data.dict(exclude_none=True)}")
     
     try:
@@ -97,11 +98,12 @@ async def create_application(
                 }
             )
         
-        print("[API Debug] Creating application")
+        print(f"[API Debug] Creating application (draft: {is_draft})")
         result = await service.create_application(
             user_id=current_user.id,
             student_id=student.id,
-            application_data=application_data
+            application_data=application_data,
+            is_draft=is_draft
         )
         print(f"[API Debug] Application created successfully: {result.app_id}")
         return result
@@ -135,15 +137,7 @@ async def create_application(
         )
 
 
-@router.post("/draft", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
-async def save_application_draft(
-    application_data: ApplicationCreate,
-    current_user: User = Depends(require_student),
-    db: AsyncSession = Depends(get_db)
-):
-    """Save application as draft"""
-    service = ApplicationService(db)
-    return await service.save_application_draft(current_user, application_data)
+
 
 
 @router.get("/", response_model=List[ApplicationListResponse])
@@ -199,6 +193,28 @@ async def submit_application(
     """Submit application for review"""
     service = ApplicationService(db)
     return await service.submit_application(application_id, current_user)
+
+
+@router.delete("/{application_id}", response_model=MessageResponse)
+async def delete_application(
+    application_id: int = Path(..., description="Application ID"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete application (only draft applications can be deleted)"""
+    service = ApplicationService(db)
+    success = await service.delete_application(application_id, current_user)
+    
+    if success:
+        return MessageResponse(
+            success=True,
+            message="Application deleted successfully"
+        )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete application"
+        )
 
 
 @router.get("/{application_id}/files")

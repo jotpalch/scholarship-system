@@ -141,10 +141,11 @@ class ApplicationService:
         self,
         user_id: int,
         student_id: int,
-        application_data: ApplicationCreate
+        application_data: ApplicationCreate,
+        is_draft: bool = False
     ) -> Application:
-        """Create a new application"""
-        print(f"[Debug] Starting application creation for user_id={user_id}, student_id={student_id}")
+        """Create a new application (draft or submitted)"""
+        print(f"[Debug] Starting application creation for user_id={user_id}, student_id={student_id}, is_draft={is_draft}")
         print(f"[Debug] Application data received: {application_data.dict(exclude_none=True)}")
         
         # Get user and student
@@ -176,6 +177,14 @@ class ApplicationService:
         # Serialize form data for JSON storage
         serialized_form_data = self._serialize_for_json(application_data.form_data.dict())
         
+        # Determine status based on is_draft flag
+        if is_draft:
+            status = ApplicationStatus.DRAFT.value
+            status_name = "草稿"
+        else:
+            status = ApplicationStatus.SUBMITTED.value
+            status_name = "已提交"
+        
         # Create application
         application = Application(
             app_id=app_id,
@@ -183,70 +192,19 @@ class ApplicationService:
             student_id=student_id,
             scholarship_type_id=scholarship.id,
             scholarship_subtype_list=application_data.scholarship_subtype_list,
-            status=ApplicationStatus.DRAFT.value,
+            status=status,
+            status_name=status_name,
             academic_year=str(datetime.now().year),
             semester="1",
             student_data=student_snapshot,
-            submitted_form_data=serialized_form_data
-        )
-        
-        self.db.add(application)
-        await self.db.commit()
-        await self.db.refresh(application)
-        
-        # Load relationships for response
-        stmt = select(Application).where(Application.id == application.id).options(
-            selectinload(Application.files),
-            selectinload(Application.reviews),
-            selectinload(Application.professor_reviews)
-        )
-        result = await self.db.execute(stmt)
-        application = result.scalar_one()
-        
-        print(f"[Debug] Application created successfully: {app_id}")
-        return application
-    
-    async def save_application_draft(
-        self, 
-        user: User, 
-        application_data: ApplicationCreate
-    ) -> ApplicationResponse:
-        """Save application as draft with minimal validation"""
-        # Get student profile
-        student = await get_student_from_user(user, self.db)
-        
-        if not student:
-            raise ValidationError(f"Student profile not found for user {user.username}")
-        
-        # 暫存不需要完整驗證，只檢查基本欄位
-        if not application_data.scholarship_type:
-            raise ValidationError("Scholarship type is required for draft")
-        
-        # Get scholarship details
-        stmt = select(ScholarshipType).where(ScholarshipType.code == application_data.scholarship_type)
-        result = await self.db.execute(stmt)
-        scholarship = result.scalar_one_or_none()
-        
-        # Serialize form data for JSON storage
-        serialized_form_data = self._serialize_for_json(application_data.form_data.dict())
-        
-        # Create draft application with minimal required fields
-        app_id = self._generate_app_id()
-        application = Application(
-            app_id=app_id,
-            user_id=user.id,
-            student_id=student.id,
-            scholarship_type_id=scholarship.id if scholarship else None,
-            scholarship_subtype_list=application_data.scholarship_subtype_list,
-            status=ApplicationStatus.DRAFT.value,
-            status_name="草稿",
-            academic_year=str(datetime.now().year),
-            semester="1",
-            student_data=student.__dict__ if student else {},
             submitted_form_data=serialized_form_data,
             agree_terms=application_data.agree_terms or False
         )
         
+        # Set submission timestamp if not draft
+        if not is_draft:
+            application.submitted_at = datetime.now(timezone.utc)
+        
         self.db.add(application)
         await self.db.commit()
         await self.db.refresh(application)
@@ -260,89 +218,10 @@ class ApplicationService:
         result = await self.db.execute(stmt)
         application = result.scalar_one()
         
-        # 整合文件資訊到 submitted_form_data.documents（如果有的話）
-        integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
-        
-        if application.files:
-            # 生成文件訪問 token
-            from app.core.config import settings
-            from app.core.security import create_access_token
-            
-            token_data = {"sub": str(user.id)}
-            access_token = create_access_token(token_data)
-            
-            # 更新 submitted_form_data 中的 documents
-            if 'documents' in integrated_form_data:
-                existing_docs = integrated_form_data['documents']
-                for existing_doc in existing_docs:
-                    # 查找對應的文件記錄
-                    matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
-                    if matching_file:
-                        # 更新現有文件資訊
-                        base_url = f"http://localhost:8000{settings.api_v1_str}"
-                        existing_doc.update({
-                            "file_id": matching_file.id,
-                            "filename": matching_file.filename,
-                            "original_filename": matching_file.original_filename,
-                            "file_size": matching_file.file_size,
-                            "mime_type": matching_file.mime_type or matching_file.content_type,
-                            "file_path": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}?token={access_token}",
-                            "download_url": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}/download?token={access_token}",
-                            "is_verified": matching_file.is_verified,
-                            "object_name": matching_file.object_name
-                        })
-        
-        # Create response data
-        response_data = {
-            'id': application.id,
-            'app_id': application.app_id,
-            'user_id': application.user_id,
-            'student_id': application.student_id,
-            'scholarship_type_id': application.scholarship_type_id,
-            'scholarship_subtype_list': application.scholarship_subtype_list,
-            'status': application.status,
-            'status_name': application.status_name,
-            'academic_year': application.academic_year,
-            'semester': application.semester,
-            'student_data': application.student_data,
-            'submitted_form_data': integrated_form_data,  # 使用整合後的表單資料
-            'agree_terms': application.agree_terms,
-            'professor_id': application.professor_id,
-            'reviewer_id': application.reviewer_id,
-            'final_approver_id': application.final_approver_id,
-            'review_score': application.review_score,
-            'review_comments': application.review_comments,
-            'rejection_reason': application.rejection_reason,
-            'submitted_at': application.submitted_at,
-            'reviewed_at': application.reviewed_at,
-            'approved_at': application.approved_at,
-            'created_at': application.created_at,
-            'updated_at': application.updated_at,
-            'meta_data': application.meta_data,
-            # 移除獨立的 files 欄位
-            'reviews': [
-                {
-                    'id': review.id,
-                    'reviewer_id': review.reviewer_id,
-                    'reviewer_name': review.reviewer_name,
-                    'score': review.score,
-                    'comments': review.comments,
-                    'reviewed_at': review.reviewed_at
-                } for review in application.reviews
-            ],
-            'professor_reviews': [
-                {
-                    'id': review.id,
-                    'professor_id': review.professor_id,
-                    'professor_name': review.professor_name,
-                    'score': review.score,
-                    'comments': review.comments,
-                    'reviewed_at': review.reviewed_at
-                } for review in application.professor_reviews
-            ]
-        }
-        
-        return ApplicationResponse(**response_data)
+        print(f"[Debug] Application created successfully: {app_id} with status: {status}")
+        return application
+    
+
     
     async def get_user_applications(
         self, 
@@ -404,6 +283,7 @@ class ApplicationService:
                 student_id=application.student_id,
                 scholarship_type=application.scholarship.code if application.scholarship else None,
                 scholarship_type_id=application.scholarship_type_id,
+                scholarship_subtype_list=application.scholarship_subtype_list or [],
                 status=application.status,
                 status_name=application.status_name,
                 academic_year=application.academic_year,
@@ -617,7 +497,8 @@ class ApplicationService:
         
         # 更新表單資料
         if update_data.form_data:
-            application.submitted_form_data = update_data.form_data.dict()
+            # Serialize form data to handle datetime objects properly
+            application.submitted_form_data = self._serialize_for_json(update_data.form_data.dict())
             
         # 更新狀態
         if update_data.status:
@@ -1236,4 +1117,47 @@ class ApplicationService:
         
         return response_applications
     
- 
+    async def delete_application(
+        self,
+        application_id: int,
+        current_user: User
+    ) -> bool:
+        """Delete an application (only draft applications can be deleted)"""
+        # Get application
+        stmt = select(Application).where(Application.id == application_id)
+        result = await self.db.execute(stmt)
+        application = result.scalar_one_or_none()
+        
+        if not application:
+            raise NotFoundError("Application", application_id)
+        
+        # Check if user has permission to delete this application
+        if current_user.role == UserRole.STUDENT:
+            if application.user_id != current_user.id:
+                raise AuthorizationError("You can only delete your own applications")
+        elif current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+            raise AuthorizationError("You don't have permission to delete applications")
+        
+        # Only draft applications can be deleted
+        if application.status != ApplicationStatus.DRAFT.value:
+            raise ValidationError("Only draft applications can be deleted")
+        
+        # Delete associated files from MinIO if they exist
+        if application.submitted_form_data and 'documents' in application.submitted_form_data:
+            for doc in application.submitted_form_data['documents']:
+                if 'file_path' in doc and doc['file_path']:
+                    try:
+                        # Extract object name from file path
+                        # Assuming file_path format: applications/{application_id}/{file_type}/{filename}
+                        object_name = doc['file_path']
+                        if object_name.startswith('applications/'):
+                            minio_service.delete_file(object_name)
+                    except Exception as e:
+                        # Log error but continue with deletion
+                        print(f"Error deleting file {doc['file_path']}: {e}")
+        
+        # Delete the application
+        await self.db.delete(application)
+        await self.db.commit()
+        
+        return True
