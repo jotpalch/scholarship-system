@@ -3,7 +3,7 @@ Application management API endpoints
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Path, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Path, UploadFile, File, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import ValidationError
 
@@ -178,16 +178,16 @@ async def get_application(
     return await service.get_application_by_id(application_id, current_user)
 
 
-@router.put("/{application_id}", response_model=ApplicationResponse)
+@router.put("/{application_id}")
 async def update_application(
     application_id: int = Path(..., description="Application ID"),
-    update_data: ApplicationUpdate = ...,
-    current_user: User = Depends(require_student),
+    update_data: ApplicationUpdate = Body(...),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Update application"""
     service = ApplicationService(db)
-    return await service.update_application(application_id, current_user, update_data)
+    return await service.update_application(application_id, update_data, current_user)
 
 
 @router.post("/{application_id}/submit", response_model=ApplicationResponse)
@@ -207,7 +207,7 @@ async def get_application_files(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get all files for an application"""
+    """Get all files for an application - 現在從 submitted_form_data.documents 中獲取"""
     from app.models.application import ApplicationFile
     from app.schemas.application import ApplicationFileResponse
     from sqlalchemy import select, and_
@@ -216,37 +216,59 @@ async def get_application_files(
     service = ApplicationService(db)
     application = await service.get_application_by_id(application_id, current_user)
     
-    # Get files and generate backend proxy URLs with token
-    from app.core.config import settings
-    from app.core.security import create_access_token
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
     
-    # Generate a temporary token for file access
-    token_data = {"sub": str(current_user.id)}
-    access_token = create_access_token(token_data)
-    
+    # 從 submitted_form_data.documents 中獲取文件資訊
     files_with_urls = []
-    for file in application.files or []:
-        file_dict = {
-            "id": file.id,
-            "filename": file.filename,
-            "original_filename": file.original_filename,
-            "file_size": file.file_size,
-            "mime_type": file.mime_type,
-            "file_type": file.file_type,
-            "is_verified": file.is_verified,
-            "uploaded_at": file.uploaded_at,
-        }
+    if application.submitted_form_data and 'documents' in application.submitted_form_data:
+        for doc in application.submitted_form_data['documents']:
+            if 'file_id' in doc and doc['file_id']:
+                file_dict = {
+                    "id": doc['file_id'],
+                    "filename": doc.get('filename', ''),
+                    "original_filename": doc.get('original_filename', ''),
+                    "file_size": doc.get('file_size'),
+                    "mime_type": doc.get('mime_type'),
+                    "file_type": doc.get('document_type', ''),
+                    "is_verified": doc.get('is_verified', False),
+                    "uploaded_at": doc.get('upload_time'),
+                    "file_path": doc.get('file_path'),
+                    "download_url": doc.get('download_url')
+                }
+                files_with_urls.append(file_dict)
+    
+    # 如果 submitted_form_data.documents 中沒有文件資訊，嘗試從獨立的 files 欄位獲取（向後兼容）
+    if not files_with_urls and application.files:
+        # Generate a temporary token for file access
+        from app.core.config import settings
+        from app.core.security import create_access_token
         
-        # Generate backend proxy URLs instead of MinIO direct URLs
-        if file.object_name:
-            base_url = f"http://localhost:8000{settings.api_v1_str}"
-            file_dict["file_path"] = f"{base_url}/files/applications/{application_id}/files/{file.id}?token={access_token}"
-            file_dict["download_url"] = f"{base_url}/files/applications/{application_id}/files/{file.id}/download?token={access_token}"
-        else:
-            file_dict["file_path"] = None
-            file_dict["download_url"] = None
+        token_data = {"sub": str(current_user.id)}
+        access_token = create_access_token(token_data)
+        
+        for file in application.files:
+            file_dict = {
+                "id": file.id,
+                "filename": file.filename,
+                "original_filename": file.original_filename,
+                "file_size": file.file_size,
+                "mime_type": file.mime_type,
+                "file_type": file.file_type,
+                "is_verified": file.is_verified,
+                "uploaded_at": file.uploaded_at,
+            }
             
-        files_with_urls.append(file_dict)
+            # Generate backend proxy URLs instead of MinIO direct URLs
+            if file.object_name:
+                base_url = f"http://localhost:8000{settings.api_v1_str}"
+                file_dict["file_path"] = f"{base_url}/files/applications/{application_id}/files/{file.id}?token={access_token}"
+                file_dict["download_url"] = f"{base_url}/files/applications/{application_id}/files/{file.id}/download?token={access_token}"
+            else:
+                file_dict["file_path"] = None
+                file_dict["download_url"] = None
+                
+            files_with_urls.append(file_dict)
     
     return {
         "success": True,

@@ -112,11 +112,19 @@ class ApplicationService:
         
         # Check for existing active applications
         # In the new design, we need to get user ID differently
-        # For now, we'll pass it as a parameter or check via student_id
+        # Get scholarship type ID for the query
+        stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_type)
+        result = await self.db.execute(stmt)
+        scholarship = result.scalar_one_or_none()
+        
+        if not scholarship:
+            raise NotFoundError("Scholarship type", scholarship_type)
+        
+        # Check for existing applications
         stmt = select(Application).where(
             and_(
                 Application.student_id == student.id,
-                Application.scholarship_type == scholarship_type,
+                Application.scholarship_type_id == scholarship.id,
                 Application.status.in_([
                     ApplicationStatus.SUBMITTED.value,
                     ApplicationStatus.UNDER_REVIEW.value,
@@ -219,45 +227,122 @@ class ApplicationService:
         result = await self.db.execute(stmt)
         scholarship = result.scalar_one_or_none()
         
+        # Serialize form data for JSON storage
+        serialized_form_data = self._serialize_for_json(application_data.form_data.dict())
+        
         # Create draft application with minimal required fields
         app_id = self._generate_app_id()
         application = Application(
             app_id=app_id,
             user_id=user.id,
             student_id=student.id,
-            scholarship_type=application_data.scholarship_type,
-            scholarship_name=scholarship.name if scholarship else None,
-            amount=scholarship.amount if scholarship else None,
+            scholarship_type_id=scholarship.id if scholarship else None,
+            scholarship_subtype_list=application_data.scholarship_subtype_list,
             status=ApplicationStatus.DRAFT.value,
             status_name="草稿",
-            academic_year=getattr(application_data, 'academic_year', None) or "2024",
-            semester=getattr(application_data, 'semester', None) or "1",
-            gpa=getattr(application_data, 'gpa', None),
-            class_ranking_percent=getattr(application_data, 'class_ranking_percent', None),
-            dept_ranking_percent=getattr(application_data, 'dept_ranking_percent', None),
-            completed_terms=getattr(application_data, 'completed_terms', None),
-            contact_phone=getattr(application_data, 'contact_phone', None),
-            contact_email=getattr(application_data, 'contact_email', None),
-            contact_address=getattr(application_data, 'contact_address', None),
-            bank_account=getattr(application_data, 'bank_account', None),
-            research_proposal=getattr(application_data, 'research_proposal', None) or getattr(application_data, 'personal_statement', None),
-            budget_plan=getattr(application_data, 'budget_plan', None),
-            milestone_plan=getattr(application_data, 'milestone_plan', None),
-            agree_terms=getattr(application_data, 'agree_terms', None) or False,
-            form_data=self._serialize_for_json(application_data.model_dump())
+            academic_year=str(datetime.now().year),
+            semester="1",
+            student_data=student.__dict__ if student else {},
+            submitted_form_data=serialized_form_data,
+            agree_terms=application_data.agree_terms or False
         )
         
         self.db.add(application)
         await self.db.commit()
         await self.db.refresh(application)
         
-        # Create response with empty lists for related objects
-        response_data = application.__dict__.copy()
-        response_data['files'] = []
-        response_data['reviews'] = []
-        response_data['professor_reviews'] = []
+        # Load relationships for response
+        stmt = select(Application).where(Application.id == application.id).options(
+            selectinload(Application.files),
+            selectinload(Application.reviews),
+            selectinload(Application.professor_reviews)
+        )
+        result = await self.db.execute(stmt)
+        application = result.scalar_one()
         
-        return ApplicationResponse.model_validate(response_data)
+        # 整合文件資訊到 submitted_form_data.documents（如果有的話）
+        integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
+        
+        if application.files:
+            # 生成文件訪問 token
+            from app.core.config import settings
+            from app.core.security import create_access_token
+            
+            token_data = {"sub": str(user.id)}
+            access_token = create_access_token(token_data)
+            
+            # 更新 submitted_form_data 中的 documents
+            if 'documents' in integrated_form_data:
+                existing_docs = integrated_form_data['documents']
+                for existing_doc in existing_docs:
+                    # 查找對應的文件記錄
+                    matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
+                    if matching_file:
+                        # 更新現有文件資訊
+                        base_url = f"http://localhost:8000{settings.api_v1_str}"
+                        existing_doc.update({
+                            "file_id": matching_file.id,
+                            "filename": matching_file.filename,
+                            "original_filename": matching_file.original_filename,
+                            "file_size": matching_file.file_size,
+                            "mime_type": matching_file.mime_type or matching_file.content_type,
+                            "file_path": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}?token={access_token}",
+                            "download_url": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}/download?token={access_token}",
+                            "is_verified": matching_file.is_verified,
+                            "object_name": matching_file.object_name
+                        })
+        
+        # Create response data
+        response_data = {
+            'id': application.id,
+            'app_id': application.app_id,
+            'user_id': application.user_id,
+            'student_id': application.student_id,
+            'scholarship_type_id': application.scholarship_type_id,
+            'scholarship_subtype_list': application.scholarship_subtype_list,
+            'status': application.status,
+            'status_name': application.status_name,
+            'academic_year': application.academic_year,
+            'semester': application.semester,
+            'student_data': application.student_data,
+            'submitted_form_data': integrated_form_data,  # 使用整合後的表單資料
+            'agree_terms': application.agree_terms,
+            'professor_id': application.professor_id,
+            'reviewer_id': application.reviewer_id,
+            'final_approver_id': application.final_approver_id,
+            'review_score': application.review_score,
+            'review_comments': application.review_comments,
+            'rejection_reason': application.rejection_reason,
+            'submitted_at': application.submitted_at,
+            'reviewed_at': application.reviewed_at,
+            'approved_at': application.approved_at,
+            'created_at': application.created_at,
+            'updated_at': application.updated_at,
+            'meta_data': application.meta_data,
+            # 移除獨立的 files 欄位
+            'reviews': [
+                {
+                    'id': review.id,
+                    'reviewer_id': review.reviewer_id,
+                    'reviewer_name': review.reviewer_name,
+                    'score': review.score,
+                    'comments': review.comments,
+                    'reviewed_at': review.reviewed_at
+                } for review in application.reviews
+            ],
+            'professor_reviews': [
+                {
+                    'id': review.id,
+                    'professor_id': review.professor_id,
+                    'professor_name': review.professor_name,
+                    'score': review.score,
+                    'comments': review.comments,
+                    'reviewed_at': review.reviewed_at
+                } for review in application.professor_reviews
+            ]
+        }
+        
+        return ApplicationResponse(**response_data)
     
     async def get_user_applications(
         self, 
@@ -265,7 +350,10 @@ class ApplicationService:
         status: Optional[str] = None
     ) -> List[ApplicationListResponse]:
         """Get applications for a user"""
-        stmt = select(Application).where(Application.user_id == user.id)
+        stmt = select(Application).options(
+            selectinload(Application.files),
+            selectinload(Application.scholarship)
+        ).where(Application.user_id == user.id)
         
         if status:
             stmt = stmt.where(Application.status == status)
@@ -275,20 +363,71 @@ class ApplicationService:
         applications = result.scalars().all()
         
         response_list = []
-        for app in applications:
-            # Get scholarship details
-            scholarship_stmt = select(ScholarshipType).where(ScholarshipType.id == app.scholarship_type_id)
-            scholarship_result = await self.db.execute(scholarship_stmt)
-            scholarship = scholarship_result.scalar_one_or_none()
+        for application in applications:
+            # 整合文件資訊到 submitted_form_data.documents
+            integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
             
-            # Create response with required fields
-            app_data = {
-                **app.__dict__,
-                'scholarship_type': scholarship.code if scholarship else None,
-                'scholarship_name': scholarship.name if scholarship else None,
-                'amount': scholarship.amount if scholarship else None
-            }
-            response_list.append(ApplicationListResponse.model_validate(app_data))
+            if application.files:
+                # 生成文件訪問 token
+                from app.core.config import settings
+                from app.core.security import create_access_token
+                
+                token_data = {"sub": str(user.id)}
+                access_token = create_access_token(token_data)
+                
+                # 更新 submitted_form_data 中的 documents
+                if 'documents' in integrated_form_data:
+                    existing_docs = integrated_form_data['documents']
+                    for existing_doc in existing_docs:
+                        # 查找對應的文件記錄
+                        matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
+                        if matching_file:
+                            # 更新現有文件資訊
+                            base_url = f"http://localhost:8000{settings.api_v1_str}"
+                            existing_doc.update({
+                                "file_id": matching_file.id,
+                                "filename": matching_file.filename,
+                                "original_filename": matching_file.original_filename,
+                                "file_size": matching_file.file_size,
+                                "mime_type": matching_file.mime_type or matching_file.content_type,
+                                "file_path": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}?token={access_token}",
+                                "download_url": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}/download?token={access_token}",
+                                "is_verified": matching_file.is_verified,
+                                "object_name": matching_file.object_name
+                            })
+            
+            # 創建響應數據
+            app_data = ApplicationListResponse(
+                id=application.id,
+                app_id=application.app_id,
+                user_id=application.user_id,
+                student_id=application.student_id,
+                scholarship_type=application.scholarship.code if application.scholarship else None,
+                scholarship_type_id=application.scholarship_type_id,
+                status=application.status,
+                status_name=application.status_name,
+                academic_year=application.academic_year,
+                semester=application.semester,
+                student_data=application.student_data,
+                submitted_form_data=integrated_form_data,  # 使用整合後的表單資料
+                agree_terms=application.agree_terms,
+                professor_id=application.professor_id,
+                reviewer_id=application.reviewer_id,
+                final_approver_id=application.final_approver_id,
+                review_score=application.review_score,
+                review_comments=application.review_comments,
+                rejection_reason=application.rejection_reason,
+                submitted_at=application.submitted_at,
+                reviewed_at=application.reviewed_at,
+                approved_at=application.approved_at,
+                created_at=application.created_at,
+                updated_at=application.updated_at,
+                meta_data=application.meta_data
+            )
+            
+            # Add Chinese scholarship type name
+            app_data = self._add_scholarship_type_zh(app_data)
+            response_list.append(app_data)
         
         return response_list
     
@@ -309,42 +448,110 @@ class ApplicationService:
             status_counts[row[0]] = count_value  # status is the first column
             total_applications += count_value
         
-        # Get recent applications
-        stmt = select(Application).where(
+        # Get recent applications with files loaded
+        stmt = select(Application).options(
+            selectinload(Application.files),
+            selectinload(Application.scholarship)
+        ).where(
             Application.user_id == user.id
         ).order_by(desc(Application.created_at)).limit(5)
         
         result = await self.db.execute(stmt)
         recent_applications = result.scalars().all()
         
+        # Convert to response models with integrated file data
+        recent_applications_response = []
+        for application in recent_applications:
+            # 整合文件資訊到 submitted_form_data.documents
+            integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
+            
+            if application.files:
+                # 生成文件訪問 token
+                from app.core.config import settings
+                from app.core.security import create_access_token
+                
+                token_data = {"sub": str(user.id)}
+                access_token = create_access_token(token_data)
+                
+                # 更新 submitted_form_data 中的 documents
+                if 'documents' in integrated_form_data:
+                    existing_docs = integrated_form_data['documents']
+                    for existing_doc in existing_docs:
+                        # 查找對應的文件記錄
+                        matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
+                        if matching_file:
+                            # 更新現有文件資訊
+                            base_url = f"http://localhost:8000{settings.api_v1_str}"
+                            existing_doc.update({
+                                "file_id": matching_file.id,
+                                "filename": matching_file.filename,
+                                "original_filename": matching_file.original_filename,
+                                "file_size": matching_file.file_size,
+                                "mime_type": matching_file.mime_type or matching_file.content_type,
+                                "file_path": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}?token={access_token}",
+                                "download_url": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}/download?token={access_token}",
+                                "is_verified": matching_file.is_verified,
+                                "object_name": matching_file.object_name
+                            })
+            
+            # 創建響應數據
+            app_data = ApplicationListResponse(
+                id=application.id,
+                app_id=application.app_id,
+                user_id=application.user_id,
+                student_id=application.student_id,
+                scholarship_type=application.scholarship.code if application.scholarship else None,
+                scholarship_type_id=application.scholarship_type_id,
+                status=application.status,
+                status_name=application.status_name,
+                academic_year=application.academic_year,
+                semester=application.semester,
+                student_data=application.student_data,
+                submitted_form_data=integrated_form_data,  # 使用整合後的表單資料
+                agree_terms=application.agree_terms,
+                professor_id=application.professor_id,
+                reviewer_id=application.reviewer_id,
+                final_approver_id=application.final_approver_id,
+                review_score=application.review_score,
+                review_comments=application.review_comments,
+                rejection_reason=application.rejection_reason,
+                submitted_at=application.submitted_at,
+                reviewed_at=application.reviewed_at,
+                approved_at=application.approved_at,
+                created_at=application.created_at,
+                updated_at=application.updated_at,
+                meta_data=application.meta_data
+            )
+            
+            # Add Chinese scholarship type name
+            app_data = self._add_scholarship_type_zh(app_data)
+            recent_applications_response.append(app_data)
+        
         return {
             "total_applications": total_applications,
             "status_counts": status_counts,
-            "recent_applications": [ApplicationListResponse.model_validate(app) for app in recent_applications]
+            "recent_applications": recent_applications_response
         }
     
     async def get_application_by_id(self, application_id: int, current_user: User) -> Optional[Application]:
-        """根據 ID 取得申請"""
-        # Get application with relationships loaded
-        stmt = select(Application).where(Application.id == application_id).options(
+        """Get application by ID with proper access control"""
+        stmt = select(Application).options(
             selectinload(Application.files),
             selectinload(Application.reviews),
             selectinload(Application.professor_reviews),
             selectinload(Application.scholarship)
-        )
+        ).where(Application.id == application_id)
         result = await self.db.execute(stmt)
         application = result.scalar_one_or_none()
-
+        
         if not application:
-            raise NotFoundError("Application", str(application_id))
-
-        # Check authorization based on role
+            return None
+            
+        # Check access permissions
         if current_user.role == UserRole.STUDENT:
-            # Students can only access their own applications
             if application.user_id != current_user.id:
-                raise AuthorizationError("Cannot access other students' applications")
+                return None
         elif current_user.role == UserRole.PROFESSOR:
-            # Professors can access applications from their students
             # TODO: Add professor-student relationship check when implemented
             # For now, allow professors to access all applications
             pass
@@ -352,38 +559,55 @@ class ApplicationService:
             # College, Admin, and Super Admin can access any application
             pass
         else:
-            # Other roles are not allowed
-            raise AuthorizationError("Access denied")
+            return None
 
-        # Generate file paths for files if they exist
-        if application.files:
+        # 整合文件資訊到 submitted_form_data.documents
+        if application.submitted_form_data and application.files:
+            integrated_form_data = application.submitted_form_data.copy()
+            
+            # 生成文件訪問 token
             from app.core.config import settings
             from app.core.security import create_access_token
             
-            # Generate a temporary token for file access
             token_data = {"sub": str(current_user.id)}
             access_token = create_access_token(token_data)
             
-            for file in application.files:
-                if file.object_name:
-                    base_url = f"http://localhost:8000{settings.api_v1_str}"
-                    file.file_path = f"{base_url}/files/applications/{application_id}/files/{file.id}?token={access_token}"
-                    file.download_url = f"{base_url}/files/applications/{application_id}/files/{file.id}/download?token={access_token}"
-                else:
-                    file.file_path = None
-                    file.download_url = None
+            # 更新 submitted_form_data 中的 documents
+            if 'documents' in integrated_form_data:
+                existing_docs = integrated_form_data['documents']
+                for existing_doc in existing_docs:
+                    # 查找對應的文件記錄
+                    matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
+                    if matching_file:
+                        # 更新現有文件資訊
+                        base_url = f"http://localhost:8000{settings.api_v1_str}"
+                        existing_doc.update({
+                            "file_id": matching_file.id,
+                            "filename": matching_file.filename,
+                            "original_filename": matching_file.original_filename,
+                            "file_size": matching_file.file_size,
+                            "mime_type": matching_file.mime_type or matching_file.content_type,
+                            "file_path": f"{base_url}/files/applications/{application_id}/files/{matching_file.id}?token={access_token}",
+                            "download_url": f"{base_url}/files/applications/{application_id}/files/{matching_file.id}/download?token={access_token}",
+                            "is_verified": matching_file.is_verified,
+                            "object_name": matching_file.object_name
+                        })
+            
+            # 更新 application 的 submitted_form_data
+            application.submitted_form_data = integrated_form_data
 
         return application
     
     async def update_application(
         self,
         application_id: int,
-        update_data: ApplicationUpdate
+        update_data: ApplicationUpdate,
+        current_user: User
     ) -> Application:
         """更新申請資料"""
         
         # 取得申請
-        application = await self.get_application_by_id(application_id)
+        application = await self.get_application_by_id(application_id, current_user)
         if not application:
             raise NotFoundError(f"Application {application_id} not found")
             
@@ -444,6 +668,67 @@ class ApplicationService:
         except Exception as e:
             print(f"[Email Error] {e}")
         
+        # 整合文件資訊到 submitted_form_data.documents
+        integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
+        
+        # 生成文件訪問 token
+        from app.core.config import settings
+        from app.core.security import create_access_token
+        
+        token_data = {"sub": str(user.id)}
+        access_token = create_access_token(token_data)
+        
+        # 將 files 的完整資訊合併到 documents 中
+        if application.files:
+            integrated_documents = []
+            for file in application.files:
+                # 生成文件 URL
+                base_url = f"http://localhost:8000{settings.api_v1_str}"
+                file_path = f"{base_url}/files/applications/{application_id}/files/{file.id}?token={access_token}"
+                download_url = f"{base_url}/files/applications/{application_id}/files/{file.id}/download?token={access_token}"
+                
+                # 整合文件資訊
+                integrated_document = {
+                    "document_id": file.file_type,
+                    "document_type": file.file_type,
+                    "file_id": file.id,
+                    "filename": file.filename,
+                    "original_filename": file.original_filename,
+                    "file_size": file.file_size,
+                    "mime_type": file.mime_type or file.content_type,
+                    "file_path": file_path,
+                    "download_url": download_url,
+                    "upload_time": file.uploaded_at.isoformat() if file.uploaded_at else None,
+                    "is_verified": file.is_verified,
+                    "object_name": file.object_name
+                }
+                integrated_documents.append(integrated_document)
+            
+            # 更新 submitted_form_data 中的 documents
+            if 'documents' in integrated_form_data:
+                # 如果已有 documents，合併文件資訊
+                existing_docs = integrated_form_data['documents']
+                for existing_doc in existing_docs:
+                    # 查找對應的文件記錄
+                    matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
+                    if matching_file:
+                        # 更新現有文件資訊
+                        base_url = f"http://localhost:8000{settings.api_v1_str}"
+                        existing_doc.update({
+                            "file_id": matching_file.id,
+                            "filename": matching_file.filename,
+                            "original_filename": matching_file.original_filename,
+                            "file_size": matching_file.file_size,
+                            "mime_type": matching_file.mime_type or matching_file.content_type,
+                            "file_path": f"{base_url}/files/applications/{application_id}/files/{matching_file.id}?token={access_token}",
+                            "download_url": f"{base_url}/files/applications/{application_id}/files/{matching_file.id}/download?token={access_token}",
+                            "is_verified": matching_file.is_verified,
+                            "object_name": matching_file.object_name
+                        })
+            else:
+                # 如果沒有 documents，創建新的
+                integrated_form_data['documents'] = integrated_documents
+        
         # Convert application to response model
         response_data = {
             'id': application.id,
@@ -457,7 +742,7 @@ class ApplicationService:
             'academic_year': application.academic_year,
             'semester': application.semester,
             'student_data': application.student_data,
-            'submitted_form_data': application.submitted_form_data,
+            'submitted_form_data': integrated_form_data,  # 使用整合後的表單資料
             'agree_terms': application.agree_terms,
             'professor_id': application.professor_id,
             'reviewer_id': application.reviewer_id,
@@ -471,130 +756,144 @@ class ApplicationService:
             'created_at': application.created_at,
             'updated_at': application.updated_at,
             'meta_data': application.meta_data,
-            'files': [
-                {
-                    'id': file.id,
-                    'filename': file.filename,
-                    'file_type': file.file_type,
-                    'file_size': file.file_size,
-                    'uploaded_at': file.uploaded_at,
-                    'content_type': file.content_type
-                } for file in application.files
-            ],
+            # 移除獨立的 files 欄位
             'reviews': [
                 {
                     'id': review.id,
                     'reviewer_id': review.reviewer_id,
-                    'comments': review.comments,
+                    'reviewer_name': review.reviewer_name,
                     'score': review.score,
-                    'created_at': review.created_at
+                    'comments': review.comments,
+                    'reviewed_at': review.reviewed_at
                 } for review in application.reviews
             ],
             'professor_reviews': [
                 {
                     'id': review.id,
                     'professor_id': review.professor_id,
-                    'recommendation': review.recommendation,
-                    'review_status': review.review_status,
+                    'professor_name': review.professor_name,
+                    'score': review.score,
+                    'comments': review.comments,
                     'reviewed_at': review.reviewed_at
                 } for review in application.professor_reviews
-            ],
-            'scholarship': {
-                'id': application.scholarship.id,
-                'code': application.scholarship.code,
-                'name': application.scholarship.name,
-                'amount': application.scholarship.amount
-            } if application.scholarship else None
+            ]
         }
         
-        return ApplicationResponse.model_validate(response_data)
+        return ApplicationResponse(**response_data)
     
     async def get_applications_for_review(
         self, 
-        user: User,
+        current_user: User,
+        skip: int = 0,
+        limit: int = 100,
         status: Optional[str] = None,
         scholarship_type: Optional[str] = None
     ) -> List[ApplicationListResponse]:
-        """Get applications for review (staff only)"""
-        if not (user.has_role(UserRole.ADMIN) or user.has_role(UserRole.COLLEGE) or user.has_role(UserRole.PROFESSOR) or user.has_role(UserRole.SUPER_ADMIN)):
-            raise AuthorizationError("Staff access required")
-        
-        stmt = select(Application).options(
-            joinedload(Application.studentProfile),
-            joinedload(Application.student)
+        """Get applications for review with proper access control"""
+        # Build query based on user role
+        query = select(Application).options(
+            selectinload(Application.files),
+            selectinload(Application.scholarship)
         )
         
-        # Filter by status
-        if status:
-            stmt = stmt.where(Application.status == status)
+        if current_user.role == UserRole.PROFESSOR:
+            # TODO: Add professor-student relationship filter when implemented
+            # For now, professors can see all applications
+            pass
+        elif current_user.role in [UserRole.COLLEGE, UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+            # College, Admin, and Super Admin can see all applications
+            pass
         else:
-            # Default to reviewable statuses
-            stmt = stmt.where(Application.status.in_([
-                ApplicationStatus.SUBMITTED.value,
-                ApplicationStatus.UNDER_REVIEW.value,
-                ApplicationStatus.PENDING_RECOMMENDATION.value
-            ]))
+            # Other roles cannot review applications
+            return []
         
-        # Join with ScholarshipType to get scholarship information
-        stmt = stmt.join(ScholarshipType, Application.scholarship_type_id == ScholarshipType.id)
-        
+        # Apply filters
+        if status:
+            query = query.where(Application.status == status)
         if scholarship_type:
-            stmt = stmt.where(ScholarshipType.code == scholarship_type)
+            # Get scholarship type ID for filtering
+            stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_type)
+            result = await self.db.execute(stmt)
+            scholarship = result.scalar_one_or_none()
+            if scholarship:
+                query = query.where(Application.scholarship_type_id == scholarship.id)
         
-        stmt = stmt.order_by(desc(Application.submitted_at))
-        result = await self.db.execute(stmt)
+        # Apply pagination
+        query = query.offset(skip).limit(limit)
+        
+        # Execute query
+        result = await self.db.execute(query)
         applications = result.scalars().all()
         
-        # Add student info and computed fields to response
-        response_list = []
-        for app in applications:
-            # Get scholarship details
-            scholarship_stmt = select(ScholarshipType).where(ScholarshipType.id == app.scholarship_type_id)
-            scholarship_result = await self.db.execute(scholarship_stmt)
-            scholarship = scholarship_result.scalar_one_or_none()
+        # Convert to response models
+        response_applications = []
+        for application in applications:
+            # 整合文件資訊到 submitted_form_data.documents
+            integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
             
-            # Create response with required fields
-            app_data = {
-                **app.__dict__,
-                'scholarship_type': scholarship.code if scholarship else None,
-                'scholarship_name': scholarship.name if scholarship else None,
-                'amount': scholarship.amount if scholarship else None
-            }
-            app_data = ApplicationListResponse.model_validate(app_data)
-            
-            # Add student information from User relationship (student)
-            if app.student:
-                app_data.student_name = app.student.full_name or app.student.chinese_name or app.student.username
-                if hasattr(app.student, 'student_no') and app.student.student_no:
-                    app_data.student_no = app.student.student_no
-            
-            # Add student information from Student relationship (studentProfile)
-            if app.studentProfile:
-                if not app_data.student_no and hasattr(app.studentProfile, 'stdNo'):
-                    app_data.student_no = app.studentProfile.stdNo
-                if not app_data.student_name and hasattr(app.studentProfile, 'cname'):
-                    app_data.student_name = app.studentProfile.cname
-            
-            # Calculate days waiting
-            if app.submitted_at:
-                from datetime import datetime, timezone
-                # Handle both timezone-aware and timezone-naive datetimes
-                now = datetime.now(timezone.utc)
-                submitted_time = app.submitted_at
+            if application.files:
+                # 生成文件訪問 token
+                from app.core.config import settings
+                from app.core.security import create_access_token
                 
-                # If submitted_at is timezone-naive, make it timezone-aware (assume UTC)
-                if submitted_time.tzinfo is None:
-                    submitted_time = submitted_time.replace(tzinfo=timezone.utc)
+                token_data = {"sub": str(current_user.id)}
+                access_token = create_access_token(token_data)
                 
-                days_diff = (now - submitted_time).days
-                app_data.days_waiting = max(0, days_diff)
+                # 更新 submitted_form_data 中的 documents
+                if 'documents' in integrated_form_data:
+                    existing_docs = integrated_form_data['documents']
+                    for existing_doc in existing_docs:
+                        # 查找對應的文件記錄
+                        matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
+                        if matching_file:
+                            # 更新現有文件資訊
+                            base_url = f"http://localhost:8000{settings.api_v1_str}"
+                            existing_doc.update({
+                                "file_id": matching_file.id,
+                                "filename": matching_file.filename,
+                                "original_filename": matching_file.original_filename,
+                                "file_size": matching_file.file_size,
+                                "mime_type": matching_file.mime_type or matching_file.content_type,
+                                "file_path": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}?token={access_token}",
+                                "download_url": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}/download?token={access_token}",
+                                "is_verified": matching_file.is_verified,
+                                "object_name": matching_file.object_name
+                            })
+            
+            # 創建響應數據
+            app_data = ApplicationListResponse(
+                id=application.id,
+                app_id=application.app_id,
+                user_id=application.user_id,
+                student_id=application.student_id,
+                scholarship_type=application.scholarship.code if application.scholarship else None,
+                scholarship_type_id=application.scholarship_type_id,
+                status=application.status,
+                status_name=application.status_name,
+                academic_year=application.academic_year,
+                semester=application.semester,
+                student_data=application.student_data,
+                submitted_form_data=integrated_form_data,  # 使用整合後的表單資料
+                agree_terms=application.agree_terms,
+                professor_id=application.professor_id,
+                reviewer_id=application.reviewer_id,
+                final_approver_id=application.final_approver_id,
+                review_score=application.review_score,
+                review_comments=application.review_comments,
+                rejection_reason=application.rejection_reason,
+                submitted_at=application.submitted_at,
+                reviewed_at=application.reviewed_at,
+                approved_at=application.approved_at,
+                created_at=application.created_at,
+                updated_at=application.updated_at,
+                meta_data=application.meta_data
+            )
             
             # Add Chinese scholarship type name
             app_data = self._add_scholarship_type_zh(app_data)
-            
-            response_list.append(app_data)
+            response_applications.append(app_data)
         
-        return response_list
+        return response_applications
     
     async def update_application_status(
         self, 
@@ -824,5 +1123,117 @@ class ApplicationService:
         
         result = await self.db.execute(query)
         return result.scalars().all()
+    
+    async def get_applications(
+        self, 
+        current_user: User,
+        skip: int = 0,
+        limit: int = 100,
+        status: Optional[str] = None,
+        scholarship_type: Optional[str] = None
+    ) -> List[ApplicationListResponse]:
+        """Get applications with proper access control"""
+        # Build query based on user role
+        query = select(Application).options(
+            selectinload(Application.files),
+            selectinload(Application.scholarship)
+        )
+        
+        if current_user.role == UserRole.STUDENT:
+            # Students can only see their own applications
+            query = query.where(Application.user_id == current_user.id)
+        elif current_user.role == UserRole.PROFESSOR:
+            # TODO: Add professor-student relationship filter when implemented
+            # For now, professors can see all applications
+            pass
+        elif current_user.role in [UserRole.COLLEGE, UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+            # College, Admin, and Super Admin can see all applications
+            pass
+        else:
+            # Other roles cannot see any applications
+            return []
+        
+        # Apply filters
+        if status:
+            query = query.where(Application.status == status)
+        if scholarship_type:
+            query = query.where(Application.scholarship_type == scholarship_type)
+        
+        # Apply pagination
+        query = query.offset(skip).limit(limit)
+        
+        # Execute query
+        result = await self.db.execute(query)
+        applications = result.scalars().all()
+        
+        # Convert to response models
+        response_applications = []
+        for application in applications:
+            # 整合文件資訊到 submitted_form_data.documents
+            integrated_form_data = application.submitted_form_data.copy() if application.submitted_form_data else {}
+            
+            if application.files:
+                # 生成文件訪問 token
+                from app.core.config import settings
+                from app.core.security import create_access_token
+                
+                token_data = {"sub": str(current_user.id)}
+                access_token = create_access_token(token_data)
+                
+                # 更新 submitted_form_data 中的 documents
+                if 'documents' in integrated_form_data:
+                    existing_docs = integrated_form_data['documents']
+                    for existing_doc in existing_docs:
+                        # 查找對應的文件記錄
+                        matching_file = next((f for f in application.files if f.file_type == existing_doc.get('document_id')), None)
+                        if matching_file:
+                            # 更新現有文件資訊
+                            base_url = f"http://localhost:8000{settings.api_v1_str}"
+                            existing_doc.update({
+                                "file_id": matching_file.id,
+                                "filename": matching_file.filename,
+                                "original_filename": matching_file.original_filename,
+                                "file_size": matching_file.file_size,
+                                "mime_type": matching_file.mime_type or matching_file.content_type,
+                                "file_path": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}?token={access_token}",
+                                "download_url": f"{base_url}/files/applications/{application.id}/files/{matching_file.id}/download?token={access_token}",
+                                "is_verified": matching_file.is_verified,
+                                "object_name": matching_file.object_name
+                            })
+            
+            # 創建響應數據
+            app_data = ApplicationListResponse(
+                id=application.id,
+                app_id=application.app_id,
+                user_id=application.user_id,
+                student_id=application.student_id,
+                scholarship_type=application.scholarship.code if application.scholarship else None,
+                scholarship_type_id=application.scholarship_type_id,
+                status=application.status,
+                status_name=application.status_name,
+                academic_year=application.academic_year,
+                semester=application.semester,
+                student_data=application.student_data,
+                submitted_form_data=integrated_form_data,  # 使用整合後的表單資料
+                agree_terms=application.agree_terms,
+                professor_id=application.professor_id,
+                reviewer_id=application.reviewer_id,
+                final_approver_id=application.final_approver_id,
+                review_score=application.review_score,
+                review_comments=application.review_comments,
+                rejection_reason=application.rejection_reason,
+                submitted_at=application.submitted_at,
+                reviewed_at=application.reviewed_at,
+                approved_at=application.approved_at,
+                created_at=application.created_at,
+                updated_at=application.updated_at,
+                meta_data=application.meta_data
+            )
+            
+            # Add Chinese scholarship type name
+            app_data = self._add_scholarship_type_zh(app_data)
+            response_applications.append(app_data)
+        
+        return response_applications
     
  

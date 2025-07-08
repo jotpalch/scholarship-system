@@ -313,7 +313,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         }
       })
 
-      // Format documents according to backend requirements
+      // Format documents according to backend requirements - 使用整合後的文件結構
       const documents = Object.entries(dynamicFileData).map(([docType, files]) => {
         const file = files[0] // Assuming single file per document type
         return {
@@ -403,7 +403,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     try {
       setIsSubmitting(true)
       
-      // 整合表單資料，保持原有格式
+      // 整合表單資料，使用整合後的文件結構
       const applicationData = {
         scholarship_type: newApplicationData.scholarship_type,
         selected_sub_types: selectedSubTypes[newApplicationData.scholarship_type]?.length 
@@ -411,19 +411,18 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
           : ["general"],
         // 保持原有的動態表單資料格式
         ...dynamicFormData,
-        // 將整個表單資料也放入 submitted_form_data
+        // 將整個表單資料也放入 submitted_form_data，使用整合後的文件結構
         submitted_form_data: {
           form_fields: dynamicFormData,
           selected_sub_types: selectedSubTypes[newApplicationData.scholarship_type]?.length 
             ? selectedSubTypes[newApplicationData.scholarship_type] 
             : ["general"],
-          uploaded_files: Object.entries(dynamicFileData).map(([docType, files]) => ({
+          documents: Object.entries(dynamicFileData).map(([docType, files]) => ({
+            document_id: docType,
             document_type: docType,
-            files: files.map(file => ({
-              name: file.name,
-              size: file.size,
-              type: file.type
-            }))
+            file_path: files[0]?.name || '',
+            original_filename: files[0]?.name || '',
+            upload_time: new Date().toISOString()
           }))
         }
       }
@@ -447,7 +446,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       }
     } catch (error) {
       console.error('Failed to save draft:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      let errorMessage = error instanceof Error ? error.message : 'Unknown error'
       alert(locale === "zh" ? `保存失敗: ${errorMessage}` : `Failed to save draft: ${errorMessage}`)
     } finally {
       setIsSubmitting(false)

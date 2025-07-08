@@ -66,11 +66,10 @@ export interface Application {
   approved_at?: string
   created_at: string
   updated_at: string
-  files?: ApplicationFile[]  // 關聯的文件
   
   // 動態表單資料
   form_data?: Record<string, any>  // 動態表單資料 (前端格式)
-  submitted_form_data?: Record<string, any>  // 後端格式的表單資料
+  submitted_form_data?: Record<string, any>  // 後端格式的表單資料，包含整合後的文件資訊
   meta_data?: Record<string, any>  // 額外的元資料
   
   // 後端 ApplicationResponse 實際返回的欄位

@@ -231,7 +231,7 @@ class ApplicationResponse(BaseModel):
     academic_year: str
     semester: str
     student_data: Dict[str, Any]
-    submitted_form_data: Dict[str, Any]
+    submitted_form_data: Dict[str, Any]  # 包含整合後的文件資訊
     agree_terms: bool = False
     professor_id: Optional[int] = None
     reviewer_id: Optional[int] = None
@@ -246,7 +246,6 @@ class ApplicationResponse(BaseModel):
     updated_at: datetime
     meta_data: Optional[Dict[str, Any]] = None
     
-    files: List[ApplicationFileResponse] = []
     reviews: List[ApplicationReviewResponse] = []
     professor_reviews: List[ProfessorReviewResponse] = []
     
@@ -281,7 +280,7 @@ class ApplicationReviewCreate(BaseModel):
 
 
 class ApplicationListResponse(BaseModel):
-    """Application list item response schema"""
+    """Application list response schema"""
     model_config = ConfigDict(from_attributes=True)
     
     id: int
@@ -289,30 +288,46 @@ class ApplicationListResponse(BaseModel):
     user_id: int
     student_id: int
     scholarship_type: str
-    scholarship_name: Optional[str]
-    amount: Optional[Decimal]
+    scholarship_type_id: int
+    scholarship_type_zh: Optional[str] = None  # 中文獎學金類型名稱
     status: str
     status_name: Optional[str]
-    submitted_at: Optional[datetime]
+    academic_year: str
+    semester: str
+    student_data: Dict[str, Any]
+    submitted_form_data: Dict[str, Any]  # 包含整合後的文件資訊
+    agree_terms: bool = False
+    professor_id: Optional[int] = None
+    reviewer_id: Optional[int] = None
+    final_approver_id: Optional[int] = None
+    review_score: Optional[Decimal] = None
+    review_comments: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    submitted_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+    approved_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    meta_data: Optional[Dict[str, Any]] = None
     
-    # Optional fields for staff view
-    student_name: Optional[str] = None
-    student_no: Optional[str] = None
+    @property
+    def is_editable(self) -> bool:
+        """Check if application can be edited"""
+        return bool(self.status in [ApplicationStatus.DRAFT.value, ApplicationStatus.RETURNED.value])
     
-    # Extended fields for college/admin dashboard
-    department: Optional[str] = None
-    nationality: Optional[str] = None
+    @property
+    def is_submitted(self) -> bool:
+        """Check if application is submitted"""
+        return bool(self.status != ApplicationStatus.DRAFT.value)
     
-    # Chinese display name for scholarship type
-    scholarship_type_zh: Optional[str] = None
-    
-    # Scholarship subtype list
-    scholarship_subtype_list: Optional[List[str]] = []
-    
-    # Computed fields
-    days_waiting: Optional[int] = None  # Days since submission
+    @property
+    def can_be_reviewed(self) -> bool:
+        """Check if application can be reviewed"""
+        return bool(self.status in [
+            ApplicationStatus.SUBMITTED.value,
+            ApplicationStatus.UNDER_REVIEW.value,
+            ApplicationStatus.RECOMMENDED.value
+        ])
 
 
 class ApplicationStatusUpdate(BaseModel):

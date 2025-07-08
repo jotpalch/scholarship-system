@@ -60,16 +60,16 @@ export function ApplicationDetailDialog({
   useEffect(() => {
     if (isOpen && application) {
       loadApplicationFiles()
-      loadDocumentLabels()
-      loadApplicationFields()
+      loadFormConfig()
     }
   }, [isOpen, application])
 
-  // 載入動態文件標籤和欄位標籤
-  const loadDocumentLabels = async () => {
+  // 載入表單配置（包含文件標籤和欄位標籤）
+  const loadFormConfig = async () => {
     if (!application) return
     
     setIsLoadingLabels(true)
+    setIsLoadingFields(true)
     setError(null)
     try {
       // 根據 scholarship_type_id 從後端獲取對應的 scholarship_type
@@ -87,7 +87,9 @@ export function ApplicationDetailDialog({
             setError(errorMsg)
             setDocumentLabels({})
             setFieldLabels({})
+            setApplicationFields([])
             setIsLoadingLabels(false)
+            setIsLoadingFields(false)
             return
           }
         } catch (error) {
@@ -96,7 +98,9 @@ export function ApplicationDetailDialog({
           setError(errorMsg)
           setDocumentLabels({})
           setFieldLabels({})
+          setApplicationFields([])
           setIsLoadingLabels(false)
+          setIsLoadingFields(false)
           return
         }
       }
@@ -107,7 +111,9 @@ export function ApplicationDetailDialog({
         setError(errorMsg)
         setDocumentLabels({})
         setFieldLabels({})
+        setApplicationFields([])
         setIsLoadingLabels(false)
+        setIsLoadingFields(false)
         return
       }
       
@@ -128,13 +134,18 @@ export function ApplicationDetailDialog({
         // 處理欄位標籤
         if (response.data.fields) {
           const fieldLabels: {[key: string]: { zh?: string, en?: string }} = {}
+          const fieldNames: string[] = []
+          
           response.data.fields.forEach(field => {
             fieldLabels[field.field_name] = {
               zh: field.field_label,
               en: field.field_label_en || field.field_label
             }
+            fieldNames.push(field.field_name)
           })
+          
           setFieldLabels(fieldLabels)
+          setApplicationFields(fieldNames)
         }
       } else {
         const errorMsg = `無法載入表單配置: ${response.message}`
@@ -142,88 +153,48 @@ export function ApplicationDetailDialog({
         setError(errorMsg)
         setDocumentLabels({})
         setFieldLabels({})
+        setApplicationFields([])
       }
     } catch (error) {
-      const errorMsg = `載入標籤時發生錯誤: ${error instanceof Error ? error.message : '未知錯誤'}`
+      const errorMsg = `載入表單配置時發生錯誤: ${error instanceof Error ? error.message : '未知錯誤'}`
       console.error(errorMsg)
       setError(errorMsg)
       setDocumentLabels({})
       setFieldLabels({})
-    } finally {
-      setIsLoadingLabels(false)
-    }
-  }
-
-  // 載入申請欄位配置
-  const loadApplicationFields = async () => {
-    if (!application) return
-    
-    setIsLoadingFields(true)
-    setError(null)
-    try {
-      // 根據 scholarship_type_id 從後端獲取對應的 scholarship_type
-      let scholarshipType = application.scholarship_type
-      
-      if (!scholarshipType && application.scholarship_type_id) {
-        try {
-          // 從後端獲取獎學金類型信息
-          const scholarshipResponse = await api.scholarships.getById(application.scholarship_type_id)
-          if (scholarshipResponse.success && scholarshipResponse.data) {
-            scholarshipType = scholarshipResponse.data.code
-          } else {
-            const errorMsg = `無法獲取獎學金類型信息: ${scholarshipResponse.message}`
-            console.error(errorMsg)
-            setError(errorMsg)
-            setApplicationFields([])
-            setIsLoadingFields(false)
-            return
-          }
-        } catch (error) {
-          const errorMsg = `獲取獎學金類型時發生錯誤: ${error instanceof Error ? error.message : '未知錯誤'}`
-          console.error(errorMsg)
-          setError(errorMsg)
-          setApplicationFields([])
-          setIsLoadingFields(false)
-          return
-        }
-      }
-      
-      if (!scholarshipType) {
-        const errorMsg = '無法確定獎學金類型'
-        console.error(errorMsg)
-        setError(errorMsg)
-        setApplicationFields([])
-        setIsLoadingFields(false)
-        return
-      }
-      
-      const response = await api.applicationFields.getFormConfig(scholarshipType)
-      if (response.success && response.data && response.data.fields) {
-        const fieldNames = response.data.fields.map(field => field.field_name)
-        setApplicationFields(fieldNames)
-      } else {
-        const errorMsg = `無法載入申請欄位: ${response.message}`
-        console.error(errorMsg)
-        setError(errorMsg)
-        setApplicationFields([])
-      }
-    } catch (error) {
-      const errorMsg = `載入申請欄位時發生錯誤: ${error instanceof Error ? error.message : '未知錯誤'}`
-      console.error(errorMsg)
-      setError(errorMsg)
       setApplicationFields([])
     } finally {
+      setIsLoadingLabels(false)
       setIsLoadingFields(false)
     }
   }
 
+  // 載入申請文件 - 現在直接從 submitted_form_data.documents 中獲取
   const loadApplicationFiles = async () => {
     if (!application) return
     
     setIsLoadingFiles(true)
     try {
-      const files = await fetchApplicationFiles(application.id)
-      setApplicationFiles(files)
+      // 直接從 application.submitted_form_data.documents 中獲取文件
+      if (application.submitted_form_data?.documents) {
+        // 將 documents 轉換為 ApplicationFile 格式以保持向後兼容
+        const files = application.submitted_form_data.documents.map((doc: any) => ({
+          id: doc.file_id,
+          filename: doc.filename,
+          original_filename: doc.original_filename,
+          file_size: doc.file_size,
+          mime_type: doc.mime_type,
+          file_type: doc.document_type,
+          file_path: doc.file_path,
+          download_url: doc.download_url,
+          is_verified: doc.is_verified,
+          uploaded_at: doc.upload_time
+        }))
+        setApplicationFiles(files)
+      } else {
+        // 如果沒有 documents，嘗試使用舊的 fetchApplicationFiles 方法（向後兼容）
+        const files = await fetchApplicationFiles(application.id)
+        setApplicationFiles(files)
+      }
     } catch (error) {
       console.error('Failed to load application files:', error)
       setApplicationFiles([])
@@ -459,8 +430,7 @@ export function ApplicationDetailDialog({
                           className="mt-2 ml-2"
                           onClick={() => {
                             setError(null)
-                            loadDocumentLabels()
-                            loadApplicationFields()
+                            loadFormConfig()
                           }}
                         >
                           {locale === "zh" ? "重試" : "Retry"}

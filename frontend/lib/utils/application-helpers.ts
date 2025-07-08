@@ -215,13 +215,25 @@ export const getDocumentLabel = (docType: string, locale: Locale, dynamicLabel?:
 // 獲取申請文件
 export const fetchApplicationFiles = async (applicationId: number) => {
   try {
-    // 先嘗試從申請詳情獲取文件
+    // 從申請詳情獲取文件，現在文件資訊整合在 submitted_form_data.documents 中
     const appResponse = await api.applications.getApplicationById(applicationId)
-    if (appResponse.success && appResponse.data?.files) {
-      return appResponse.data.files
+    if (appResponse.success && appResponse.data?.submitted_form_data?.documents) {
+      // 將 documents 轉換為 ApplicationFile 格式以保持向後兼容
+      return appResponse.data.submitted_form_data.documents.map((doc: any) => ({
+        id: doc.file_id,
+        filename: doc.filename,
+        original_filename: doc.original_filename,
+        file_size: doc.file_size,
+        mime_type: doc.mime_type,
+        file_type: doc.document_type,
+        file_path: doc.file_path,
+        download_url: doc.download_url,
+        is_verified: doc.is_verified,
+        uploaded_at: doc.upload_time
+      }))
     }
     
-    // 如果申請詳情沒有文件，嘗試專門的文件API
+    // 如果申請詳情沒有文件，嘗試專門的文件API（向後兼容）
     const filesResponse = await api.applications.getApplicationFiles(applicationId)
     if (filesResponse.success && filesResponse.data) {
       return filesResponse.data
