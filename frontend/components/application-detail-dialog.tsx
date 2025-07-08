@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ProgressTimeline } from "@/components/progress-timeline"
 import { FilePreviewDialog } from "@/components/file-preview-dialog"
 import { FileText, Eye, Loader2 } from "lucide-react"
@@ -45,6 +46,7 @@ export function ApplicationDetailDialog({
   const [fieldLabels, setFieldLabels] = useState<{[key: string]: { zh?: string, en?: string }}>({})
   const [applicationFields, setApplicationFields] = useState<string[]>([])
   const [isLoadingFields, setIsLoadingFields] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // 獲取欄位標籤（優先使用動態標籤，後備使用靜態標籤）
   const getFieldLabel = (fieldName: string, locale: Locale, fieldLabels?: {[key: string]: { zh?: string, en?: string }}) => {
@@ -68,8 +70,48 @@ export function ApplicationDetailDialog({
     if (!application) return
     
     setIsLoadingLabels(true)
+    setError(null)
     try {
-      const response = await api.applicationFields.getFormConfig(application.scholarship_type)
+      // 根據 scholarship_type_id 從後端獲取對應的 scholarship_type
+      let scholarshipType = application.scholarship_type
+      
+      if (!scholarshipType && application.scholarship_type_id) {
+        try {
+          // 從後端獲取獎學金類型信息
+          const scholarshipResponse = await api.scholarships.getById(application.scholarship_type_id)
+          if (scholarshipResponse.success && scholarshipResponse.data) {
+            scholarshipType = scholarshipResponse.data.code
+          } else {
+            const errorMsg = `無法獲取獎學金類型信息: ${scholarshipResponse.message}`
+            console.error(errorMsg)
+            setError(errorMsg)
+            setDocumentLabels({})
+            setFieldLabels({})
+            setIsLoadingLabels(false)
+            return
+          }
+        } catch (error) {
+          const errorMsg = `獲取獎學金類型時發生錯誤: ${error instanceof Error ? error.message : '未知錯誤'}`
+          console.error(errorMsg)
+          setError(errorMsg)
+          setDocumentLabels({})
+          setFieldLabels({})
+          setIsLoadingLabels(false)
+          return
+        }
+      }
+      
+      if (!scholarshipType) {
+        const errorMsg = '無法確定獎學金類型'
+        console.error(errorMsg)
+        setError(errorMsg)
+        setDocumentLabels({})
+        setFieldLabels({})
+        setIsLoadingLabels(false)
+        return
+      }
+      
+      const response = await api.applicationFields.getFormConfig(scholarshipType)
       if (response.success && response.data) {
         // 處理文件標籤
         if (response.data.documents) {
@@ -94,9 +136,17 @@ export function ApplicationDetailDialog({
           })
           setFieldLabels(fieldLabels)
         }
+      } else {
+        const errorMsg = `無法載入表單配置: ${response.message}`
+        console.error(errorMsg)
+        setError(errorMsg)
+        setDocumentLabels({})
+        setFieldLabels({})
       }
     } catch (error) {
-      console.error('Failed to load document and field labels:', error)
+      const errorMsg = `載入標籤時發生錯誤: ${error instanceof Error ? error.message : '未知錯誤'}`
+      console.error(errorMsg)
+      setError(errorMsg)
       setDocumentLabels({})
       setFieldLabels({})
     } finally {
@@ -109,14 +159,58 @@ export function ApplicationDetailDialog({
     if (!application) return
     
     setIsLoadingFields(true)
+    setError(null)
     try {
-      const response = await api.applicationFields.getFormConfig(application.scholarship_type)
+      // 根據 scholarship_type_id 從後端獲取對應的 scholarship_type
+      let scholarshipType = application.scholarship_type
+      
+      if (!scholarshipType && application.scholarship_type_id) {
+        try {
+          // 從後端獲取獎學金類型信息
+          const scholarshipResponse = await api.scholarships.getById(application.scholarship_type_id)
+          if (scholarshipResponse.success && scholarshipResponse.data) {
+            scholarshipType = scholarshipResponse.data.code
+          } else {
+            const errorMsg = `無法獲取獎學金類型信息: ${scholarshipResponse.message}`
+            console.error(errorMsg)
+            setError(errorMsg)
+            setApplicationFields([])
+            setIsLoadingFields(false)
+            return
+          }
+        } catch (error) {
+          const errorMsg = `獲取獎學金類型時發生錯誤: ${error instanceof Error ? error.message : '未知錯誤'}`
+          console.error(errorMsg)
+          setError(errorMsg)
+          setApplicationFields([])
+          setIsLoadingFields(false)
+          return
+        }
+      }
+      
+      if (!scholarshipType) {
+        const errorMsg = '無法確定獎學金類型'
+        console.error(errorMsg)
+        setError(errorMsg)
+        setApplicationFields([])
+        setIsLoadingFields(false)
+        return
+      }
+      
+      const response = await api.applicationFields.getFormConfig(scholarshipType)
       if (response.success && response.data && response.data.fields) {
         const fieldNames = response.data.fields.map(field => field.field_name)
         setApplicationFields(fieldNames)
+      } else {
+        const errorMsg = `無法載入申請欄位: ${response.message}`
+        console.error(errorMsg)
+        setError(errorMsg)
+        setApplicationFields([])
       }
     } catch (error) {
-      console.error('Failed to load application fields:', error)
+      const errorMsg = `載入申請欄位時發生錯誤: ${error instanceof Error ? error.message : '未知錯誤'}`
+      console.error(errorMsg)
+      setError(errorMsg)
       setApplicationFields([])
     } finally {
       setIsLoadingFields(false)
@@ -197,24 +291,60 @@ export function ApplicationDetailDialog({
     const dynamicFields: Record<string, any> = {}
     const basicFields: Record<string, any> = {}
     
-    Object.entries(formData).forEach(([key, value]) => {
-      if (!value || value === '' || key === 'files' || key === 'agree_terms') {
-        return
-      }
-      
-      if (applicationFields.includes(key)) {
-        dynamicFields[key] = value
-      } else {
-        basicFields[key] = value
-      }
-    })
+    // 處理後端的 submitted_form_data.fields 結構
+    if (formData.submitted_form_data && formData.submitted_form_data.fields) {
+      // 後端結構：{ submitted_form_data: { fields: { field_id: { value: "..." } } } }
+      Object.entries(formData.submitted_form_data.fields).forEach(([fieldId, fieldData]: [string, any]) => {
+        if (fieldData && typeof fieldData === 'object' && 'value' in fieldData) {
+          const value = fieldData.value
+          if (value && value !== '' && fieldId !== 'files' && fieldId !== 'agree_terms') {
+            if (applicationFields.includes(fieldId)) {
+              dynamicFields[fieldId] = value
+            } else {
+              basicFields[fieldId] = value
+            }
+          }
+        }
+      })
+    } else if (formData.fields) {
+      // 直接處理 fields 結構
+      Object.entries(formData.fields).forEach(([fieldId, fieldData]: [string, any]) => {
+        if (fieldData && typeof fieldData === 'object' && 'value' in fieldData) {
+          const value = fieldData.value
+          if (value && value !== '' && fieldId !== 'files' && fieldId !== 'agree_terms') {
+            if (applicationFields.includes(fieldId)) {
+              dynamicFields[fieldId] = value
+            } else {
+              basicFields[fieldId] = value
+            }
+          }
+        }
+      })
+    } else {
+      // 前端結構：{ field_name: value }
+      Object.entries(formData).forEach(([key, value]) => {
+        if (!value || value === '' || key === 'files' || key === 'agree_terms') {
+          return
+        }
+        
+        if (applicationFields.includes(key)) {
+          dynamicFields[key] = value
+        } else {
+          basicFields[key] = value
+        }
+      })
+    }
     
     return { dynamicFields, basicFields }
   }
 
   if (!application) return null
 
-  const { dynamicFields, basicFields } = application.form_data ? separateFormData(application.form_data) : { dynamicFields: {}, basicFields: {} }
+  const { dynamicFields, basicFields } = (() => {
+    // 優先使用 submitted_form_data，如果沒有則使用 form_data
+    const dataToProcess = application.submitted_form_data || application.form_data || {}
+    return separateFormData(dataToProcess)
+  })()
 
   return (
     <>
@@ -319,7 +449,25 @@ export function ApplicationDetailDialog({
                   <CardTitle className="text-lg">{locale === "zh" ? "申請欄位" : "Application Fields"}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {isLoadingFields ? (
+                  {error ? (
+                    <Alert variant="destructive">
+                      <AlertDescription>
+                        {locale === "zh" ? "載入失敗" : "Loading failed"}: {error}
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="mt-2 ml-2"
+                          onClick={() => {
+                            setError(null)
+                            loadDocumentLabels()
+                            loadApplicationFields()
+                          }}
+                        >
+                          {locale === "zh" ? "重試" : "Retry"}
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  ) : isLoadingFields ? (
                     <div className="flex items-center gap-2">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       <span className="text-sm text-muted-foreground">
@@ -327,24 +475,21 @@ export function ApplicationDetailDialog({
                       </span>
                     </div>
                   ) : (
-                    <ApplicationFormDataDisplay formData={dynamicFields} locale={locale} fieldLabels={fieldLabels} />
+                    <ApplicationFormDataDisplay formData={application} locale={locale} fieldLabels={fieldLabels} />
                   )}
                 </CardContent>
               </Card>
             )}
 
-            {/* 其他申請內容 - 緊湊顯示 */}
+            {/* 申請表單欄位 */}
             {Object.keys(basicFields).length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">{locale === "zh" ? "其他申請內容" : "Other Application Content"}</CardTitle>
+                  <CardTitle className="text-lg">{locale === "zh" ? "申請表單欄位" : "Application Form Fields"}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-3">
                     {Object.entries(basicFields).map(([key, value]) => {
-                      // 跳過個人陳述，因為它有自己的卡片
-                      if (key === 'personal_statement') return null
-                      
                       return (
                         <div key={key} className="flex flex-col space-y-1 p-2 bg-slate-50 rounded-md">
                           <Label className="text-xs font-medium text-gray-600">

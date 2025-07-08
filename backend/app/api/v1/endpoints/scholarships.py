@@ -54,7 +54,7 @@ async def get_scholarship_detail(
         joinedload(ScholarshipType.rules)
     ).where(ScholarshipType.id == scholarship_id)
     result = await db.execute(stmt)
-    scholarship = result.scalar_one_or_none()
+    scholarship = result.unique().scalar_one_or_none()
     if not scholarship:
         raise HTTPException(status_code=404, detail="Scholarship not found")
     return scholarship

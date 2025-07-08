@@ -21,6 +21,7 @@ class ScholarshipCategoryEnum(str, Enum):
 
 
 class ScholarshipSubTypeEnum(str, Enum):
+    GENERAL = "general"  # 一般獎學金（無子類型時的預設值）
     NSTC = "nstc"  # 國科會
     MOE_1W = "moe_1w"  # 教育部+指導教授配合款一萬
     MOE_2W = "moe_2w"  # 教育部+指導教授配合款兩萬

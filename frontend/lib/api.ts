@@ -3,6 +3,8 @@
  * Follows backend camelCase endpoint naming conventions
  */
 
+import { ScholarshipCategory } from '@/types/scholarship'
+
 export interface ApiResponse<T> {
   success: boolean
   message: string
@@ -67,11 +69,13 @@ export interface Application {
   files?: ApplicationFile[]  // 關聯的文件
   
   // 動態表單資料
-  form_data?: Record<string, any>  // 動態表單資料
+  form_data?: Record<string, any>  // 動態表單資料 (前端格式)
+  submitted_form_data?: Record<string, any>  // 後端格式的表單資料
   meta_data?: Record<string, any>  // 額外的元資料
   
-  // 後端 ApplicationListResponse 實際返回的欄位
+  // 後端 ApplicationResponse 實際返回的欄位
   user_id?: number
+  scholarship_type_id?: number  // 主獎學金ID
   scholarship_name?: string
   amount?: number
   status_name?: string
