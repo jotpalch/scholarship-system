@@ -83,6 +83,7 @@ export interface Application {
   class_ranking_percent?: number
   dept_ranking_percent?: number
   days_waiting?: number
+  scholarship_subtype_list?: string[]
   
   // Extended properties for dashboard display (保留向後兼容)
   user?: User  // 關聯的使用者資訊
@@ -489,6 +490,24 @@ export interface FormConfigSaveRequest {
     upload_instructions_en?: string
     validation_rules?: Record<string, any>
   }>
+}
+
+export interface ScholarshipStats {
+  id: number
+  name: string
+  name_en?: string
+  total_applications: number
+  pending_review: number
+  avg_wait_days: number
+  sub_types: string[]
+  has_sub_types: boolean
+}
+
+export interface SubTypeStats {
+  sub_type: string
+  total_applications: number
+  pending_review: number
+  avg_wait_days: number
 }
 
 class ApiClient {
@@ -1046,7 +1065,7 @@ class ApiClient {
     },
 
     updateEmailTemplate: async (template: EmailTemplate): Promise<ApiResponse<EmailTemplate>> => {
-      return this.request(`/admin/email-template`, {
+      return this.request('/admin/email-template', {
         method: 'PUT',
         body: JSON.stringify(template),
       })
@@ -1103,6 +1122,28 @@ class ApiClient {
       return this.request(`/admin/announcements/${id}`, {
         method: 'DELETE',
       })
+    },
+
+    // Scholarship management endpoints
+    getScholarshipStats: async (): Promise<ApiResponse<Record<string, ScholarshipStats>>> => {
+      return this.request('/admin/scholarships/stats')
+    },
+
+    getApplicationsByScholarship: async (
+      scholarshipCode: string,
+      subType?: string,
+      status?: string
+    ): Promise<ApiResponse<Application[]>> => {
+      const params = new URLSearchParams()
+      if (subType) params.append('sub_type', subType)
+      if (status) params.append('status', status)
+      
+      const queryString = params.toString()
+      return this.request(`/admin/scholarships/${scholarshipCode}/applications${queryString ? `?${queryString}` : ''}`)
+    },
+
+    getScholarshipSubTypes: async (scholarshipCode: string): Promise<ApiResponse<SubTypeStats[]>> => {
+      return this.request(`/admin/scholarships/${scholarshipCode}/sub-types`)
     },
   }
 

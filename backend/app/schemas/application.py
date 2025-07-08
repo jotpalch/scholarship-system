@@ -302,12 +302,14 @@ class ApplicationListResponse(BaseModel):
     student_no: Optional[str] = None
     
     # Extended fields for college/admin dashboard
-    gpa: Optional[Decimal] = None
     department: Optional[str] = None
     nationality: Optional[str] = None
     
     # Chinese display name for scholarship type
     scholarship_type_zh: Optional[str] = None
+    
+    # Scholarship subtype list
+    scholarship_subtype_list: Optional[List[str]] = []
     
     # Computed fields
     days_waiting: Optional[int] = None  # Days since submission

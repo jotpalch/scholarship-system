@@ -522,8 +522,11 @@ class ApplicationService:
                 ApplicationStatus.PENDING_RECOMMENDATION.value
             ]))
         
+        # Join with ScholarshipType to get scholarship information
+        stmt = stmt.join(ScholarshipType, Application.scholarship_type_id == ScholarshipType.id)
+        
         if scholarship_type:
-            stmt = stmt.where(Application.scholarship_type == scholarship_type)
+            stmt = stmt.where(ScholarshipType.code == scholarship_type)
         
         stmt = stmt.order_by(desc(Application.submitted_at))
         result = await self.db.execute(stmt)
@@ -532,7 +535,19 @@ class ApplicationService:
         # Add student info and computed fields to response
         response_list = []
         for app in applications:
-            app_data = ApplicationListResponse.model_validate(app)
+            # Get scholarship details
+            scholarship_stmt = select(ScholarshipType).where(ScholarshipType.id == app.scholarship_type_id)
+            scholarship_result = await self.db.execute(scholarship_stmt)
+            scholarship = scholarship_result.scalar_one_or_none()
+            
+            # Create response with required fields
+            app_data = {
+                **app.__dict__,
+                'scholarship_type': scholarship.code if scholarship else None,
+                'scholarship_name': scholarship.name if scholarship else None,
+                'amount': scholarship.amount if scholarship else None
+            }
+            app_data = ApplicationListResponse.model_validate(app_data)
             
             # Add student information from User relationship (student)
             if app.student:
@@ -546,10 +561,6 @@ class ApplicationService:
                     app_data.student_no = app.studentProfile.stdNo
                 if not app_data.student_name and hasattr(app.studentProfile, 'cname'):
                     app_data.student_name = app.studentProfile.cname
-            
-            # Add scholarship information (these are stored directly in Application)
-            app_data.amount = app.amount
-            app_data.scholarship_name = app.scholarship_name
             
             # Calculate days waiting
             if app.submitted_at:

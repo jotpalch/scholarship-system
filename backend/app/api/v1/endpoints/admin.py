@@ -17,6 +17,7 @@ from app.models.application import Application, ApplicationStatus
 from app.models.student import Student
 from app.models.notification import Notification
 from app.services.system_setting_service import SystemSettingService, EmailTemplateService
+from app.models.scholarship import ScholarshipType, ScholarshipStatus
 
 router = APIRouter()
 
@@ -32,8 +33,12 @@ async def get_all_applications(
 ):
     """Get all applications with pagination (admin only)"""
     
-    # Base query
-    stmt = select(Application).join(User, Application.user_id == User.id)
+    # Build query with joins
+    stmt = select(Application, User, ScholarshipType).join(
+        User, Application.user_id == User.id
+    ).outerjoin(
+        ScholarshipType, Application.scholarship_type_id == ScholarshipType.id
+    )
     
     # Apply filters
     if status:
@@ -57,12 +62,49 @@ async def get_all_applications(
     
     # Execute query
     result = await db.execute(stmt)
-    applications = result.scalars().all()
+    application_tuples = result.fetchall()
     
     # Convert to response format
-    application_list = [
-        ApplicationListResponse.model_validate(app) for app in applications
-    ]
+    application_list = []
+    for app_tuple in application_tuples:
+        app, user, scholarship_type = app_tuple
+        
+        # Create response data with proper field mapping
+        app_data = {
+            "id": app.id,
+            "app_id": app.app_id,
+            "user_id": app.user_id,
+            "student_id": app.student_id,
+            "scholarship_type": scholarship_type.code if scholarship_type else "unknown",
+            "scholarship_name": scholarship_type.name if scholarship_type else "Unknown Scholarship",
+            "amount": scholarship_type.amount if scholarship_type else None,
+            "status": app.status,
+            "status_name": app.status_name,
+            "submitted_at": app.submitted_at,
+            "created_at": app.created_at,
+            "updated_at": app.updated_at,
+            "student_name": user.full_name if user else None,
+            "student_no": getattr(user, 'student_no', None),
+            "department": None,
+            "nationality": None,
+            "scholarship_type_zh": None,
+            "scholarship_subtype_list": app.scholarship_subtype_list or [],
+            "days_waiting": None
+        }
+        
+        # Calculate days waiting
+        if app.submitted_at:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            submitted_time = app.submitted_at
+            
+            if submitted_time.tzinfo is None:
+                submitted_time = submitted_time.replace(tzinfo=timezone.utc)
+            
+            days_diff = (now - submitted_time).days
+            app_data["days_waiting"] = max(0, days_diff)
+        
+        application_list.append(ApplicationListResponse.model_validate(app_data))
     
     return PaginatedResponse(
         items=application_list,
@@ -73,7 +115,7 @@ async def get_all_applications(
     )
 
 
-@router.get("/dashboard/stats", response_model=Dict[str, Any])
+@router.get("/dashboard/stats", response_model=ApiResponse[Dict[str, Any]])
 async def get_dashboard_stats(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -132,30 +174,38 @@ async def get_dashboard_stats(
     avg_days = result.scalar()
     avg_processing_time = f"{avg_days:.1f}天" if avg_days else "N/A"
     
-    return {
-        "total_applications": total_applications,
-        "pending_review": pending_review,
-        "approved": approved_this_month,
-        "rejected": status_counts.get(ApplicationStatus.REJECTED.value, 0),
-        "avg_processing_time": avg_processing_time
-    }
+    return ApiResponse(
+        success=True,
+        message="Dashboard statistics retrieved successfully",
+        data={
+            "total_applications": total_applications,
+            "pending_review": pending_review,
+            "approved": approved_this_month,
+            "rejected": status_counts.get(ApplicationStatus.REJECTED.value, 0),
+            "avg_processing_time": avg_processing_time
+        }
+    )
 
 
-@router.get("/system/health", response_model=Dict[str, Any])
+@router.get("/system/health", response_model=ApiResponse[Dict[str, Any]])
 async def get_system_health(
     current_user: User = Depends(require_admin)
 ):
     """Get system health status"""
-    return {
-        "status": "healthy",
-        "database": "connected",
-        "redis": "connected",
-        "storage": "available",
-        "timestamp": "2025-06-15T10:30:00Z"
-    }
+    return ApiResponse(
+        success=True,
+        message="System health status retrieved successfully",
+        data={
+            "status": "healthy",
+            "database": "connected",
+            "redis": "connected",
+            "storage": "available",
+            "timestamp": "2025-06-15T10:30:00Z"
+        }
+    )
 
 
-@router.get("/system-setting", response_model=SystemSettingSchema)
+@router.get("/system-setting", response_model=ApiResponse[SystemSettingSchema])
 async def get_system_setting(
     key: str = Query(..., description="Setting key"),
     current_user: User = Depends(require_admin),
@@ -164,14 +214,22 @@ async def get_system_setting(
     """Get system setting by key (admin only)"""
     setting = await SystemSettingService.get_setting(db, key)
     if not setting:
-        return SystemSettingSchema(
-            key=key,
-            value=""
+        return ApiResponse(
+            success=True,
+            message="System setting retrieved successfully",
+            data=SystemSettingSchema(
+                key=key,
+                value=""
+            )
         )
-    return SystemSettingSchema.model_validate(setting)
+    return ApiResponse(
+        success=True,
+        message="System setting retrieved successfully",
+        data=SystemSettingSchema.model_validate(setting)
+    )
 
 
-@router.put("/system-setting", response_model=SystemSettingSchema)
+@router.put("/system-setting", response_model=ApiResponse[SystemSettingSchema])
 async def set_system_setting(
     data: SystemSettingSchema,
     current_user: User = Depends(require_admin),
@@ -183,7 +241,11 @@ async def set_system_setting(
         key=data.key,
         value=data.value
     )
-    return SystemSettingSchema.model_validate(setting)
+    return ApiResponse(
+        success=True,
+        message="System setting updated successfully",
+        data=SystemSettingSchema.model_validate(setting)
+    )
 
 
 @router.get("/email-template")
@@ -236,7 +298,7 @@ async def update_email_template(
     }
 
 
-@router.get("/recent-applications", response_model=List[ApplicationListResponse])
+@router.get("/recent-applications", response_model=ApiResponse[List[ApplicationListResponse]])
 async def get_recent_applications(
     limit: int = Query(5, ge=1, le=20, description="Number of recent applications"),
     current_user: User = Depends(require_admin),
@@ -244,12 +306,15 @@ async def get_recent_applications(
 ):
     """Get recent applications for admin dashboard"""
     
-    stmt = select(Application).join(User, Application.user_id == User.id).order_by(
-        desc(Application.created_at)
-    ).limit(limit)
+    # Build query with joins
+    stmt = select(Application, User, ScholarshipType).join(
+        User, Application.user_id == User.id
+    ).outerjoin(
+        ScholarshipType, Application.scholarship_type_id == ScholarshipType.id
+    ).order_by(desc(Application.created_at)).limit(limit)
     
     result = await db.execute(stmt)
-    applications = result.scalars().all()
+    application_tuples = result.fetchall()
     
     # Add Chinese scholarship type names
     scholarship_type_zh = {
@@ -260,16 +325,57 @@ async def get_recent_applications(
     }
     
     response_list = []
-    for app in applications:
-        app_data = ApplicationListResponse.model_validate(app)
-        # Add Chinese scholarship type name
-        app_data.scholarship_type_zh = scholarship_type_zh.get(app.scholarship_type, app.scholarship_type)
-        response_list.append(app_data)
+    for app_tuple in application_tuples:
+        app, user, scholarship_type = app_tuple
+        
+        # Create response data with proper field mapping
+        app_data = {
+            "id": app.id,
+            "app_id": app.app_id,
+            "user_id": app.user_id,
+            "student_id": app.student_id,
+            "scholarship_type": scholarship_type.code if scholarship_type else "unknown",
+            "scholarship_name": scholarship_type.name if scholarship_type else "Unknown Scholarship",
+            "amount": scholarship_type.amount if scholarship_type else None,
+            "status": app.status,
+            "status_name": app.status_name,
+            "submitted_at": app.submitted_at,
+            "created_at": app.created_at,
+            "updated_at": app.updated_at,
+            "student_name": user.full_name if user else None,
+            "student_no": getattr(user, 'student_no', None),
+            "department": None,
+            "nationality": None,
+            "scholarship_type_zh": scholarship_type_zh.get(
+                scholarship_type.code if scholarship_type else "unknown", 
+                scholarship_type.code if scholarship_type else "unknown"
+            ),
+            "scholarship_subtype_list": app.scholarship_subtype_list or [],
+            "days_waiting": None
+        }
+        
+        # Calculate days waiting
+        if app.submitted_at:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            submitted_time = app.submitted_at
+            
+            if submitted_time.tzinfo is None:
+                submitted_time = submitted_time.replace(tzinfo=timezone.utc)
+            
+            days_diff = (now - submitted_time).days
+            app_data["days_waiting"] = max(0, days_diff)
+        
+        response_list.append(ApplicationListResponse.model_validate(app_data))
     
-    return response_list
+    return ApiResponse(
+        success=True,
+        message="Recent applications retrieved successfully",
+        data=response_list
+    )
 
 
-@router.get("/system-announcements", response_model=List[NotificationResponse])
+@router.get("/system-announcements", response_model=ApiResponse[List[NotificationResponse]])
 async def get_system_announcements(
     limit: int = Query(5, ge=1, le=20, description="Number of announcements"),
     current_user: User = Depends(require_admin),
@@ -315,7 +421,11 @@ async def get_system_announcements(
         }
         response_list.append(NotificationResponse.model_validate(notification_dict))
     
-    return response_list
+    return ApiResponse(
+        success=True,
+        message="System announcements retrieved successfully",
+        data=response_list
+    )
 
 
 # === 系統公告 CRUD === #
@@ -397,7 +507,7 @@ async def get_all_announcements(
     )
 
 
-@router.post("/announcements", response_model=NotificationResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/announcements", response_model=ApiResponse[NotificationResponse], status_code=status.HTTP_201_CREATED)
 async def create_announcement(
     announcement_data: NotificationCreate,
     current_user: User = Depends(require_admin),
@@ -450,10 +560,14 @@ async def create_announcement(
         'meta_data': announcement.meta_data if isinstance(announcement.meta_data, (dict, type(None))) else None
     }
     
-    return NotificationResponse.model_validate(announcement_dict)
+    return ApiResponse(
+        success=True,
+        message="System announcement created successfully",
+        data=NotificationResponse.model_validate(announcement_dict)
+    )
 
 
-@router.get("/announcements/{announcement_id}", response_model=NotificationResponse)
+@router.get("/announcements/{announcement_id}", response_model=ApiResponse[NotificationResponse])
 async def get_announcement(
     announcement_id: int,
     current_user: User = Depends(require_admin),
@@ -497,10 +611,14 @@ async def get_announcement(
         'meta_data': announcement.meta_data if isinstance(announcement.meta_data, (dict, type(None))) else None
     }
     
-    return NotificationResponse.model_validate(announcement_dict)
+    return ApiResponse(
+        success=True,
+        message="System announcement retrieved successfully",
+        data=NotificationResponse.model_validate(announcement_dict)
+    )
 
 
-@router.put("/announcements/{announcement_id}", response_model=NotificationResponse)
+@router.put("/announcements/{announcement_id}", response_model=ApiResponse[NotificationResponse])
 async def update_announcement(
     announcement_id: int,
     announcement_data: NotificationUpdate,
@@ -558,10 +676,14 @@ async def update_announcement(
         'meta_data': announcement.meta_data if isinstance(announcement.meta_data, (dict, type(None))) else None
     }
     
-    return NotificationResponse.model_validate(announcement_dict)
+    return ApiResponse(
+        success=True,
+        message="System announcement updated successfully",
+        data=NotificationResponse.model_validate(announcement_dict)
+    )
 
 
-@router.delete("/announcements/{announcement_id}", response_model=MessageResponse)
+@router.delete("/announcements/{announcement_id}", response_model=ApiResponse[MessageResponse])
 async def delete_announcement(
     announcement_id: int,
     current_user: User = Depends(require_admin),
@@ -589,4 +711,218 @@ async def delete_announcement(
     await db.delete(announcement)
     await db.commit()
     
-    return MessageResponse(message="系統公告已成功刪除") 
+    return ApiResponse(
+        success=True,
+        message="系統公告已成功刪除",
+        data=MessageResponse(message="系統公告已成功刪除")
+    )
+
+
+@router.get("/scholarships/stats", response_model=ApiResponse[Dict[str, Any]])
+async def get_scholarship_statistics(
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get scholarship-specific statistics for admin dashboard"""
+    
+    # Get all scholarship types
+    stmt = select(ScholarshipType).where(ScholarshipType.status == ScholarshipStatus.ACTIVE.value)
+    result = await db.execute(stmt)
+    scholarships = result.scalars().all()
+    
+    scholarship_stats = {}
+    
+    for scholarship in scholarships:
+        # Get applications for this scholarship type
+        stmt = select(Application).where(Application.scholarship_type_id == scholarship.id)
+        result = await db.execute(stmt)
+        applications = result.scalars().all()
+        
+        # Calculate statistics
+        total_applications = len(applications)
+        pending_review = len([app for app in applications if app.status in [
+            ApplicationStatus.SUBMITTED.value,
+            ApplicationStatus.UNDER_REVIEW.value,
+            ApplicationStatus.PENDING_RECOMMENDATION.value
+        ]])
+        
+        # Calculate average wait time for completed applications
+        completed_apps = [app for app in applications if app.status in [
+            ApplicationStatus.APPROVED.value,
+            ApplicationStatus.REJECTED.value
+        ] and app.submitted_at and app.reviewed_at]
+        
+        avg_wait_days = 0
+        if completed_apps:
+            total_days = sum([
+                (app.reviewed_at - app.submitted_at).days 
+                for app in completed_apps
+            ])
+            avg_wait_days = round(total_days / len(completed_apps), 1)
+        
+        # Get sub-types if they exist
+        sub_types = scholarship.sub_type_list or []
+        
+        scholarship_stats[scholarship.code] = {
+            "id": scholarship.id,
+            "name": scholarship.name,
+            "name_en": scholarship.name_en,
+            "total_applications": total_applications,
+            "pending_review": pending_review,
+            "avg_wait_days": avg_wait_days,
+            "sub_types": sub_types,
+            "has_sub_types": len(sub_types) > 0 and "general" not in sub_types
+        }
+    
+    return ApiResponse(
+        success=True,
+        message="Scholarship statistics retrieved successfully",
+        data=scholarship_stats
+    )
+
+
+@router.get("/scholarships/{scholarship_code}/applications", response_model=ApiResponse[List[ApplicationListResponse]])
+async def get_applications_by_scholarship(
+    scholarship_code: str,
+    sub_type: Optional[str] = Query(None, description="Filter by sub-type"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get applications for a specific scholarship type"""
+    
+    # Verify scholarship exists
+    stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_code)
+    result = await db.execute(stmt)
+    scholarship = result.scalar_one_or_none()
+    
+    if not scholarship:
+        raise HTTPException(status_code=404, detail="Scholarship not found")
+    
+    # Build query with joins
+    stmt = select(Application, User).join(
+        User, Application.user_id == User.id
+    ).where(Application.scholarship_type_id == scholarship.id)
+    
+    if status:
+        stmt = stmt.where(Application.status == status)
+    
+    if sub_type:
+        # Filter by sub-type in scholarship_subtype_list
+        stmt = stmt.where(Application.scholarship_subtype_list.contains([sub_type]))
+    
+    stmt = stmt.order_by(desc(Application.submitted_at))
+    result = await db.execute(stmt)
+    application_tuples = result.fetchall()
+    
+    # Convert to response format
+    response_list = []
+    for app_tuple in application_tuples:
+        app, user = app_tuple
+        
+        # Create response data with proper field mapping
+        app_data = {
+            "id": app.id,
+            "app_id": app.app_id,
+            "user_id": app.user_id,
+            "student_id": app.student_id,
+            "scholarship_type": scholarship.code,
+            "scholarship_name": scholarship.name,
+            "amount": scholarship.amount,
+            "status": app.status,
+            "status_name": app.status_name,
+            "submitted_at": app.submitted_at,
+            "created_at": app.created_at,
+            "updated_at": app.updated_at,
+            "student_name": user.full_name if user else None,
+            "student_no": getattr(user, 'student_no', None),
+            "department": None,
+            "nationality": None,
+            "scholarship_type_zh": None,
+            "scholarship_subtype_list": app.scholarship_subtype_list or [],
+            "days_waiting": None
+        }
+        
+        # Calculate days waiting
+        if app.submitted_at:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            submitted_time = app.submitted_at
+            
+            if submitted_time.tzinfo is None:
+                submitted_time = submitted_time.replace(tzinfo=timezone.utc)
+            
+            days_diff = (now - submitted_time).days
+            app_data["days_waiting"] = max(0, days_diff)
+        
+        response_list.append(ApplicationListResponse.model_validate(app_data))
+    
+    return ApiResponse(
+        success=True,
+        message=f"Applications for scholarship {scholarship_code} retrieved successfully",
+        data=response_list
+    )
+
+
+@router.get("/scholarships/{scholarship_code}/sub-types", response_model=ApiResponse[List[Dict[str, Any]]])
+async def get_scholarship_sub_types(
+    scholarship_code: str,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get sub-types for a specific scholarship"""
+    
+    # Get scholarship
+    stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_code)
+    result = await db.execute(stmt)
+    scholarship = result.scalar_one_or_none()
+    
+    if not scholarship:
+        raise HTTPException(status_code=404, detail="Scholarship not found")
+    
+    sub_types = scholarship.sub_type_list or []
+    
+    # Return sub-types with statistics
+    sub_type_stats = []
+    for sub_type in sub_types:
+        # Get applications for this sub-type
+        stmt = select(Application).where(
+            Application.scholarship_type_id == scholarship.id,
+            Application.scholarship_subtype_list.contains([sub_type])
+        )
+        result = await db.execute(stmt)
+        applications = result.scalars().all()
+        
+        total_applications = len(applications)
+        pending_review = len([app for app in applications if app.status in [
+            ApplicationStatus.SUBMITTED.value,
+            ApplicationStatus.UNDER_REVIEW.value,
+            ApplicationStatus.PENDING_RECOMMENDATION.value
+        ]])
+        
+        # Calculate average wait time
+        completed_apps = [app for app in applications if app.status in [
+            ApplicationStatus.APPROVED.value,
+            ApplicationStatus.REJECTED.value
+        ] and app.submitted_at and app.reviewed_at]
+        
+        avg_wait_days = 0
+        if completed_apps:
+            total_days = sum([
+                (app.reviewed_at - app.submitted_at).days 
+                for app in completed_apps
+            ])
+            avg_wait_days = round(total_days / len(completed_apps), 1)
+        
+        sub_type_stats.append({
+            "sub_type": sub_type,
+            "total_applications": total_applications,
+            "pending_review": pending_review,
+            "avg_wait_days": avg_wait_days
+        })
+    
+    return ApiResponse(
+        success=True,
+        message=f"Sub-type statistics for scholarship {scholarship_code} retrieved successfully",
+        data=sub_type_stats
+    ) 
