@@ -26,8 +26,14 @@ import {
   RefreshCw
 } from "lucide-react"
 import { useScholarshipSpecificApplications } from "@/hooks/use-admin"
+import { ApplicationDetailDialog } from "@/components/application-detail-dialog"
+import { Locale } from "@/lib/validators"
 
-interface Application {
+// Use the Application type from the API
+import { Application } from "@/lib/api"
+
+// Dashboard-specific Application interface for the data we actually receive
+interface DashboardApplication {
   id: number
   student_name?: string
   student_no?: string
@@ -39,6 +45,16 @@ interface Application {
   user?: {
     email: string
   }
+  // Additional fields that might be present
+  app_id?: string
+  student_id?: string
+  scholarship_type?: string
+  created_at?: string
+  gpa?: number
+  class_ranking_percent?: number
+  dept_ranking_percent?: number
+  personal_statement?: string
+  form_data?: Record<string, any>
 }
 
 export function ScholarshipSpecificDashboard() {
@@ -53,6 +69,9 @@ export function ScholarshipSpecificDashboard() {
     updateApplicationStatus 
   } = useScholarshipSpecificApplications()
 
+  // Locale state for internationalization
+  const [locale, setLocale] = useState<Locale>("zh")
+
   // Debug logging
   console.log('ScholarshipSpecificDashboard render:', {
     scholarshipTypes,
@@ -62,13 +81,14 @@ export function ScholarshipSpecificDashboard() {
     error
   })
 
-  const [selectedApplication, setSelectedApplication] = useState<Application | null>(null)
+  const [selectedApplication, setSelectedApplication] = useState<DashboardApplication | null>(null)
   const [activeTab, setActiveTab] = useState("")
   const [selectedSubTypes, setSelectedSubTypes] = useState<string[]>([]) // 多選子類型
   const [tabLoading, setTabLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [showApplicationDetail, setShowApplicationDetail] = useState(false)
+  const [selectedApplicationForDetail, setSelectedApplicationForDetail] = useState<DashboardApplication | null>(null)
 
   // 動態獲取各類型申請資料
   const getApplicationsByType = (type: string) => applicationsByType[type] || []
@@ -321,7 +341,7 @@ export function ScholarshipSpecificDashboard() {
                           variant="outline"
                           size="sm"
                           onClick={() => {
-                            setSelectedApplication(app)
+                            setSelectedApplicationForDetail(app)
                             setShowApplicationDetail(true)
                           }}
                         >
@@ -602,7 +622,16 @@ export function ScholarshipSpecificDashboard() {
         ))}
       </Tabs>
 
-      {/* 申請詳情 Modal 可以在這裡添加 */}
+      {/* 申請詳情 Modal */}
+      <ApplicationDetailDialog
+        isOpen={showApplicationDetail}
+        onClose={() => {
+          setShowApplicationDetail(false)
+          setSelectedApplicationForDetail(null)
+        }}
+        application={selectedApplicationForDetail ? selectedApplicationForDetail as Application : null}
+        locale={locale}
+      />
     </div>
   )
 }
