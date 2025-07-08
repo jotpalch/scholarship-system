@@ -77,6 +77,18 @@ class Settings(BaseSettings):
     enable_mock_sso: bool = config("ENABLE_MOCK_SSO", default=True, cast=bool)
     mock_sso_domain: str = config("MOCK_SSO_DOMAIN", default="dev.university.edu")
     
+    # NYCU OAuth Configuration
+    nycu_oauth_enabled: bool = config("NYCU_OAUTH_ENABLED", default=True, cast=bool)
+    nycu_client_id: str = config("NYCU_CLIENT_ID", default="Auzal0boWyND8ylWKbx4lGswChDSbMAsQRkgia2E")
+    nycu_client_secret: str = config("NYCU_CLIENT_SECRET", default="lfqcybIL8fAsnSd47reh8Ye6PRQIrayg5EQVNC1SQ2DtJtsE441MwPG1dOm9ZuxlC6bfNcdpyoqDZEK42rEpzHFaRVbYO0GiZwQDqcxHq8LffjeuUqOlrsVXQJnH6Zz3")
+    nycu_authorization_url: str = config("NYCU_AUTHORIZATION_URL", default="https://id.nycu.edu.tw/o/authorize/")
+    nycu_token_url: str = config("NYCU_TOKEN_URL", default="https://id.nycu.edu.tw/o/token/")
+    nycu_profile_url: str = config("NYCU_PROFILE_URL", default="https://id.nycu.edu.tw/api/profile/")
+    nycu_name_url: str = config("NYCU_NAME_URL", default="https://id.nycu.edu.tw/api/name/")
+    nycu_status_url: str = config("NYCU_STATUS_URL", default="https://id.nycu.edu.tw/api/status/")
+    nycu_redirect_uri: str = config("NYCU_REDIRECT_URI", default="http://140.113.207.40:3000/sso-redirect")
+    nycu_oauth_scopes: str = config("NYCU_OAUTH_SCOPES", default="profile name")
+    
     @field_validator("database_url", mode="before")
     @classmethod
     def assemble_db_connection(cls, v: str) -> str:

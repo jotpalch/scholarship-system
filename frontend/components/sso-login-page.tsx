@@ -1,13 +1,30 @@
 "use client";
 
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { GraduationCap, ExternalLink } from "lucide-react";
+import { GraduationCap, ExternalLink, Loader2 } from "lucide-react";
 
 export function SSOLoginPage() {
-  const handleSSOLogin = () => {
-    // Redirect to backend SSO endpoint
-    window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/sso/login`;
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSSOLogin = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/auth/sso/login`
+      );
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "無法取得 SSO 登入網址");
+      }
+      window.location.href = data.data.authorization_url;
+    } catch (err: any) {
+      setError(err.message || "無法取得 SSO 登入網址");
+      setLoading(false);
+    }
   };
 
   return (
@@ -25,10 +42,18 @@ export function SSOLoginPage() {
             <Button 
               onClick={handleSSOLogin}
               className="w-full"
+              disabled={loading}
             >
-              <ExternalLink className="h-4 w-4 mr-2" />
+              {loading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <ExternalLink className="h-4 w-4 mr-2" />
+              )}
               使用 SSO 登入
             </Button>
+            {error && (
+              <div className="text-red-600 text-center text-sm py-2">{error}</div>
+            )}
             <p className="text-center text-sm text-gray-600">
               請使用您的校園帳號登入系統
             </p>

@@ -10,6 +10,7 @@ from app.schemas.user import UserCreate, UserLogin, TokenResponse, UserResponse
 from app.schemas.common import MessageResponse
 from app.services.auth_service import AuthService
 from app.services.mock_sso_service import MockSSOService
+from app.services.nycu_oauth_service import NYCUOAuthService
 from app.services.developer_profile_service import DeveloperProfileService, DeveloperProfile, DeveloperProfileManager
 from app.core.security import get_current_user
 from app.core.config import settings
@@ -431,4 +432,72 @@ async def delete_specific_profile(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid role: {role}"
+        )
+
+
+# NYCU OAuth endpoints
+@router.get("/sso/login")
+async def nycu_sso_login():
+    """Redirect to NYCU OAuth authorization"""
+    if not settings.nycu_oauth_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="NYCU OAuth is disabled"
+        )
+    
+    nycu_service = NYCUOAuthService(None)  # We don't need DB for this
+    authorization_url = nycu_service.get_authorization_url()
+    
+    return {
+        "success": True,
+        "message": "NYCU OAuth authorization URL generated",
+        "data": {
+            "authorization_url": authorization_url
+        }
+    }
+
+
+@router.get("/sso/callback")
+async def nycu_sso_callback(
+    code: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Handle NYCU OAuth callback"""
+    if not settings.nycu_oauth_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="NYCU OAuth is disabled"
+        )
+    
+    if not code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Authorization code is required"
+        )
+    
+    try:
+        nycu_service = NYCUOAuthService(db)
+        user, access_token = await nycu_service.handle_oauth_callback(code)
+        
+        return {
+            "success": True,
+            "message": "NYCU OAuth login successful",
+            "data": {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "expires_in": 3600,
+                "user": {
+                    "id": str(user.id),
+                    "username": user.username,
+                    "email": user.email,
+                    "role": user.role.value,
+                    "full_name": user.full_name,
+                    "is_active": user.is_active
+                }
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"OAuth authentication failed: {str(e)}"
         ) 
