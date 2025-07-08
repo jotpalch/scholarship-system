@@ -38,7 +38,7 @@ export function ApplicationDetailDialog({
 }: ApplicationDetailDialogProps) {
   const [applicationFiles, setApplicationFiles] = useState<any[]>([])
   const [isLoadingFiles, setIsLoadingFiles] = useState(false)
-  const [previewFile, setPreviewFile] = useState<{ url: string; filename: string; type: string } | null>(null)
+  const [previewFile, setPreviewFile] = useState<{ url: string; filename: string; type: string; downloadUrl?: string } | null>(null)
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false)
   const [documentLabels, setDocumentLabels] = useState<{[key: string]: { zh?: string, en?: string }}>({})
   const [isLoadingLabels, setIsLoadingLabels] = useState(false)
@@ -180,10 +180,14 @@ export function ApplicationDetailDialog({
       hasToken: !!token
     })
     
+    // 構建下載URL
+    const downloadUrl = file.download_url || file.file_path
+    
     setPreviewFile({
       url: previewUrl,
       filename: filename,
-      type: fileType
+      type: fileType,
+      downloadUrl: downloadUrl
     })
     setIsPreviewDialogOpen(true)
   }

@@ -734,10 +734,11 @@ class ApplicationService:
         # Save file metadata to database
         file_record = ApplicationFile(
             application_id=application_id,
-            filename=file.filename,
+            filename=file.filename,  # Keep original filename for display
+            original_filename=file.filename,  # Store original filename
             file_type=file_type,
             file_size=file_size,
-            object_name=object_name,
+            object_name=object_name,  # This is now UUID-based path
             uploaded_at=datetime.utcnow(),
             content_type=file.content_type or 'application/octet-stream',
             mime_type=file.content_type or 'application/octet-stream'

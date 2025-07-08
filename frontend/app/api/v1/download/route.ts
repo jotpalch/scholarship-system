@@ -30,10 +30,10 @@ export async function GET(request: NextRequest) {
       )
     }
     
-    // 預設使用內部 Docker 網路地址來訪問後端，如果沒有設定則使用 NEXT_PUBLIC_API_URL
-    const backendUrl = `${process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL}/api/v1/files/applications/${applicationId}/files/${fileId}?token=${token}`
+    // 使用後端的下載端點
+    const backendUrl = `${process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL}/api/v1/files/applications/${applicationId}/files/${fileId}/download?token=${token}`
     
-    console.log('Preview API called:', {
+    console.log('Download API called:', {
       fileId,
       applicationId,
       backendUrl
@@ -59,35 +59,27 @@ export async function GET(request: NextRequest) {
     const fileBuffer = await response.arrayBuffer()
     const contentType = response.headers.get('content-type') || 'application/octet-stream'
     
-    // 根據文件類型設置適當的 Content-Type
-    let finalContentType = contentType
-    if (type === 'pdf') {
-      finalContentType = 'application/pdf'
-    } else if (type === 'image') {
-      finalContentType = contentType.startsWith('image/') ? contentType : 'image/jpeg'
-    }
-    
     // 處理中文文件名編碼
-    let contentDisposition = 'inline'
+    let contentDisposition = 'attachment'
     if (filename) {
       // 使用 encodeURIComponent 來正確編碼中文文件名
       const encodedFilename = encodeURIComponent(filename)
-      contentDisposition = `inline; filename*=UTF-8''${encodedFilename}`
+      contentDisposition = `attachment; filename*=UTF-8''${encodedFilename}`
     }
     
     // 返回文件給用戶
     return new NextResponse(fileBuffer, {
       status: 200,
       headers: {
-        'Content-Type': finalContentType,
+        'Content-Type': contentType,
         'Content-Disposition': contentDisposition,
-        'Cache-Control': 'private, max-age=3600', // 1小時緩存
+        'Cache-Control': 'no-cache',
       },
     })
   } catch (error) {
-    console.error('File preview error:', error)
+    console.error('File download error:', error)
     return NextResponse.json(
-      { error: 'Failed to preview file' },
+      { error: 'Failed to download file' },
       { status: 500 }
     )
   }
