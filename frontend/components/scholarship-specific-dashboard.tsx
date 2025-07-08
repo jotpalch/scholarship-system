@@ -1096,7 +1096,7 @@ export function ScholarshipSpecificDashboard({ user, locale = "zh" }: Scholarshi
                                   }
                                   
                                   // 構建前端預覽URL，包含token參數
-                                  const previewUrl = `/api/preview?fileId=${file.id}&filename=${encodeURIComponent(filename)}&type=${encodeURIComponent(file.file_type)}&applicationId=${selectedApplication.id}&token=${token}`
+                                  const previewUrl = `/api/v1/preview?fileId=${file.id}&filename=${encodeURIComponent(filename)}&type=${encodeURIComponent(file.file_type)}&applicationId=${selectedApplication.id}&token=${token}`
                                   
                                   // For PDF files, use iframe preview
                                   if (filename.toLowerCase().endsWith('.pdf')) {
@@ -1219,7 +1219,7 @@ export function ScholarshipSpecificDashboard({ user, locale = "zh" }: Scholarshi
                   <Button
                     onClick={() => {
                       // 使用前端URL在新視窗開啟，確保包含token
-                      const frontendUrl = previewFile.url.startsWith('/api/preview') 
+                      const frontendUrl = previewFile.url.startsWith('/api/v1/preview') 
                         ? previewFile.url 
                         : (() => {
                             // 從原始文件URL中提取token
@@ -1235,7 +1235,7 @@ export function ScholarshipSpecificDashboard({ user, locale = "zh" }: Scholarshi
                               const token = urlParams.get('token')
                               
                               if (token) {
-                                return `/api/preview?fileId=${originalFile.id}&filename=${encodeURIComponent(previewFile.filename)}&type=${encodeURIComponent(originalFile.file_type)}&applicationId=${applicationId}&token=${token}`
+                                return `/api/v1/preview?fileId=${originalFile.id}&filename=${encodeURIComponent(previewFile.filename)}&type=${encodeURIComponent(originalFile.file_type)}&applicationId=${applicationId}&token=${token}`
                               }
                             }
                             return previewFile.url

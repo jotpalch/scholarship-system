@@ -22,10 +22,11 @@ from app.models.scholarship import ScholarshipType
 from app.schemas.application import (
     ApplicationCreate, ApplicationUpdate, ApplicationResponse,
     ApplicationListResponse, ApplicationStatusUpdate,
-    ApplicationReviewCreate, ApplicationReviewResponse
+    ApplicationReviewCreate, ApplicationReviewResponse, ApplicationFormData
 )
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
+from app.services.student_service import StudentService
 
 
 async def get_student_from_user(user: User, db: AsyncSession) -> Optional[Student]:
@@ -44,6 +45,7 @@ class ApplicationService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.emailService = EmailService()
+        self.student_service = StudentService(db)
     
     def _serialize_for_json(self, data: Any) -> Any:
         """Serialize data for JSON response"""
@@ -128,64 +130,73 @@ class ApplicationService:
             raise ConflictError("You already have an active application for this scholarship")
     
     async def create_application(
-        self, 
-        user: User, 
+        self,
+        user_id: int,
+        student_id: int,
         application_data: ApplicationCreate
-    ) -> ApplicationResponse:
-        """Create a new scholarship application"""
-        # Get student profile
-        student = await get_student_from_user(user, self.db)
+    ) -> Application:
+        """Create a new application"""
+        print(f"[Debug] Starting application creation for user_id={user_id}, student_id={student_id}")
+        print(f"[Debug] Application data received: {application_data.dict(exclude_none=True)}")
         
-        if not student:
-            raise ValidationError(f"Student profile not found for user {user.username}")
+        # Get user and student
+        stmt = select(User).where(User.id == user_id)
+        result = await self.db.execute(stmt)
+        user = result.scalar_one()
         
-        # Validate eligibility
-        await self._validate_student_eligibility(student, application_data.scholarship_type, application_data)
+        stmt = select(Student).options(
+            selectinload(Student.academicRecords),
+            selectinload(Student.contacts),
+            selectinload(Student.termRecords)
+        ).where(Student.id == student_id)
+        result = await self.db.execute(stmt)
+        student = result.scalar_one()
         
-        # Get scholarship details
+        # Get student snapshot
+        print(f"[Debug] Fetching student snapshot for student_id={student_id}")
+        student_snapshot = await self.student_service.get_student_snapshot(student)
+        print(f"[Debug] Student snapshot: {student_snapshot}")
+        
+        # Get scholarship type
         stmt = select(ScholarshipType).where(ScholarshipType.code == application_data.scholarship_type)
         result = await self.db.execute(stmt)
-        scholarship = result.scalar_one_or_none()
+        scholarship = result.scalar_one()
+        
+        # Create application ID
+        app_id = f"APP-{datetime.now().year}-{str(uuid.uuid4())[:8]}"
+        
+        # Serialize form data for JSON storage
+        serialized_form_data = self._serialize_for_json(application_data.form_data.dict())
         
         # Create application
-        app_id = self._generate_app_id()
         application = Application(
             app_id=app_id,
-            user_id=user.id,
-            student_id=student.id,
-            scholarship_type=application_data.scholarship_type,
-            scholarship_name=scholarship.name if scholarship else None,
-            amount=scholarship.amount if scholarship else None,
+            user_id=user_id,
+            student_id=student_id,
+            scholarship_type_id=scholarship.id,
+            scholarship_subtype_list=application_data.scholarship_subtype_list,
             status=ApplicationStatus.DRAFT.value,
-            status_name="草稿",
-            academic_year=application_data.academic_year,
-            semester=application_data.semester,
-            gpa=application_data.gpa,
-            class_ranking_percent=application_data.class_ranking_percent,
-            dept_ranking_percent=application_data.dept_ranking_percent,
-            completed_terms=application_data.completed_terms,
-            contact_phone=application_data.contact_phone,
-            contact_email=application_data.contact_email,
-            contact_address=application_data.contact_address,
-            bank_account=application_data.bank_account,
-            research_proposal=application_data.research_proposal,
-            budget_plan=application_data.budget_plan,
-            milestone_plan=application_data.milestone_plan,
-            agree_terms=application_data.agree_terms,
-            form_data=self._serialize_for_json(application_data.model_dump())
+            academic_year=str(datetime.now().year),
+            semester="1",
+            student_data=student_snapshot,
+            submitted_form_data=serialized_form_data
         )
         
         self.db.add(application)
         await self.db.commit()
         await self.db.refresh(application)
         
-        # Create response with empty lists for related objects
-        response_data = application.__dict__.copy()
-        response_data['files'] = []
-        response_data['reviews'] = []
-        response_data['professor_reviews'] = []
+        # Load relationships for response
+        stmt = select(Application).where(Application.id == application.id).options(
+            selectinload(Application.files),
+            selectinload(Application.reviews),
+            selectinload(Application.professor_reviews)
+        )
+        result = await self.db.execute(stmt)
+        application = result.scalar_one()
         
-        return ApplicationResponse.model_validate(response_data)
+        print(f"[Debug] Application created successfully: {app_id}")
+        return application
     
     async def save_application_draft(
         self, 
@@ -263,7 +274,23 @@ class ApplicationService:
         result = await self.db.execute(stmt)
         applications = result.scalars().all()
         
-        return [ApplicationListResponse.model_validate(app) for app in applications]
+        response_list = []
+        for app in applications:
+            # Get scholarship details
+            scholarship_stmt = select(ScholarshipType).where(ScholarshipType.id == app.scholarship_type_id)
+            scholarship_result = await self.db.execute(scholarship_stmt)
+            scholarship = scholarship_result.scalar_one_or_none()
+            
+            # Create response with required fields
+            app_data = {
+                **app.__dict__,
+                'scholarship_type': scholarship.code if scholarship else None,
+                'scholarship_name': scholarship.name if scholarship else None,
+                'amount': scholarship.amount if scholarship else None
+            }
+            response_list.append(ApplicationListResponse.model_validate(app_data))
+        
+        return response_list
     
     async def get_student_dashboard_stats(self, user: User) -> Dict[str, Any]:
         """Get dashboard statistics for student"""
@@ -296,136 +323,178 @@ class ApplicationService:
             "recent_applications": [ApplicationListResponse.model_validate(app) for app in recent_applications]
         }
     
-    async def get_application_by_id(
-        self, 
-        application_id: int, 
-        user: Optional[User] = None
-    ) -> ApplicationResponse:
-        """Get application by ID"""
-        stmt = select(Application).options(
+    async def get_application_by_id(self, application_id: int, current_user: User) -> Optional[Application]:
+        """根據 ID 取得申請"""
+        # Get application with relationships loaded
+        stmt = select(Application).where(Application.id == application_id).options(
             selectinload(Application.files),
             selectinload(Application.reviews),
-            selectinload(Application.professor_reviews)
-        ).where(Application.id == application_id)
-        
-        # If user is provided and not staff, filter by user
-        if user and not user.has_role(UserRole.ADMIN) and not user.has_role(UserRole.COLLEGE):
-            stmt = stmt.where(Application.user_id == user.id)
-        
+            selectinload(Application.professor_reviews),
+            selectinload(Application.scholarship)
+        )
         result = await self.db.execute(stmt)
         application = result.scalar_one_or_none()
-        
+
         if not application:
             raise NotFoundError("Application", str(application_id))
-        
-        # Convert to response and add file URLs
-        app_response = ApplicationResponse.model_validate(application)
-        
-        # Generate download URLs for files with user token
-        if application.files and user:
-            from app.schemas.application import ApplicationFileResponse
+
+        # Check authorization
+        if current_user.role == UserRole.STUDENT and application.user_id != current_user.id:
+            raise AuthorizationError("Cannot access other students' applications")
+
+        # Generate file paths for files if they exist
+        if application.files:
             from app.core.config import settings
             from app.core.security import create_access_token
             
             # Generate a temporary token for file access
-            token_data = {"sub": str(user.id)}
+            token_data = {"sub": str(current_user.id)}
             access_token = create_access_token(token_data)
             
-            files_with_urls = []
             for file in application.files:
-                # Create proper ApplicationFileResponse object
-                file_response = ApplicationFileResponse.model_validate(file)
-                
-                # Generate backend proxy URLs instead of MinIO direct URLs
                 if file.object_name:
-                    # Use backend file proxy endpoint with token
                     base_url = f"http://localhost:8000{settings.api_v1_str}"
-                    file_response.file_path = f"{base_url}/files/applications/{application_id}/files/{file.id}?token={access_token}"
-                    file_response.download_url = f"{base_url}/files/applications/{application_id}/files/{file.id}/download?token={access_token}"
+                    file.file_path = f"{base_url}/files/applications/{application_id}/files/{file.id}?token={access_token}"
+                    file.download_url = f"{base_url}/files/applications/{application_id}/files/{file.id}/download?token={access_token}"
                 else:
-                    file_response.file_path = None
-                    file_response.download_url = None
-                
-                files_with_urls.append(file_response)
-            
-            app_response.files = files_with_urls
-        
-        return app_response
+                    file.file_path = None
+                    file.download_url = None
+
+        return application
     
     async def update_application(
-        self, 
-        application_id: int, 
-        user: User, 
+        self,
+        application_id: int,
         update_data: ApplicationUpdate
-    ) -> ApplicationResponse:
-        """Update application"""
-        # Get the actual application model with eager loading of relationships
-        stmt = select(Application).options(
-            selectinload(Application.files),
-            selectinload(Application.reviews),
-            selectinload(Application.professor_reviews)
-        ).where(
-            and_(Application.id == application_id, Application.user_id == user.id)
-        )
-        result = await self.db.execute(stmt)
-        application = result.scalar_one_or_none()
+    ) -> Application:
+        """更新申請資料"""
         
+        # 取得申請
+        application = await self.get_application_by_id(application_id)
         if not application:
-            raise NotFoundError("Application", str(application_id))
-        
+            raise NotFoundError(f"Application {application_id} not found")
+            
+        # 檢查是否可以編輯
         if not application.is_editable:
-            raise BusinessLogicError("Application cannot be edited in current status")
+            raise ValidationError("Application cannot be edited in current status")
         
-        # Update fields
-        update_dict = update_data.model_dump(exclude_unset=True)
-        for field, value in update_dict.items():
-            if hasattr(application, field):
-                setattr(application, field, value)
-        
-        # Update form_data to include any dynamic fields
-        if update_dict:
-            # Get current form_data
-            current_form_data = application.form_data or {}
-            # Update with new data
-            current_form_data.update(update_dict)
-            # Update the form_data field
-            application.form_data = self._serialize_for_json(current_form_data)
-        
+        # 更新表單資料
+        if update_data.form_data:
+            application.submitted_form_data = update_data.form_data.dict()
+            
+        # 更新狀態
+        if update_data.status:
+            application.status = update_data.status
+            
         await self.db.commit()
         await self.db.refresh(application)
         
-        return ApplicationResponse.model_validate(application)
+        return application
     
-    async def submit_application(self, application_id: int, user: User) -> ApplicationResponse:
-        """Submit application for review"""
-        stmt = select(Application).where(
-            and_(Application.id == application_id, Application.user_id == user.id)
-        )
+    async def submit_application(
+        self,
+        application_id: int,
+        user: User
+    ) -> ApplicationResponse:
+        """提交申請"""
+        # Get application with relationships loaded
+        stmt = select(Application).options(
+            selectinload(Application.files),
+            selectinload(Application.reviews),
+            selectinload(Application.professor_reviews),
+            selectinload(Application.scholarship)
+        ).where(Application.id == application_id)
         result = await self.db.execute(stmt)
         application = result.scalar_one_or_none()
-        if not application:
-            raise NotFoundError("Application", str(application_id))
-        if application.status != ApplicationStatus.DRAFT.value:
-            raise BusinessLogicError("Only draft applications can be submitted")
-        if not application.agree_terms:
-            raise ValidationError("Must agree to terms and conditions")
-        # 特殊流程：學士班新生獎學金與逕博獎學金直接進入 admin 審查
-        if application.scholarship_type in ["undergraduate_freshman", "direct_phd"]:
-            application.status = ApplicationStatus.UNDER_REVIEW.value
-            application.status_name = "審核中"
-        else:
-            application.status = ApplicationStatus.PENDING_RECOMMENDATION.value
-            application.status_name = "待教授推薦"
-            # 通知指導教授
-            try:
-                await self.emailService.send_to_professor(application, db=self.db)
-            except Exception as e:
-                print(f"[Email Error] {e}")
-        application.submitted_at = datetime.utcnow()
-        await self.db.commit()
         
-        # Return fresh copy with all relationships loaded
-        return await self.get_application_by_id(application_id, user)
+        if not application:
+            raise NotFoundError(f"Application {application_id} not found")
+            
+        if not application.is_editable:
+            raise ValidationError("Application cannot be submitted in current status")
+            
+        # 驗證所有必填欄位
+        form_data = ApplicationFormData(**application.submitted_form_data)
+        
+        # 更新狀態為已提交
+        application.status = ApplicationStatus.SUBMITTED.value
+        application.status_name = "已提交"
+        application.submitted_at = datetime.now(timezone.utc)
+        application.updated_at = datetime.now(timezone.utc)
+        
+        await self.db.commit()
+        await self.db.refresh(application, ['files', 'reviews', 'professor_reviews', 'scholarship'])
+        
+        # 發送通知
+        try:
+            await self.emailService.send_submission_notification(application, db=self.db)
+        except Exception as e:
+            print(f"[Email Error] {e}")
+        
+        # Convert application to response model
+        response_data = {
+            'id': application.id,
+            'app_id': application.app_id,
+            'user_id': application.user_id,
+            'student_id': application.student_id,
+            'scholarship_type_id': application.scholarship_type_id,
+            'scholarship_subtype_list': application.scholarship_subtype_list,
+            'status': application.status,
+            'status_name': application.status_name,
+            'academic_year': application.academic_year,
+            'semester': application.semester,
+            'student_data': application.student_data,
+            'submitted_form_data': application.submitted_form_data,
+            'agree_terms': application.agree_terms,
+            'professor_id': application.professor_id,
+            'reviewer_id': application.reviewer_id,
+            'final_approver_id': application.final_approver_id,
+            'review_score': application.review_score,
+            'review_comments': application.review_comments,
+            'rejection_reason': application.rejection_reason,
+            'submitted_at': application.submitted_at,
+            'reviewed_at': application.reviewed_at,
+            'approved_at': application.approved_at,
+            'created_at': application.created_at,
+            'updated_at': application.updated_at,
+            'meta_data': application.meta_data,
+            'files': [
+                {
+                    'id': file.id,
+                    'filename': file.filename,
+                    'file_type': file.file_type,
+                    'file_size': file.file_size,
+                    'uploaded_at': file.uploaded_at,
+                    'content_type': file.content_type
+                } for file in application.files
+            ],
+            'reviews': [
+                {
+                    'id': review.id,
+                    'reviewer_id': review.reviewer_id,
+                    'comments': review.comments,
+                    'score': review.score,
+                    'created_at': review.created_at
+                } for review in application.reviews
+            ],
+            'professor_reviews': [
+                {
+                    'id': review.id,
+                    'professor_id': review.professor_id,
+                    'recommendation': review.recommendation,
+                    'review_status': review.review_status,
+                    'reviewed_at': review.reviewed_at
+                } for review in application.professor_reviews
+            ],
+            'scholarship': {
+                'id': application.scholarship.id,
+                'code': application.scholarship.code,
+                'name': application.scholarship.name,
+                'amount': application.scholarship.amount
+            } if application.scholarship else None
+        }
+        
+        return ApplicationResponse.model_validate(response_data)
     
     async def get_applications_for_review(
         self, 
@@ -540,7 +609,7 @@ class ApplicationService:
         await self.db.commit()
         
         # Return fresh copy with all relationships loaded
-        return await self.get_application_by_id(application_id)
+        return await self.get_application_by_id(application_id, user)
     
     async def upload_application_file(
         self, 
@@ -658,7 +727,7 @@ class ApplicationService:
             file_type=file_type,
             file_size=file_size,
             object_name=object_name,
-            upload_date=datetime.utcnow(),
+            uploaded_at=datetime.utcnow(),
             content_type=file.content_type or 'application/octet-stream',
             mime_type=file.content_type or 'application/octet-stream'
         )
@@ -675,7 +744,7 @@ class ApplicationService:
                 "filename": file_record.filename,
                 "file_type": file_record.file_type,
                 "file_size": file_record.file_size,
-                "upload_date": file_record.upload_date.isoformat()
+                "uploaded_at": file_record.uploaded_at.isoformat()
             }
         }
     
@@ -689,5 +758,33 @@ class ApplicationService:
         }
         app_data.scholarship_type_zh = scholarship_type_zh.get(app_data.scholarship_type, app_data.scholarship_type)
         return app_data
+    
+    async def search_applications(
+        self,
+        search_criteria: Dict[str, Any]
+    ) -> List[Application]:
+        """搜尋申請"""
+        query = select(Application)
+        
+        # 動態添加搜尋條件
+        for field, value in search_criteria.items():
+            if field.startswith('student.'):
+                # 搜尋學生資料
+                json_path = field.replace('student.', '')
+                query = query.filter(
+                    Application.student_data[json_path].astext == str(value)
+                )
+            elif field.startswith('form.'):
+                # 搜尋表單資料
+                json_path = field.replace('form.', '')
+                query = query.filter(
+                    Application.submitted_form_data[json_path].astext == str(value)
+                )
+            else:
+                # 一般欄位搜尋
+                query = query.filter(getattr(Application, field) == value)
+        
+        result = await self.db.execute(query)
+        return result.scalars().all()
     
  

@@ -3,8 +3,9 @@ Application management API endpoints
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, status, Query, Path, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Path, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import ValidationError
 
 from app.db.deps import get_db
 from app.schemas.application import (
@@ -27,8 +28,111 @@ async def create_application(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new scholarship application"""
-    service = ApplicationService(db)
-    return await service.create_application(current_user, application_data)
+    print(f"[API Debug] Received application creation request from user: {current_user.id}")
+    print(f"[API Debug] Raw request data: {application_data.dict(exclude_none=True)}")
+    
+    try:
+        service = ApplicationService(db)
+        
+        # Get student profile from user
+        print("[API Debug] Fetching student profile")
+        from app.services.application_service import get_student_from_user
+        student = await get_student_from_user(current_user, db)
+        
+        if not student:
+            print(f"[API Error] Student profile not found for user: {current_user.id}")
+            print(f"[API Debug] User data: {current_user.dict(exclude={'hashed_password'})}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": "Student profile not found",
+                    "user_id": current_user.id,
+                    "student_no": getattr(current_user, 'student_no', None),
+                    "error_code": "STUDENT_NOT_FOUND"
+                }
+            )
+            
+        print(f"[API Debug] Found student profile: {student.id}")
+        
+        # Validate scholarship type exists
+        if not application_data.scholarship_type:
+            print("[API Error] Missing scholarship_type")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "message": "Scholarship type is required",
+                    "error_code": "MISSING_SCHOLARSHIP_TYPE",
+                    "received_data": application_data.dict(exclude_none=True)
+                }
+            )
+            
+        # Validate form data
+        print("[API Debug] Validating form data")
+        if not application_data.form_data:
+            print("[API Error] Missing form_data")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "message": "Form data is required",
+                    "error_code": "MISSING_FORM_DATA",
+                    "received_data": application_data.dict(exclude_none=True)
+                }
+            )
+            
+        try:
+            # Try to validate form data structure
+            print("[API Debug] Validating form data structure")
+            form_data_dict = application_data.form_data.dict()
+            print(f"[API Debug] Form data validated: {form_data_dict}")
+        except Exception as e:
+            print(f"[API Error] Form data validation failed: {str(e)}")
+            print(f"[API Error] Raw form data: {application_data.form_data}")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "message": "Invalid form data structure",
+                    "error_code": "INVALID_FORM_DATA",
+                    "error": str(e),
+                    "received_form_data": str(application_data.form_data)
+                }
+            )
+        
+        print("[API Debug] Creating application")
+        result = await service.create_application(
+            user_id=current_user.id,
+            student_id=student.id,
+            application_data=application_data
+        )
+        print(f"[API Debug] Application created successfully: {result.app_id}")
+        return result
+        
+    except ValidationError as e:
+        print(f"[API Error] Validation error: {str(e)}")
+        if hasattr(e, 'errors'):
+            print(f"[API Debug] Validation errors: {e.errors()}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "Validation error",
+                "error_code": "VALIDATION_ERROR",
+                "errors": e.errors() if hasattr(e, 'errors') else str(e),
+                "received_data": application_data.dict(exclude_none=True)
+            }
+        )
+    except Exception as e:
+        print(f"[API Error] Unexpected error: {str(e)}")
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"[API Error] Full traceback: {error_trace}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "message": "An error occurred while creating the application",
+                "error_code": "INTERNAL_SERVER_ERROR",
+                "error": str(e),
+                "error_type": type(e).__name__
+            }
+        )
 
 
 @router.post("/draft", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
@@ -170,13 +274,13 @@ async def upload_file(
 @router.get("/review/list", response_model=List[ApplicationListResponse])
 async def get_applications_for_review(
     status: Optional[str] = Query(None, description="Filter by status"),
-    scholarship_type: Optional[str] = Query(None, description="Filter by scholarship type"),
+    scholarship_type_id: Optional[int] = Query(None, description="Filter by scholarship type ID"),
     current_user: User = Depends(require_staff),
     db: AsyncSession = Depends(get_db)
 ):
     """Get applications for review (staff only)"""
     service = ApplicationService(db)
-    return await service.get_applications_for_review(current_user, status, scholarship_type)
+    return await service.get_applications_for_review(current_user, status, scholarship_type_id)
 
 
 @router.put("/{application_id}/status", response_model=ApplicationResponse)

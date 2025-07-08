@@ -141,8 +141,20 @@ export function ApplicationDetailDialog({
   const handleFilePreview = (file: any) => {
     const filename = file.filename || file.original_filename
     
+    // 檢查是否有文件路徑
+    if (!file.file_path) {
+      console.error('No file path available for preview')
+      return
+    }
+    
     // 從後端URL中提取token
-    const urlParams = new URLSearchParams(file.file_path.split('?')[1])
+    const urlParts = file.file_path.split('?')
+    if (urlParts.length < 2) {
+      console.error('Invalid file URL format')
+      return
+    }
+    
+    const urlParams = new URLSearchParams(urlParts[1])
     const token = urlParams.get('token')
     
     if (!token) {
@@ -151,7 +163,7 @@ export function ApplicationDetailDialog({
     }
     
     // 構建前端預覽URL，包含token參數
-    const previewUrl = `/api/preview?fileId=${file.id}&filename=${encodeURIComponent(filename)}&type=${encodeURIComponent(file.file_type)}&applicationId=${application?.id}&token=${token}`
+    const previewUrl = `/api/v1/preview?fileId=${file.id}&filename=${encodeURIComponent(filename)}&type=${encodeURIComponent(file.file_type)}&applicationId=${application?.id}&token=${token}`
     
     // 判斷文件類型
     let fileType = 'other'
@@ -160,6 +172,13 @@ export function ApplicationDetailDialog({
     } else if (['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'].some(ext => filename.toLowerCase().endsWith(ext))) {
       fileType = 'image'
     }
+    
+    console.log('Opening file preview:', {
+      filename,
+      fileType,
+      previewUrl,
+      hasToken: !!token
+    })
     
     setPreviewFile({
       url: previewUrl,

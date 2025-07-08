@@ -174,6 +174,26 @@ class ApplicationFile(Base):
 
     def __repr__(self):
         return f"<ApplicationFile(id={self.id}, filename={self.filename}, application_id={self.application_id})>"
+    
+    @property
+    def file_path(self) -> Optional[str]:
+        """Dynamic property for file preview URL"""
+        return getattr(self, '_file_path', None)
+    
+    @file_path.setter
+    def file_path(self, value: Optional[str]):
+        """Set file preview URL"""
+        self._file_path = value
+    
+    @property
+    def download_url(self) -> Optional[str]:
+        """Dynamic property for file download URL"""
+        return getattr(self, '_download_url', None)
+    
+    @download_url.setter
+    def download_url(self, value: Optional[str]):
+        """Set file download URL"""
+        self._download_url = value
 
 
 class ApplicationReview(Base):

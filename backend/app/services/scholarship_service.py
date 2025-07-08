@@ -60,12 +60,12 @@ def separate_rules(rules: List[ScholarshipRule]) -> tuple[List[ScholarshipRule],
     
     return common_rules, subtype_rules
 
-def get_field_value(student: Student, field_path: str) -> Any:
+async def get_field_value(student: Student, field_path: str) -> Any:
     """Get value from student object using dot notation field path"""
     obj = student
     for field in field_path.split('.'):
         if field == "academicRecords":
-            obj = obj.currentAcademicRecord
+            obj = await obj.getCurrentAcademicRecord()
             if obj is None:
                 return None
         elif field == "studyingStatus" and hasattr(obj, field):
@@ -147,11 +147,11 @@ def create_validation_result(
         priority=rule.priority
     )
 
-def validate_rule(student: Student, rule: ScholarshipRule) -> RuleValidationResult:
+async def validate_rule(student: Student, rule: ScholarshipRule) -> RuleValidationResult:
     """Validate a single rule against student data"""
     # Special handling for enrollType validation
     if rule.condition_field == "enrollTypeId":
-        academic_record = student.currentAcademicRecord
+        academic_record = await student.getCurrentAcademicRecord()
         if academic_record is None or academic_record.degree is None:
             return create_validation_result(
                 False,
@@ -160,7 +160,7 @@ def validate_rule(student: Student, rule: ScholarshipRule) -> RuleValidationResu
             )
         
         # Get the enrollment type code
-        enroll_type = get_field_value(student, rule.condition_field)
+        enroll_type = await get_field_value(student, rule.condition_field)
         if enroll_type is None:
             return create_validation_result(
                 False,
@@ -173,7 +173,7 @@ def validate_rule(student: Student, rule: ScholarshipRule) -> RuleValidationResu
         return create_validation_result(passed, rule)
     
     # Normal validation for other fields
-    field_value = get_field_value(student, rule.condition_field)
+    field_value = await get_field_value(student, rule.condition_field)
     
     if field_value is None:
         return create_validation_result(
@@ -186,7 +186,7 @@ def validate_rule(student: Student, rule: ScholarshipRule) -> RuleValidationResu
     passed = compare_values(str(field_value), str(rule.expected_value), rule.operator)
     return create_validation_result(passed, rule)
 
-def validate_common_rules(
+async def validate_common_rules(
     student: Student,
     rules: List[ScholarshipRule],
 ) -> tuple[List[RuleValidationResult], List[RuleValidationResult], List[RuleValidationResult]]:
@@ -195,7 +195,7 @@ def validate_common_rules(
     failed_rules = []
     warnings_rules = []
     for rule in rules:
-        result = validate_rule(student, rule)
+        result = await validate_rule(student, rule)
         if result.is_warning and result.passed:
             warnings_rules.append(result)
         if not result.passed and not result.is_warning:
@@ -209,7 +209,7 @@ def validate_common_rules(
     # Return True if no hard rules failed, even if there are warning rules that failed
     return passed_rules, failed_rules, warnings_rules
 
-def validate_subtype_rules(
+async def validate_subtype_rules(
     student: Student,
     subtype: str,
     rules: List[ScholarshipRule],
@@ -220,7 +220,7 @@ def validate_subtype_rules(
     warnings_rules = []
     
     for rule in rules:
-        result = validate_rule(student, rule)
+        result = await validate_rule(student, rule)
         if result.is_warning and result.passed:
             warnings_rules.append(result)
         if not result.passed and not result.is_warning:
@@ -331,7 +331,7 @@ async def get_eligible_scholarships(
         common_rules, subtype_rules = separate_rules(rules)
 
         # Validate common rules first
-        passed_common, failed_common, warnings_common = validate_common_rules(student, common_rules)
+        passed_common, failed_common, warnings_common = await validate_common_rules(student, common_rules)
 
         # hard rule failed, skip
         if not passed_common:
@@ -348,7 +348,7 @@ async def get_eligible_scholarships(
 
         for subtype in eligible_sub_types:
             if subtype in subtype_rules:
-                passed_subtype, failed_subtype, warnings_subtype = validate_subtype_rules(
+                passed_subtype, failed_subtype, warnings_subtype = await validate_subtype_rules(
                     student, subtype, subtype_rules[subtype]
                 )
                 if failed_subtype:

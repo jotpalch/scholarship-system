@@ -351,6 +351,7 @@ export function DynamicApplicationForm({
           maxFiles={document.max_file_count}
           initialFiles={files}
           fileType={document.document_name}
+          locale={locale}
         />
 
         <div className="text-xs text-muted-foreground space-y-1">

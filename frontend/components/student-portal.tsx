@@ -707,6 +707,7 @@ export function StudentPortal({ user, locale }: StudentPortalProps) {
                     onFilesChange={(files) => console.log("Files uploaded:", files)}
                     acceptedTypes={[".pdf", ".jpg", ".jpeg", ".png"]}
                     maxSize={10 * 1024 * 1024} // 10MB
+                    locale={locale}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     {locale === "zh"

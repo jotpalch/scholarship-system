@@ -82,10 +82,6 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     updateApplication
   } = useApplications()
 
-  // State for student data
-  const [studentData, setStudentData] = useState<any>(null)
-  const [isLoadingStudentData, setIsLoadingStudentData] = useState(false)
-
   // State for eligible scholarships
   const [eligibleScholarships, setEligibleScholarships] = useState<ScholarshipType[]>([])
   const [isLoadingScholarships, setIsLoadingScholarships] = useState(true)
@@ -195,34 +191,6 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     }
   }
 
-  // Try to fetch student data on component mount (optional)
-  useEffect(() => {
-    const fetchStudentData = async () => {
-      try {
-        setIsLoadingStudentData(true)
-        const response = await api.users.getStudentInfo()
-        console.log('Student data response:', response) // Debug log
-        
-        if (response.success && response.data) {
-          setStudentData(response.data)
-          console.log('Student data loaded successfully')
-        } else {
-          console.warn('Student data endpoint not available:', response.message)
-          // App can work without student data - use basic info from user
-          setStudentData(null)
-        }
-      } catch (error) {
-        console.warn('Student data endpoint not implemented:', error)
-        // App can work without student data - use basic info from user
-        setStudentData(null)
-      } finally {
-        setIsLoadingStudentData(false)
-      }
-    }
-
-    fetchStudentData()
-  }, [])
-
   // Form state for new application
   const [newApplicationData, setNewApplicationData] = useState<ApplicationCreate>({
     scholarship_type: '',
@@ -314,58 +282,6 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     calculateProgress()
   }, [newApplicationData.scholarship_type, dynamicFormData, dynamicFileData, selectedScholarship, selectedSubTypes])
 
-
-
-  // Helper function to build application data with available information
-  const buildApplicationData = () => {
-    const currentYear = new Date().getFullYear()
-    const currentMonth = new Date().getMonth() + 1
-    const academicYear = currentMonth >= 8 ? currentYear.toString() : (currentYear - 1).toString()
-    const semester = currentMonth >= 2 && currentMonth <= 7 ? "2" : "1" // Spring: 2-7, Fall: 8-1
-    
-    // Helper to truncate strings to fit database constraints
-    const truncateString = (str: string | undefined, maxLength: number): string | undefined => {
-      if (!str) return undefined
-      return str.length > maxLength ? str.substring(0, maxLength) : str
-    }
-    
-    // Build application with minimum required data (works with or without studentData)
-    const applicationData = {
-      scholarship_type: newApplicationData.scholarship_type,
-      academic_year: truncateString(academicYear, 10), // Max 10 chars
-      semester: truncateString(semester, 10), // Max 10 chars
-      contact_email: user.email, // Always available from user
-      agree_terms: true, // Default to true
-      // Include selected sub-types if any
-      selected_sub_types: selectedSubTypes[newApplicationData.scholarship_type] || [],
-      // Include dynamic form data
-      ...dynamicFormData,
-      // Optional fields from studentData (if available)
-      ...(studentData?.gpa && { gpa: studentData.gpa }),
-      ...(studentData?.phone_number && { 
-        contact_phone: truncateString(studentData.phone_number, 20) 
-      }),
-      ...(studentData?.address && { contact_address: studentData.address }),
-      ...(studentData?.bank_account && { 
-        bank_account: truncateString(studentData.bank_account, 20) 
-      })
-    }
-    
-    console.log('Built application data:', applicationData)
-    console.log('Dynamic form data:', dynamicFormData)
-    console.log('Student data available:', !!studentData)
-    console.log('Field lengths:', {
-      scholarship_type: applicationData.scholarship_type?.length || 0,
-      academic_year: applicationData.academic_year?.length || 0,
-      semester: applicationData.semester?.length || 0,
-      contact_phone: applicationData.contact_phone?.length || 0,
-      contact_email: applicationData.contact_email?.length || 0,
-      bank_account: applicationData.bank_account?.length || 0
-    })
-    
-    return applicationData
-  }
-
   // 新增狀態用於詳情對話框
   const [selectedApplicationForDetails, setSelectedApplicationForDetails] = useState<Application | null>(null)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
@@ -376,147 +292,102 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       return
     }
 
-    // Check if student data is still loading
-    if (isLoadingStudentData) {
-      alert(locale === "zh" ? "正在載入學生資料，請稍後再試" : "Loading student data, please try again later")
-      return
-    }
-
     try {
       setIsSubmitting(true)
       
-      // 編輯模式 vs 新建模式
+      // Format form fields according to backend requirements
+      const formFields: Record<string, {
+        field_id: string,
+        field_type: string,
+        value: string,
+        required: boolean
+      }> = {}
+
+      // Convert dynamic form data to required format
+      Object.entries(dynamicFormData).forEach(([fieldName, value]) => {
+        formFields[fieldName] = {
+          field_id: fieldName,
+          field_type: "text", // You might need to get this from field configuration
+          value: String(value),
+          required: true // This should come from field configuration
+        }
+      })
+
+      // Format documents according to backend requirements
+      const documents = Object.entries(dynamicFileData).map(([docType, files]) => {
+        const file = files[0] // Assuming single file per document type
+        return {
+          document_id: docType,
+          document_type: docType,
+          file_path: file.name, // This should be the server path after upload
+          original_filename: file.name,
+          upload_time: new Date().toISOString()
+        }
+      })
+
+      // Prepare the application data according to backend format
+      const applicationData = {
+        scholarship_type: newApplicationData.scholarship_type,
+        scholarship_subtype_list: selectedSubTypes[newApplicationData.scholarship_type]?.length 
+          ? selectedSubTypes[newApplicationData.scholarship_type] 
+          : ["general"],
+        form_data: {
+          fields: formFields,
+          documents: documents
+        }
+      }
+      
       if (editingApplication) {
-        // 編輯模式：更新現有申請
-        const applicationData = buildApplicationData()
+        // 編輯模式
         console.log('Updating application with data:', applicationData)
-        
-        // Step 1: Update the application
         await updateApplication(editingApplication.id, applicationData)
-        console.log('Application updated:', editingApplication.id)
         
-        // Step 2: Upload new files if any (from dynamic form)
+        // 上傳新文件
         for (const [docType, files] of Object.entries(dynamicFileData)) {
-          if (files && files.length > 0) {
-            for (const file of files) {
-              // 只上傳新文件（沒有isUploaded標記的）
-              if (!(file as any).isUploaded) {
-                try {
-                  await uploadDocument(editingApplication.id, file, docType)
-                  console.log(`Successfully uploaded ${docType} file`)
-                } catch (error) {
-                  console.error(`Failed to upload ${docType} file:`, error)
-                }
-              }
+          for (const file of files) {
+            if (!(file as any).isUploaded) {
+              await uploadDocument(editingApplication.id, file, docType)
             }
           }
         }
         
-        // Step 3: Submit the updated application for review
-        try {
-          await submitApplicationApi(editingApplication.id)
-          console.log('Updated application submitted for review')
-        } catch (error) {
-          console.error('Failed to submit updated application for review:', error)
-        }
+        await submitApplicationApi(editingApplication.id)
       } else {
-        // 新建模式：創建新申請
-        const applicationData = buildApplicationData()
-        console.log('Submitting application with data:', applicationData)
-        
-        // Step 1: Create the application
+        // 新建模式
+        console.log('Creating application with data:', applicationData)
         const createdApplication = await createApplication(applicationData)
-        console.log('Application created:', createdApplication)
         
         if (!createdApplication || !createdApplication.id) {
           throw new Error('Failed to create application')
         }
         
-        // Step 2: Upload files if any (from dynamic form)
+        // 上傳文件
         for (const [docType, files] of Object.entries(dynamicFileData)) {
-          if (files && files.length > 0) {
-            for (const file of files) {
-              try {
-                await uploadDocument(createdApplication.id, file, docType)
-                console.log(`Successfully uploaded ${docType} file`)
-              } catch (error) {
-                console.error(`Failed to upload ${docType} file:`, error)
-                // Continue with other files even if one fails
-              }
-            }
+          for (const file of files) {
+            await uploadDocument(createdApplication.id, file, docType)
           }
         }
         
-        // Step 3: Submit the application for review
-        try {
-          await submitApplicationApi(createdApplication.id)
-          console.log('Application submitted for review')
-        } catch (error) {
-          console.error('Failed to submit application for review:', error)
-          // Even if submission fails, the application was created
-        }
+        await submitApplicationApi(createdApplication.id)
       }
-      
 
-      
-      // Reset form
-      setNewApplicationData({
-        scholarship_type: '',
-      })
+      // 重置表單
+      setNewApplicationData({ scholarship_type: '' })
       setDynamicFormData({})
       setDynamicFileData({})
       setUploadedFiles({})
       setSelectedScholarship(null)
       setEditingApplication(null)
       
-      // 重新載入申請列表確保狀態正確
+      // 重新載入申請列表
       await fetchApplications()
-      
-      // 切換到我的申請tab
       setActiveTab("applications")
       
       alert(locale === "zh" ? "申請提交成功！" : "Application submitted successfully!")
       
     } catch (error) {
       console.error('Failed to submit application:', error)
-      
-      // Extract error message from API response
-      let errorMessage = 'Unknown error'
-      if (error instanceof Error) {
-        errorMessage = error.message
-        
-        // Check if it's a specific backend error and provide user-friendly messages
-        if (errorMessage.includes('Student profile not found')) {
-          errorMessage = locale === "zh" 
-            ? "找不到學生資料，請聯繫管理員設定您的學號資料" 
-            : "Student profile not found, please contact admin to set up your student record"
-        } else if (errorMessage.includes('Scholarship type') && errorMessage.includes('not found')) {
-          errorMessage = locale === "zh" 
-            ? "獎學金類型無效，請重新選擇" 
-            : "Invalid scholarship type, please select again"
-        } else if (errorMessage.includes('not active')) {
-          errorMessage = locale === "zh" 
-            ? "此獎學金已停用" 
-            : "This scholarship is inactive"
-        } else if (errorMessage.includes('Application period')) {
-          errorMessage = locale === "zh" 
-            ? "申請期限已過" 
-            : "Application period has ended"
-        } else if (errorMessage.includes('not eligible') || errorMessage.includes('Only pre-approved students')) {
-          errorMessage = locale === "zh" 
-            ? "您不在此獎學金的白名單內，僅限預先核准的學生申請" 
-            : "You are not on the whitelist for this scholarship. Only pre-approved students can apply"
-        } else if (errorMessage.includes('already have an active application')) {
-          errorMessage = locale === "zh" 
-            ? "您已經有一個進行中的申請" 
-            : "You already have an active application for this scholarship"
-        } else if (errorMessage.includes('Failed to create application')) {
-          errorMessage = locale === "zh" 
-            ? "系統錯誤，請稍後再試或聯繫管理員" 
-            : "System error, please try again later or contact admin"
-        }
-      }
-      
+      let errorMessage = error instanceof Error ? error.message : 'Unknown error'
       alert(locale === "zh" ? `提交失敗: ${errorMessage}` : `Failed to submit application: ${errorMessage}`)
     } finally {
       setIsSubmitting(false)
@@ -532,43 +403,46 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
     try {
       setIsSubmitting(true)
       
-      // Build application data with available information
-      const applicationData = buildApplicationData()
-      console.log('Saving draft with data:', applicationData) // Debug log
-      
+      // 整合表單資料，保持原有格式
+      const applicationData = {
+        scholarship_type: newApplicationData.scholarship_type,
+        selected_sub_types: selectedSubTypes[newApplicationData.scholarship_type]?.length 
+          ? selectedSubTypes[newApplicationData.scholarship_type] 
+          : ["general"],
+        // 保持原有的動態表單資料格式
+        ...dynamicFormData,
+        // 將整個表單資料也放入 submitted_form_data
+        submitted_form_data: {
+          form_fields: dynamicFormData,
+          selected_sub_types: selectedSubTypes[newApplicationData.scholarship_type]?.length 
+            ? selectedSubTypes[newApplicationData.scholarship_type] 
+            : ["general"],
+          uploaded_files: Object.entries(dynamicFileData).map(([docType, files]) => ({
+            document_type: docType,
+            files: files.map(file => ({
+              name: file.name,
+              size: file.size,
+              type: file.type
+            }))
+          }))
+        }
+      }
+
+      console.log('Saving draft with data:', applicationData)
       const application = await saveApplicationDraft(applicationData)
-      console.log('Save draft response:', application) // Debug log
       
       if (application && application.id) {
-        // If successful, upload files to the created application
-        const applicationId = application.id
-        
-        // Upload files for each document type (from dynamic form)
+        // 上傳文件
         for (const [docType, files] of Object.entries(dynamicFileData)) {
-          if (files && files.length > 0) {
-            for (const file of files) {
-              try {
-                await uploadDocument(applicationId, file, docType)
-                console.log(`Successfully uploaded ${docType} file`) // Debug log
-              } catch (error) {
-                console.error(`Failed to upload ${docType} file:`, error)
-                // Don't stop the process for upload errors
-              }
+          for (const file of files) {
+            if (!(file as any).isUploaded) {
+              await uploadDocument(application.id, file, docType)
             }
           }
         }
         
-        // Note: We don't need to refresh applications list here because
-        // the saveApplicationDraft hook already updates the applications state
-        // Refreshing would cause unnecessary re-renders and potential state loss
-        console.log('Draft saved without triggering navigation') // Debug log
-        
-        // Keep user on the same page - don't clear form or switch tabs
-        // This allows continued editing of the draft
-        
         alert(locale === "zh" ? "草稿已保存，您可以繼續編輯" : "Draft saved successfully. You can continue editing.")
       } else {
-        console.error('Invalid application response:', application) // Debug log
         throw new Error('Invalid application response')
       }
     } catch (error) {
@@ -587,10 +461,6 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
       console.error('Failed to withdraw application:', error)
     }
   }
-
-
-
-
 
   // 查看詳情處理函數
   const handleViewDetails = async (application: Application) => {
@@ -630,7 +500,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
   }
 
   // Loading state
-  if (isLoadingScholarships || isLoadingStudentData) {
+  if (isLoadingScholarships) {
     return (
       <Card>
         <CardContent className="p-6 text-center">
@@ -641,11 +511,6 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
           {isLoadingScholarships && (
             <p className="text-sm text-muted-foreground mt-2">
               {locale === "zh" ? "載入獎學金資訊..." : "Loading scholarship information..."}
-            </p>
-          )}
-          {isLoadingStudentData && (
-            <p className="text-sm text-muted-foreground mt-2">
-              {locale === "zh" ? "載入學生資料..." : "Loading student data..."}
             </p>
           )}
         </CardContent>
@@ -1176,7 +1041,7 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
                  selectedScholarship.eligible_sub_types[0] !== "general" && 
                  selectedScholarship.eligible_sub_types.length > 0 && (
                   <div className="space-y-2">
-                    <Label>{locale === "zh" ? "申請項目" : "Application Items"} *</Label>
+                    <Label>{locale === "zh" ? "申請欄位" : "Application Fields"} *</Label>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       {selectedScholarship.eligible_sub_types.map((subType) => {
                         const isSelected = selectedSubTypes[newApplicationData.scholarship_type]?.includes(subType)
@@ -1377,7 +1242,6 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
         onClose={() => setIsDetailsDialogOpen(false)}
         locale={locale}
       />
-
 
     </div>
   )

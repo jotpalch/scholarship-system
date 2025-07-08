@@ -24,7 +24,7 @@ export function FilePreviewDialog({ isOpen, onClose, file, locale }: FilePreview
     if (!file) return
     
     // 使用前端URL在新視窗開啟，確保包含token
-    const frontendUrl = file.url.startsWith('/api/preview') 
+    const frontendUrl = file.url.startsWith('/api/v1/preview') 
       ? file.url 
       : file.url // 如果已經是前端URL就直接使用
     

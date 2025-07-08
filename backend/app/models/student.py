@@ -133,12 +133,14 @@ class Student(Base):
         """Get student display name"""
         return str(self.cname or self.ename or self.stdNo or "")
 
-    @property
-    def currentAcademicRecord(self) -> Optional["StudentAcademicRecord"]:
-        """Get current academic record"""
-        if self.academicRecords:
-            return max(self.academicRecords, key=lambda x: x.createdAt)
-        return None
+    async def getCurrentAcademicRecord(self) -> Optional["StudentAcademicRecord"]:
+        """Get current academic record asynchronously"""
+        if not hasattr(self, '_current_academic_record'):
+            if self.academicRecords:
+                self._current_academic_record = max(self.academicRecords, key=lambda x: x.createdAt)
+            else:
+                self._current_academic_record = None
+        return self._current_academic_record
     
     def get_student_type(self, academic_record: Optional["StudentAcademicRecord"] = None) -> "StudentType":
         """
