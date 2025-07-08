@@ -6,10 +6,12 @@ from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, status, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, update, delete
+from sqlalchemy.orm import selectinload
 
 from app.db.deps import get_db
 from app.schemas.common import MessageResponse, PaginatedResponse, SystemSettingSchema, EmailTemplateSchema, ApiResponse
 from app.schemas.application import ApplicationListResponse
+from app.schemas.scholarship import ScholarshipSubTypeConfigCreate, ScholarshipSubTypeConfigUpdate, ScholarshipSubTypeConfigResponse
 from app.schemas.notification import NotificationResponse, NotificationCreate, NotificationUpdate
 from app.core.security import require_admin
 from app.models.user import User
@@ -17,7 +19,7 @@ from app.models.application import Application, ApplicationStatus
 from app.models.student import Student
 from app.models.notification import Notification
 from app.services.system_setting_service import SystemSettingService, EmailTemplateService
-from app.models.scholarship import ScholarshipType, ScholarshipStatus
+from app.models.scholarship import ScholarshipType, ScholarshipStatus, ScholarshipSubTypeConfig, ScholarshipSubType
 
 router = APIRouter()
 
@@ -925,4 +927,263 @@ async def get_scholarship_sub_types(
         success=True,
         message=f"Sub-type statistics for scholarship {scholarship_code} retrieved successfully",
         data=sub_type_stats
+    )
+
+
+@router.get("/scholarships/sub-type-translations", response_model=ApiResponse[Dict[str, Dict[str, str]]])
+async def get_sub_type_translations(
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get sub-type name translations for all supported languages from database"""
+    
+    # Get all active scholarship types with their sub-type configurations
+    stmt = select(ScholarshipType).options(
+        selectinload(ScholarshipType.sub_type_configs)
+    ).where(ScholarshipType.status == ScholarshipStatus.ACTIVE.value)
+    result = await db.execute(stmt)
+    scholarships = result.scalars().all()
+    
+    # Build translations from database
+    translations = {"zh": {}, "en": {}}
+    
+    for scholarship in scholarships:
+        # Get sub-type translations for this scholarship
+        scholarship_translations = scholarship.get_sub_type_translations()
+        
+        # Merge into global translations
+        for lang in ["zh", "en"]:
+            translations[lang].update(scholarship_translations[lang])
+    
+    return ApiResponse(
+        success=True,
+        message="Sub-type translations retrieved successfully from database",
+        data=translations
+    )
+
+
+# === 子類型配置管理 API === #
+
+@router.get("/scholarships/{scholarship_id}/sub-type-configs", response_model=ApiResponse[List[ScholarshipSubTypeConfigResponse]])
+async def get_scholarship_sub_type_configs(
+    scholarship_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get sub-type configurations for a specific scholarship"""
+    
+    # Get scholarship with sub-type configurations
+    stmt = select(ScholarshipType).options(
+        selectinload(ScholarshipType.sub_type_configs)
+    ).where(ScholarshipType.id == scholarship_id)
+    result = await db.execute(stmt)
+    scholarship = result.scalar_one_or_none()
+    
+    if not scholarship:
+        raise HTTPException(status_code=404, detail="Scholarship not found")
+    
+    # Get sub-type configurations
+    configs = []
+    
+    # 獲取已配置的子類型
+    for config in scholarship.get_active_sub_type_configs():
+        config_dict = {
+            "id": config.id,
+            "scholarship_type_id": config.scholarship_type_id,
+            "sub_type_code": config.sub_type_code,
+            "name": config.name,
+            "name_en": config.name_en,
+            "description": config.description,
+            "description_en": config.description_en,
+            "amount": config.amount,
+            "currency": config.currency,
+            "display_order": config.display_order,
+            "is_active": config.is_active,
+            "effective_amount": config.effective_amount,
+            "created_at": config.created_at,
+            "updated_at": config.updated_at
+        }
+        configs.append(ScholarshipSubTypeConfigResponse.model_validate(config_dict))
+    
+    # 為 general 子類型添加預設配置（如果沒有配置且在子類型列表中）
+    if ScholarshipSubType.GENERAL.value in scholarship.sub_type_list:
+        general_config = scholarship.get_sub_type_config(ScholarshipSubType.GENERAL.value)
+        if not general_config:
+            # 創建預設的 general 配置
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            
+            config_dict = {
+                "id": 0,  # 虛擬 ID
+                "scholarship_type_id": scholarship.id,
+                "sub_type_code": ScholarshipSubType.GENERAL.value,
+                "name": "一般獎學金",
+                "name_en": "General Scholarship",
+                "description": "一般獎學金",
+                "description_en": "General Scholarship",
+                "amount": None,
+                "currency": scholarship.currency,
+                "display_order": 0,
+                "is_active": True,
+                "effective_amount": scholarship.amount,
+                "created_at": now,
+                "updated_at": now
+            }
+            configs.append(ScholarshipSubTypeConfigResponse.model_validate(config_dict))
+    
+    return ApiResponse(
+        success=True,
+        message="Sub-type configurations retrieved successfully",
+        data=configs
+    )
+
+
+@router.post("/scholarships/{scholarship_id}/sub-type-configs", response_model=ApiResponse[ScholarshipSubTypeConfigResponse])
+async def create_sub_type_config(
+    scholarship_id: int,
+    config_data: ScholarshipSubTypeConfigCreate,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create new sub-type configuration for a scholarship"""
+    
+    # Get scholarship with sub-type configurations
+    stmt = select(ScholarshipType).options(
+        selectinload(ScholarshipType.sub_type_configs)
+    ).where(ScholarshipType.id == scholarship_id)
+    result = await db.execute(stmt)
+    scholarship = result.scalar_one_or_none()
+    
+    if not scholarship:
+        raise HTTPException(status_code=404, detail="Scholarship not found")
+    
+    # Validate sub_type_code
+    if config_data.sub_type_code not in scholarship.sub_type_list:
+        raise HTTPException(status_code=400, detail="Invalid sub_type_code for this scholarship")
+    
+    # Prevent creating general sub-type configurations
+    if config_data.sub_type_code == ScholarshipSubType.GENERAL.value:
+        raise HTTPException(status_code=400, detail="Cannot create configuration for 'general' sub-type. It uses default values.")
+    
+    # Check if config already exists
+    existing = await db.execute(
+        select(ScholarshipSubTypeConfig).where(
+            ScholarshipSubTypeConfig.scholarship_type_id == scholarship_id,
+            ScholarshipSubTypeConfig.sub_type_code == config_data.sub_type_code
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Sub-type configuration already exists")
+    
+    # Create new config
+    config = ScholarshipSubTypeConfig(
+        scholarship_type_id=scholarship_id,
+        created_by=current_user.id,
+        updated_by=current_user.id,
+        **config_data.model_dump()
+    )
+    
+    db.add(config)
+    await db.commit()
+    await db.refresh(config)
+    
+    config_dict = {
+        "id": config.id,
+        "scholarship_type_id": config.scholarship_type_id,
+        "sub_type_code": config.sub_type_code,
+        "name": config.name,
+        "name_en": config.name_en,
+        "description": config.description,
+        "description_en": config.description_en,
+        "amount": config.amount,
+        "currency": config.currency,
+        "display_order": config.display_order,
+        "is_active": config.is_active,
+        "effective_amount": config.effective_amount,
+        "created_at": config.created_at,
+        "updated_at": config.updated_at
+    }
+    
+    return ApiResponse(
+        success=True,
+        message="Sub-type configuration created successfully",
+        data=ScholarshipSubTypeConfigResponse.model_validate(config_dict)
+    )
+
+
+@router.put("/scholarships/sub-type-configs/{config_id}", response_model=ApiResponse[ScholarshipSubTypeConfigResponse])
+async def update_sub_type_config(
+    config_id: int,
+    config_data: ScholarshipSubTypeConfigUpdate,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update sub-type configuration"""
+    
+    # Get config
+    stmt = select(ScholarshipSubTypeConfig).where(ScholarshipSubTypeConfig.id == config_id)
+    result = await db.execute(stmt)
+    config = result.scalar_one_or_none()
+    
+    if not config:
+        raise HTTPException(status_code=404, detail="Sub-type configuration not found")
+    
+    # Update fields
+    update_data = config_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(config, field, value)
+    
+    config.updated_by = current_user.id
+    await db.commit()
+    await db.refresh(config)
+    
+    config_dict = {
+        "id": config.id,
+        "scholarship_type_id": config.scholarship_type_id,
+        "sub_type_code": config.sub_type_code,
+        "name": config.name,
+        "name_en": config.name_en,
+        "description": config.description,
+        "description_en": config.description_en,
+        "amount": config.amount,
+        "currency": config.currency,
+        "display_order": config.display_order,
+        "is_active": config.is_active,
+        "effective_amount": config.effective_amount,
+        "created_at": config.created_at,
+        "updated_at": config.updated_at
+    }
+    
+    return ApiResponse(
+        success=True,
+        message="Sub-type configuration updated successfully",
+        data=ScholarshipSubTypeConfigResponse.model_validate(config_dict)
+    )
+
+
+@router.delete("/scholarships/sub-type-configs/{config_id}", response_model=ApiResponse[MessageResponse])
+async def delete_sub_type_config(
+    config_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete sub-type configuration (soft delete by setting is_active=False)"""
+    
+    # Get config
+    stmt = select(ScholarshipSubTypeConfig).where(ScholarshipSubTypeConfig.id == config_id)
+    result = await db.execute(stmt)
+    config = result.scalar_one_or_none()
+    
+    if not config:
+        raise HTTPException(status_code=404, detail="Sub-type configuration not found")
+    
+    # Soft delete
+    config.is_active = False
+    config.updated_by = current_user.id
+    await db.commit()
+    
+    return ApiResponse(
+        success=True,
+        message="Sub-type configuration deleted successfully",
+        data=MessageResponse(message="Sub-type configuration deleted successfully")
     ) 

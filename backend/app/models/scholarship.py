@@ -7,6 +7,8 @@ from sqlalchemy import Column, Integer, String, Boolean, DateTime, Numeric, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
+from decimal import Decimal
+from typing import Optional, List, Dict
 
 from app.db.base_class import Base
 
@@ -33,6 +35,65 @@ class ScholarshipSubType(enum.Enum):
     NSTC = "nstc"  # 國科會 (National Science and Technology Council)
     MOE_1W = "moe_1w"    # 教育部 (Ministry of Education) + 指導教授配合款一萬
     MOE_2W = "moe_2w"  # 教育部 (Ministry of Education) + 指導教授配合款兩萬
+
+
+class ScholarshipSubTypeConfig(Base):
+    """
+    Scholarship sub-type configuration model
+    
+    This table stores the configuration for scholarship sub-types,
+    including display names, descriptions, and specific settings.
+    """
+    __tablename__ = "scholarship_sub_type_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=False)
+    sub_type_code = Column(String(50), nullable=False)  # "nstc", "moe_1w", "moe_2w"
+    
+    # 顯示名稱
+    name = Column(String(200), nullable=False)  # 中文名稱
+    name_en = Column(String(200))  # 英文名稱
+    
+    # 描述
+    description = Column(Text)
+    description_en = Column(Text)
+    
+    # 子類型特定設定
+    amount = Column(Numeric(10, 2))  # 子類型特定金額，如果為 None 則使用主獎學金金額
+    currency = Column(String(10), default="TWD")
+    
+    # 顯示設定
+    display_order = Column(Integer, default=0)  # 顯示順序
+    is_active = Column(Boolean, default=True)  # 是否啟用
+    
+    # 時間戳記
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_by = Column(Integer, ForeignKey("users.id"))
+    updated_by = Column(Integer, ForeignKey("users.id"))
+    
+    # 關聯
+    scholarship_type = relationship("ScholarshipType", back_populates="sub_type_configs")
+    creator = relationship("User", foreign_keys=[created_by])
+    updater = relationship("User", foreign_keys=[updated_by])
+
+    def __repr__(self):
+        return f"<ScholarshipSubTypeConfig(id={self.id}, sub_type_code={self.sub_type_code}, name={self.name})>"
+    
+    @property
+    def display_name(self) -> str:
+        """Get display name based on current locale"""
+        return self.name_en or self.name
+    
+    @property
+    def effective_amount(self) -> Optional[Decimal]:
+        """Get effective amount (sub-type specific or fallback to main scholarship)"""
+        if self.amount is not None:
+            return self.amount
+        elif self.scholarship_type:
+            return self.scholarship_type.amount
+        return None
+
 
 class ScholarshipType(Base):
     """
@@ -82,6 +143,7 @@ class ScholarshipType(Base):
     
     # 關聯
     rules = relationship("ScholarshipRule", back_populates="scholarship_type", cascade="all, delete-orphan")
+    sub_type_configs = relationship("ScholarshipSubTypeConfig", back_populates="scholarship_type", cascade="all, delete-orphan")
     creator = relationship("User", foreign_keys=[created_by])
     updater = relationship("User", foreign_keys=[updated_by])
 
@@ -120,6 +182,47 @@ class ScholarshipType(Base):
             return True  # 空列表是有效的
         valid_types = [e.value for e in ScholarshipSubType]
         return all(sub_type in valid_types for sub_type in self.sub_type_list)
+
+    def get_sub_type_config(self, sub_type_code: str) -> Optional['ScholarshipSubTypeConfig']:
+        """Get sub-type configuration by code"""
+        # 如果是 general 且沒有配置，返回 None（使用預設值）
+        if sub_type_code == ScholarshipSubType.GENERAL.value:
+            for config in self.sub_type_configs:
+                if config.sub_type_code == sub_type_code and config.is_active:
+                    return config
+            return None  # general 沒有配置是正常的
+        
+        # 其他子類型必須有配置
+        for config in self.sub_type_configs:
+            if config.sub_type_code == sub_type_code and config.is_active:
+                return config
+        return None
+
+    def get_active_sub_type_configs(self) -> List['ScholarshipSubTypeConfig']:
+        """Get all active sub-type configurations ordered by display_order"""
+        return sorted(
+            [config for config in self.sub_type_configs if config.is_active],
+            key=lambda x: x.display_order
+        )
+
+    def get_sub_type_translations(self) -> Dict[str, Dict[str, str]]:
+        """Get sub-type translations for all supported languages"""
+        translations = {"zh": {}, "en": {}}
+        
+        # 添加已配置的子類型
+        for config in self.get_active_sub_type_configs():
+            translations["zh"][config.sub_type_code] = config.name
+            translations["en"][config.sub_type_code] = config.name_en or config.name
+        
+        # 為 general 子類型添加預設翻譯（如果沒有配置）
+        if ScholarshipSubType.GENERAL.value in self.sub_type_list:
+            general_config = self.get_sub_type_config(ScholarshipSubType.GENERAL.value)
+            if not general_config:
+                # 使用預設翻譯
+                translations["zh"][ScholarshipSubType.GENERAL.value] = "一般獎學金"
+                translations["en"][ScholarshipSubType.GENERAL.value] = "General Scholarship"
+        
+        return translations
 
 
 class ScholarshipRule(Base):

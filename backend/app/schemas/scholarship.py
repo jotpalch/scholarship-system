@@ -177,3 +177,59 @@ class EligibleScholarshipResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+class ScholarshipSubTypeConfigBase(BaseModel):
+    """Base schema for scholarship sub-type configuration"""
+    sub_type_code: str
+    name: str
+    name_en: Optional[str] = None
+    description: Optional[str] = None
+    description_en: Optional[str] = None
+    amount: Optional[Decimal] = None
+    currency: str = "TWD"
+    display_order: int = 0
+    is_active: bool = True
+
+    @validator('sub_type_code')
+    def validate_sub_type_code(cls, v):
+        valid_types = [e.value for e in ScholarshipSubTypeEnum]
+        if v not in valid_types:
+            raise ValueError(f"Invalid sub_type_code: {v}")
+        return v
+    
+    @validator('name')
+    def validate_name_for_general(cls, v, values):
+        # For general sub-type, use default name if not provided
+        if values.get('sub_type_code') == ScholarshipSubTypeEnum.GENERAL.value and not v:
+            return "一般獎學金"
+        return v
+
+
+class ScholarshipSubTypeConfigCreate(ScholarshipSubTypeConfigBase):
+    """Schema for creating scholarship sub-type configuration"""
+    pass
+
+
+class ScholarshipSubTypeConfigUpdate(BaseModel):
+    """Schema for updating scholarship sub-type configuration"""
+    name: Optional[str] = None
+    name_en: Optional[str] = None
+    description: Optional[str] = None
+    description_en: Optional[str] = None
+    amount: Optional[Decimal] = None
+    currency: Optional[str] = None
+    display_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class ScholarshipSubTypeConfigResponse(ScholarshipSubTypeConfigBase):
+    """Schema for scholarship sub-type configuration response"""
+    id: int
+    scholarship_type_id: int
+    effective_amount: Optional[Decimal] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

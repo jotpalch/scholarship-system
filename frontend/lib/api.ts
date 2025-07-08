@@ -1145,6 +1145,10 @@ class ApiClient {
     getScholarshipSubTypes: async (scholarshipCode: string): Promise<ApiResponse<SubTypeStats[]>> => {
       return this.request(`/admin/scholarships/${scholarshipCode}/sub-types`)
     },
+
+    getSubTypeTranslations: async (): Promise<ApiResponse<Record<string, Record<string, string>>>> => {
+      return this.request('/admin/scholarships/sub-type-translations')
+    },
   }
 
   // Application Fields Configuration

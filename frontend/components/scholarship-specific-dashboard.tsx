@@ -28,6 +28,7 @@ import {
 import { useScholarshipSpecificApplications } from "@/hooks/use-admin"
 import { ApplicationDetailDialog } from "@/components/application-detail-dialog"
 import { Locale } from "@/lib/validators"
+import { api } from "@/lib/api"
 
 // Use the Application type from the API
 import { Application } from "@/lib/api"
@@ -69,8 +70,12 @@ export function ScholarshipSpecificDashboard() {
     updateApplicationStatus 
   } = useScholarshipSpecificApplications()
 
-  // Locale state for internationalization
-  const [locale, setLocale] = useState<Locale>("zh")
+  // Locale state for internationalization (管理員頁面固定使用中文)
+  const [locale] = useState<Locale>("zh")
+  
+  // State for sub-type translations from backend
+  const [subTypeTranslations, setSubTypeTranslations] = useState<Record<string, string>>({})
+  const [translationsLoading, setTranslationsLoading] = useState(false)
 
   // Debug logging
   console.log('ScholarshipSpecificDashboard render:', {
@@ -111,6 +116,28 @@ export function ScholarshipSpecificDashboard() {
     setSelectedSubTypes([])
   }, [activeTab])
 
+  // 載入子類型翻譯
+  useEffect(() => {
+    const loadSubTypeTranslations = async () => {
+      if (Object.keys(subTypeTranslations).length > 0) return // 已經載入過
+      
+      setTranslationsLoading(true)
+      try {
+        const response = await api.admin.getSubTypeTranslations()
+        if (response.success && response.data) {
+          // 使用中文翻譯
+          setSubTypeTranslations(response.data.zh || {})
+        }
+      } catch (error) {
+        console.error('Failed to load sub-type translations:', error)
+      } finally {
+        setTranslationsLoading(false)
+      }
+    }
+
+    loadSubTypeTranslations()
+  }, [subTypeTranslations])
+
   // 搜尋和篩選邏輯
   const filterApplications = (applications: Application[]) => {
     let filtered = applications
@@ -133,25 +160,29 @@ export function ScholarshipSpecificDashboard() {
     return filtered
   }
 
-  // 獲取獎學金顯示名稱
+  // 獲取獎學金顯示名稱（從後端資料）
   const getScholarshipDisplayName = (code: string) => {
-    const nameMap: Record<string, string> = {
-      'undergraduate_freshman': '學士班新生獎學金',
-      'phd': '博士生獎學金',
-      'direct_phd': '逕升博士獎學金'
+    if (scholarshipStats[code]) {
+      return locale === "zh" ? scholarshipStats[code].name : (scholarshipStats[code].name_en || scholarshipStats[code].name)
     }
-    return nameMap[code] || code
+    return code
   }
 
-  // 獲取子類型顯示名稱
+  // 獲取子類型顯示名稱（從後端獲取）
   const getSubTypeDisplayName = (subType: string) => {
-    const nameMap: Record<string, string> = {
+    // 優先使用後端翻譯
+    if (subTypeTranslations[subType]) {
+      return subTypeTranslations[subType]
+    }
+    
+    // 備用：使用本地映射
+    const fallbackMap: Record<string, string> = {
       'nstc': '國科會',
       'moe_1w': '教育部一萬元',
       'moe_2w': '教育部兩萬元',
       'general': '一般'
     }
-    return nameMap[subType] || subType
+    return fallbackMap[subType] || subType
   }
 
   // 處理申請狀態更新

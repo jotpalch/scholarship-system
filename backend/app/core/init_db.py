@@ -18,7 +18,7 @@ from app.models.student import (
 )
 from app.core.security import get_password_hash
 from app.db.base_class import Base
-from app.models.scholarship import ScholarshipRule, ScholarshipType, ScholarshipStatus, ScholarshipCategory
+from app.models.scholarship import ScholarshipRule, ScholarshipType, ScholarshipStatus, ScholarshipCategory, ScholarshipSubTypeConfig
 from app.models.notification import Notification, NotificationType, NotificationPriority
 from app.models.application_field import ApplicationField, ApplicationDocument
 from app.core.config import settings
@@ -1034,6 +1034,80 @@ async def createTestScholarships(session: AsyncSession) -> None:
         session.add(scholarship_rule)
 
     await session.commit()
+    
+    # === 創建子類型配置 ===
+    print("🔧 Creating sub-type configurations...")
+    
+    # 獲取已創建的獎學金類型
+    result = await session.execute(select(ScholarshipType))
+    scholarships = result.scalars().all()
+    
+    # 創建子類型配置
+    sub_type_configs_data = []
+    
+    for scholarship in scholarships:
+        if scholarship.code == "phd":
+            # 博士生獎學金的子類型配置
+            sub_type_configs_data.extend([
+                {
+                    "scholarship_type_id": scholarship.id,
+                    "sub_type_code": "nstc",
+                    "name": "國科會博士生獎學金",
+                    "name_en": "NSTC PHD Scholarship",
+                    "description": "國科會博士生獎學金，適用於符合條件的博士生",
+                    "description_en": "NSTC PHD Scholarship for eligible PhD students",
+                    "amount": None,  # 使用主獎學金金額
+                    "display_order": 1,
+                    "is_active": True,
+                    "created_by": 1,
+                    "updated_by": 1
+                },
+                {
+                    "scholarship_type_id": scholarship.id,
+                    "sub_type_code": "moe_1w",
+                    "name": "教育部博士生獎學金 (指導教授配合款一萬)",
+                    "name_en": "MOE PHD Scholarship (Professor Match 10K)",
+                    "description": "教育部博士生獎學金，指導教授配合款一萬元",
+                    "description_en": "MOE PHD Scholarship with professor match of 10K",
+                    "amount": None,  # 使用主獎學金金額
+                    "display_order": 2,
+                    "is_active": True,
+                    "created_by": 1,
+                    "updated_by": 1
+                },
+                {
+                    "scholarship_type_id": scholarship.id,
+                    "sub_type_code": "moe_2w",
+                    "name": "教育部博士生獎學金 (指導教授配合款兩萬)",
+                    "name_en": "MOE PHD Scholarship (Professor Match 20K)",
+                    "description": "教育部博士生獎學金，指導教授配合款兩萬元",
+                    "description_en": "MOE PHD Scholarship with professor match of 20K",
+                    "amount": None,  # 使用主獎學金金額
+                    "display_order": 3,
+                    "is_active": True,
+                    "created_by": 1,
+                    "updated_by": 1
+                }
+            ])
+        # 注意：general 子類型不需要特別配置，因為它代表預設情況
+    
+    # 創建子類型配置
+    for config_data in sub_type_configs_data:
+        # 檢查是否已存在
+        result = await session.execute(
+            select(ScholarshipSubTypeConfig).where(
+                ScholarshipSubTypeConfig.scholarship_type_id == config_data["scholarship_type_id"],
+                ScholarshipSubTypeConfig.sub_type_code == config_data["sub_type_code"]
+            )
+        )
+        existing = result.scalar_one_or_none()
+        
+        if not existing:
+            config = ScholarshipSubTypeConfig(**config_data)
+            session.add(config)
+    
+    await session.commit()
+    print("✅ Sub-type configurations created successfully!")
     print("✅ Test scholarship data created successfully!")
     
     if settings.debug:
