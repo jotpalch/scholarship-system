@@ -170,19 +170,13 @@ export function ScholarshipSpecificDashboard() {
 
   // 獲取子類型顯示名稱（從後端獲取）
   const getSubTypeDisplayName = (subType: string) => {
-    // 優先使用後端翻譯
+    // 使用後端翻譯
     if (subTypeTranslations[subType]) {
       return subTypeTranslations[subType]
     }
     
-    // 備用：使用本地映射
-    const fallbackMap: Record<string, string> = {
-      'nstc': '國科會',
-      'moe_1w': '教育部一萬元',
-      'moe_2w': '教育部兩萬元',
-      'general': '一般'
-    }
-    return fallbackMap[subType] || subType
+    // 如果沒有翻譯，顯示原始代碼
+    return subType
   }
 
   // 處理申請狀態更新
