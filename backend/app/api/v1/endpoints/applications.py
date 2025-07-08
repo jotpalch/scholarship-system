@@ -260,7 +260,7 @@ async def upload_file(
     application_id: int = Path(..., description="Application ID"),
     file: UploadFile = File(...),
     file_type: str = Query("other", description="File type"),
-    current_user: User = Depends(require_student),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Upload file for application using MinIO"""

@@ -68,12 +68,21 @@ async def get_file_proxy(
         # Check access permissions
         application = file_record.application
         
-        # Students can only access their own files
-        if current_user.role == UserRole.STUDENT and application.user_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Access denied")
-        
-        # Staff (admin/college) can access any file
-        if current_user.role not in [UserRole.STUDENT, UserRole.ADMIN, UserRole.COLLEGE]:
+        # Check access permissions based on role
+        if current_user.role == UserRole.STUDENT:
+            # Students can only access their own files
+            if application.user_id != current_user.id:
+                raise HTTPException(status_code=403, detail="Access denied")
+        elif current_user.role == UserRole.PROFESSOR:
+            # Professors can access files from their students
+            # TODO: Add professor-student relationship check when implemented
+            # For now, allow professors to access all files
+            pass
+        elif current_user.role in [UserRole.COLLEGE, UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+            # College, Admin, and Super Admin can access any file
+            pass
+        else:
+            # Other roles are not allowed
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Get file stream from MinIO
@@ -160,7 +169,22 @@ async def download_file_proxy(
         
         # Check access permissions
         application = file_record.application
-        if current_user.role == UserRole.STUDENT and application.user_id != current_user.id:
+        
+        # Check access permissions based on role
+        if current_user.role == UserRole.STUDENT:
+            # Students can only access their own files
+            if application.user_id != current_user.id:
+                raise HTTPException(status_code=403, detail="Access denied")
+        elif current_user.role == UserRole.PROFESSOR:
+            # Professors can access files from their students
+            # TODO: Add professor-student relationship check when implemented
+            # For now, allow professors to access all files
+            pass
+        elif current_user.role in [UserRole.COLLEGE, UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+            # College, Admin, and Super Admin can access any file
+            pass
+        else:
+            # Other roles are not allowed
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Get file stream from MinIO

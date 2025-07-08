@@ -338,9 +338,22 @@ class ApplicationService:
         if not application:
             raise NotFoundError("Application", str(application_id))
 
-        # Check authorization
-        if current_user.role == UserRole.STUDENT and application.user_id != current_user.id:
-            raise AuthorizationError("Cannot access other students' applications")
+        # Check authorization based on role
+        if current_user.role == UserRole.STUDENT:
+            # Students can only access their own applications
+            if application.user_id != current_user.id:
+                raise AuthorizationError("Cannot access other students' applications")
+        elif current_user.role == UserRole.PROFESSOR:
+            # Professors can access applications from their students
+            # TODO: Add professor-student relationship check when implemented
+            # For now, allow professors to access all applications
+            pass
+        elif current_user.role in [UserRole.COLLEGE, UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+            # College, Admin, and Super Admin can access any application
+            pass
+        else:
+            # Other roles are not allowed
+            raise AuthorizationError("Access denied")
 
         # Generate file paths for files if they exist
         if application.files:
@@ -721,9 +734,22 @@ class ApplicationService:
         if not application:
             raise NotFoundError("Application", str(application_id))
         
-        # For students, they can only upload to their own applications
-        if user.role == UserRole.STUDENT and application.user_id != user.id:
-            raise AuthorizationError("Cannot upload files to other students' applications")
+        # Check upload permissions based on role
+        if user.role == UserRole.STUDENT:
+            # Students can only upload to their own applications
+            if application.user_id != user.id:
+                raise AuthorizationError("Cannot upload files to other students' applications")
+        elif user.role == UserRole.PROFESSOR:
+            # Professors can upload files to their students' applications
+            # TODO: Add professor-student relationship check when implemented
+            # For now, allow professors to upload to any application
+            pass
+        elif user.role in [UserRole.COLLEGE, UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+            # College, Admin, and Super Admin can upload to any application
+            pass
+        else:
+            # Other roles are not allowed to upload
+            raise AuthorizationError("Upload access denied")
         
         # Upload file to MinIO
         object_name, file_size = await minio_service.upload_file(file, application_id, file_type)
