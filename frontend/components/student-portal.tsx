@@ -66,9 +66,9 @@ export function StudentPortal({ user, locale }: StudentPortalProps) {
           name: t("scholarships.direct_phd"),
           description:
             locale === "zh"
-              ? "適用於逕升博士班學生，需完整研究計畫"
+              ? "適用於逕讀博士班學生，需完整研究計畫"
               : "For direct PhD students, requires complete research plan",
-          eligibility: locale === "zh" ? "逕升博士生，入學管道8-11" : "Direct PhD students, enrollment channels 8-11",
+          eligibility: locale === "zh" ? "逕讀博士生，入學管道8-11" : "Direct PhD students, enrollment channels 8-11",
           amount: "NT$ 150,000",
         }
       default:

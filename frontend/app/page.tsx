@@ -141,7 +141,7 @@ export default function ScholarshipManagementSystem() {
       const typeMap = {
         'undergraduate_freshman': '學士班新生獎學金',
         'phd': '博士生獎學金',
-        'direct_phd': '逕升博士獎學金'
+        'direct_phd': '逕讀博士獎學金'
       }
       return typeMap[type as keyof typeof typeMap] || type
     }

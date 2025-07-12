@@ -24,7 +24,7 @@ class ScholarshipCategory(enum.Enum):
     """Scholarship category enum"""
     UNDERGRADUATE_FRESHMAN = "undergraduate_freshman"  # 學士班新生獎學金
     PHD = "phd"  # 國科會/教育部博士生獎學金
-    DIRECT_PHD = "direct_phd"  # 逕升博士獎學金
+    DIRECT_PHD = "direct_phd"  # 逕讀博士獎學金
 
 class ScholarshipSubType(enum.Enum):
     """Scholarship sub-type enum for combined scholarships"""

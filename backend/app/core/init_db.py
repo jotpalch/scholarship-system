@@ -679,9 +679,9 @@ async def createTestScholarships(session: AsyncSession) -> None:
         },
         {
             "code": "direct_phd",
-            "name": "逕升博士獎學金",
+            "name": "逕讀博士獎學金",
             "name_en": "Direct PhD Scholarship",
-            "description": "適用於逕升博士班學生，需完整研究計畫",
+            "description": "適用於逕讀博士班學生，需完整研究計畫",
             "description_en": "For direct PhD students, requires complete research plan",
             "category": ScholarshipCategory.DIRECT_PHD.value,
             "amount": 10000.00,
@@ -859,14 +859,14 @@ async def createTestScholarships(session: AsyncSession) -> None:
         {
             "scholarship_type_id": 3,
             "sub_type": None,
-            "rule_name": "逕升博士獎學金 博士生身分",
+            "rule_name": "逕讀博士獎學金 博士生身分",
             "tag": "博士生",
-            "description": "逕升博士獎學金需要博士生身分",
+            "description": "逕讀博士獎學金需要博士生身分",
             "rule_type": "degree",
             "condition_field": "academicRecords.degree",
             "operator": "==",
             "expected_value": "1",
-            "message": "逕升博士獎學金需要博士生身分",
+            "message": "逕讀博士獎學金需要博士生身分",
             "message_en": "Direct PhD scholarship requires PhD student status",
             "is_hard_rule": False,
             "is_warning": False,
@@ -876,13 +876,13 @@ async def createTestScholarships(session: AsyncSession) -> None:
         {
             "scholarship_type_id": 3,
             "sub_type": None,
-            "rule_name": "逕升博士獎學金 在學生身分 1: 在學 2: 應畢 3: 延畢",
+            "rule_name": "逕讀博士獎學金 在學生身分 1: 在學 2: 應畢 3: 延畢",
             "rule_type": "studyingStatus",
             "tag": "在學生",
             "condition_field": "academicRecords.studyingStatus",
             "operator": "in",
             "expected_value": "1,2,3",
-            "message": "逕升博士獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
+            "message": "逕讀博士獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
             "message_en": "Direct PhD scholarship requires active student status",
             "is_hard_rule": False,
             "is_warning": False,
@@ -892,13 +892,13 @@ async def createTestScholarships(session: AsyncSession) -> None:
         {
             "scholarship_type_id": 3,
             "sub_type": None,
-            "rule_name": "逕升博士獎學金 非在職生身分 需要為一般生",
+            "rule_name": "逕讀博士獎學金 非在職生身分 需要為一般生",
             "rule_type": "schoolIdentity",
             "tag": "非在職生",
             "condition_field": "academicRecords.schoolIdentity",
             "operator": "==",
             "expected_value": "1",
-            "message": "逕升博士獎學金需要非在職生身分 需要為一般生",
+            "message": "逕讀博士獎學金需要非在職生身分 需要為一般生",
             "message_en": "Direct PhD scholarship requires regular student status",
             "is_hard_rule": False,
             "is_warning": False,
@@ -908,14 +908,14 @@ async def createTestScholarships(session: AsyncSession) -> None:
         {
             "scholarship_type_id": 3,
             "sub_type": None,
-            "rule_name": "逕升博士獎學金 非陸港澳生身分",
+            "rule_name": "逕讀博士獎學金 非陸港澳生身分",
             "rule_type": "Identity",
             "tag": "非陸生",
-            "description": "逕升博士獎學金需要非陸港澳生身分",
+            "description": "逕讀博士獎學金需要非陸港澳生身分",
             "condition_field": "academicRecords.identity",
             "operator": "!=",
             "expected_value": "17",
-            "message": "逕升博士獎學金需要非陸港澳生身分",
+            "message": "逕讀博士獎學金需要非陸港澳生身分",
             "message_en": "Direct PhD scholarship requires non-Mainland China, Hong Kong, or Macao student status",
             "is_hard_rule": False,
             "is_warning": False,
@@ -925,14 +925,14 @@ async def createTestScholarships(session: AsyncSession) -> None:
         {
             "scholarship_type_id": 3,
             "sub_type": None,
-            "rule_name": "逕升博士獎學金 逕博生身分 8: 大學逕博 9: 碩士逕博 10: 跨校學士逕博 11: 跨校碩士逕博",
+            "rule_name": "逕讀博士獎學金 逕博生身分 8: 大學逕博 9: 碩士逕博 10: 跨校學士逕博 11: 跨校碩士逕博",
             "rule_type": "enrollType",
             "tag": "逕博生",
-            "description": "逕升博士獎學金需要逕博生身分",
+            "description": "逕讀博士獎學金需要逕博生身分",
             "condition_field": "academicRecords.enrollTypeCode",
             "operator": "in",
             "expected_value": "8,9,10,11",
-            "message": "逕升博士獎學金需要逕博生身分",
+            "message": "逕讀博士獎學金需要逕博生身分",
             "message_en": "Direct PhD scholarship requires direct PhD student status",
             "is_hard_rule": True,
             "is_warning": False,
@@ -942,14 +942,14 @@ async def createTestScholarships(session: AsyncSession) -> None:
         {
             "scholarship_type_id": 3,
             "sub_type": None,
-            "rule_name": "逕升博士獎學金 第一學年",
+            "rule_name": "逕讀博士獎學金 第一學年",
             "rule_type": "termCount",
             "tag": "第一學年",
-            "description": "逕升博士獎學金需要第一學年",
+            "description": "逕讀博士獎學金需要第一學年",
             "condition_field": "academicRecords.termCount",
             "operator": "in",
             "expected_value": "1,2",
-            "message": "逕升博士獎學金需要第一學年",
+            "message": "逕讀博士獎學金需要第一學年",
             "message_en": "Direct PhD scholarship requires first year",
             "is_hard_rule": False,
             "is_warning": False,
@@ -1300,7 +1300,7 @@ async def createApplicationFields(session: AsyncSession) -> None:
         }
     ]
     
-    # === 逕升博士獎學金字段配置 ===
+    # === 逕讀博士獎學金字段配置 ===
     direct_phd_fields = [
         {
             "scholarship_type": "direct_phd",
@@ -1534,7 +1534,7 @@ async def createApplicationFields(session: AsyncSession) -> None:
             "created_by": admin_id,
             "updated_by": admin_id
         },
-        # 逕升博士文件
+        # 逕讀博士文件
         # 1.個人基本資料(套印確認)
         # 2.博士班研修計畫書(範本下載)
         # 3.推薦信2封(註冊組上傳)
@@ -1743,7 +1743,7 @@ async def initDatabase() -> None:
     print("- College: college / college123")
     print("- Student (學士): stu_under / stuunder123")
     print("- Student (博士): stu_phd / stuphd123")
-    print("- Student (逕升博士): stu_direct / studirect123")
+    print("- Student (逕讀博士): stu_direct / studirect123")
     print("- Student (碩士): stu_master / stumaster123")
     print("- Student (陸生): stu_china / stuchina123")
 

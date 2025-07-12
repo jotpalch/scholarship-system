@@ -168,7 +168,7 @@ export const formatFieldValue = async (fieldName: string, value: any, locale: Lo
     const fallbackMap = {
       'undergraduate_freshman': locale === "zh" ? "學士班新生獎學金" : "Undergraduate Freshman Scholarship",
       'phd': locale === "zh" ? "博士生獎學金" : "PhD Scholarship",
-      'direct_phd': locale === "zh" ? "逕升博士獎學金" : "Direct PhD Scholarship",
+      'direct_phd': locale === "zh" ? "逕讀博士獎學金" : "Direct PhD Scholarship",
       'phd_moe': locale === "zh" ? "教育部博士生獎學金" : "MOE PhD Scholarship",
       'phd_nstc': locale === "zh" ? "國科會博士生獎學金" : "NSTC PhD Scholarship",
     };
