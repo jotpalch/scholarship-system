@@ -20,6 +20,22 @@ class ScholarshipCategoryEnum(str, Enum):
     DIRECT_PHD = "direct_phd"  # 逕讀博士獎學金
 
 
+class SemesterEnum(str, Enum):
+    FIRST = "first"
+    SECOND = "second"
+
+
+class CycleTypeEnum(str, Enum):
+    SEMESTER = "semester"
+    YEARLY = "yearly"
+
+
+class SubTypeSelectionModeEnum(str, Enum):
+    SINGLE = "single"          # 僅能選擇一個子項目
+    MULTIPLE = "multiple"      # 可自由多選
+    HIERARCHICAL = "hierarchical"  # 需依序選取：A → AB → ABC
+
+
 class ScholarshipSubTypeEnum(str, Enum):
     GENERAL = "general"  # 一般獎學金（無子類型時的預設值）
     NSTC = "nstc"  # 國科會
@@ -34,6 +50,9 @@ class ScholarshipTypeBase(BaseModel):
     description: Optional[str] = None
     description_en: Optional[str] = None
     category: ScholarshipCategoryEnum
+    academic_year: int
+    semester: SemesterEnum
+    application_cycle: CycleTypeEnum = CycleTypeEnum.SEMESTER
     sub_type_list: Optional[List[str]] = None  # ["nstc", "moe_1w", "moe_2w"]
     amount: Decimal
     currency: str = "TWD"
@@ -42,8 +61,12 @@ class ScholarshipTypeBase(BaseModel):
     application_start_date: Optional[datetime] = None
     application_end_date: Optional[datetime] = None
     review_deadline: Optional[datetime] = None
+    professor_review_start: Optional[datetime] = None
+    professor_review_end: Optional[datetime] = None
+    college_review_start: Optional[datetime] = None
+    college_review_end: Optional[datetime] = None
+    sub_type_selection_mode: SubTypeSelectionModeEnum = SubTypeSelectionModeEnum.SINGLE
     status: ScholarshipStatusEnum = ScholarshipStatusEnum.ACTIVE
-    max_applications_per_year: int = 1
     requires_professor_recommendation: bool = False
     requires_college_review: bool = False
     review_workflow: Optional[Dict[str, Any]] = None
@@ -70,6 +93,26 @@ class ScholarshipTypeBase(BaseModel):
         if v <= 0:
             raise ValueError("Amount must be greater than 0")
         return v
+    
+    @validator('academic_year')
+    def validate_academic_year(cls, v):
+        if v < 100 or v > 200:  # 民國100年到200年
+            raise ValueError("Academic year must be between 100 and 200")
+        return v
+    
+    @validator('professor_review_end')
+    def validate_professor_review_period(cls, v, values):
+        if v and 'professor_review_start' in values and values['professor_review_start']:
+            if v <= values['professor_review_start']:
+                raise ValueError("professor_review_end must be after professor_review_start")
+        return v
+    
+    @validator('college_review_end')
+    def validate_college_review_period(cls, v, values):
+        if v and 'college_review_start' in values and values['college_review_start']:
+            if v <= values['college_review_start']:
+                raise ValueError("college_review_end must be after college_review_start")
+        return v
 
 
 class ScholarshipTypeCreate(ScholarshipTypeBase):
@@ -81,6 +124,9 @@ class ScholarshipTypeUpdate(BaseModel):
     name_en: Optional[str] = None
     description: Optional[str] = None
     description_en: Optional[str] = None
+    academic_year: Optional[int] = None
+    semester: Optional[SemesterEnum] = None
+    application_cycle: Optional[CycleTypeEnum] = None
     amount: Optional[Decimal] = None
     currency: Optional[str] = None
     whitelist_enabled: Optional[bool] = None
@@ -88,8 +134,12 @@ class ScholarshipTypeUpdate(BaseModel):
     application_start_date: Optional[datetime] = None
     application_end_date: Optional[datetime] = None
     review_deadline: Optional[datetime] = None
+    professor_review_start: Optional[datetime] = None
+    professor_review_end: Optional[datetime] = None
+    college_review_start: Optional[datetime] = None
+    college_review_end: Optional[datetime] = None
+    sub_type_selection_mode: Optional[SubTypeSelectionModeEnum] = None
     status: Optional[ScholarshipStatusEnum] = None
-    max_applications_per_year: Optional[int] = None
     requires_professor_recommendation: Optional[bool] = None
     requires_college_review: Optional[bool] = None
     sub_type_list: Optional[List[str]] = None
@@ -165,12 +215,20 @@ class EligibleScholarshipResponse(BaseModel):
     name_en: str
     eligible_sub_types: List[str]
     category: str
+    academic_year: int
+    semester: SemesterEnum
+    application_cycle: CycleTypeEnum
     description: Optional[str] = None
     description_en: Optional[str] = None
     amount: Decimal
     currency: str
     application_start_date: Optional[datetime] = None
     application_end_date: Optional[datetime] = None
+    professor_review_start: Optional[datetime] = None
+    professor_review_end: Optional[datetime] = None
+    college_review_start: Optional[datetime] = None
+    college_review_end: Optional[datetime] = None
+    sub_type_selection_mode: SubTypeSelectionModeEnum
     passed: List[RuleMessage]
     warnings: List[RuleMessage]
     errors: List[RuleMessage]

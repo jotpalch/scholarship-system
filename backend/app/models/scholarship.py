@@ -26,6 +26,26 @@ class ScholarshipCategory(enum.Enum):
     PHD = "phd"  # 國科會/教育部博士生獎學金
     DIRECT_PHD = "direct_phd"  # 逕讀博士獎學金
 
+
+class Semester(enum.Enum):
+    """Semester enum"""
+    FIRST = "first"
+    SECOND = "second"
+
+
+class CycleType(enum.Enum):
+    """Application cycle type enum"""
+    SEMESTER = "semester"
+    YEARLY = "yearly"
+
+
+class SubTypeSelectionMode(enum.Enum):
+    """Sub-type selection mode enum"""
+    SINGLE = "single"          # 僅能選擇一個子項目
+    MULTIPLE = "multiple"      # 可自由多選
+    HIERARCHICAL = "hierarchical"  # 需依序選取：A → AB → ABC
+
+
 class ScholarshipSubType(enum.Enum):
     """Scholarship sub-type enum for combined scholarships"""
 
@@ -56,6 +76,12 @@ class ScholarshipType(Base):
     # 類別設定
     category = Column(String(50), nullable=False)
     sub_type_list = Column(JSON, default=[ScholarshipSubType.GENERAL.value]) # ["nstc", "moe_1w", "moe_2w"]
+    sub_type_selection_mode = Column(Enum(SubTypeSelectionMode), default=SubTypeSelectionMode.SINGLE, nullable=False)
+    
+    # 學年度與學期設定
+    academic_year = Column(Integer, nullable=False)  # 民國年，如 113 表示 113 學年度
+    semester = Column(Enum(Semester), nullable=False)
+    application_cycle = Column(Enum(CycleType), default=CycleType.SEMESTER, nullable=False)
     
     # 金額設定
     amount = Column(Numeric(10, 2), nullable=False)
@@ -66,15 +92,21 @@ class ScholarshipType(Base):
     whitelist_student_ids = Column(JSON, default=[])  # 白名單學生ID列表
     
     # 申請時間
-    application_start_date = Column(DateTime(timezone=True))
-    application_end_date = Column(DateTime(timezone=True))
-    review_deadline = Column(DateTime(timezone=True))
-    
+    application_start_date = Column(DateTime(timezone=True), nullable=True)
+    application_end_date = Column(DateTime(timezone=True), nullable=True)
+
+    requires_professor_recommendation = Column(Boolean, default=False)
+    professor_review_start = Column(DateTime(timezone=True), nullable=True)
+    professor_review_end = Column(DateTime(timezone=True), nullable=True)
+
+    requires_college_review = Column(Boolean, default=False)
+    college_review_start = Column(DateTime(timezone=True), nullable=True)
+    college_review_end = Column(DateTime(timezone=True), nullable=True)
+
+    review_deadline = Column(DateTime(timezone=True), nullable=True)
+
     # 狀態與設定
     status = Column(String(20), default=ScholarshipStatus.ACTIVE.value)
-    max_applications_per_year = Column(Integer, default=1)
-    requires_professor_recommendation = Column(Boolean, default=False)
-    requires_college_review = Column(Boolean, default=False)
         
     # 時間戳記
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -104,6 +136,29 @@ class ScholarshipType(Base):
         if not self.application_start_date or not self.application_end_date:
             return False
         return bool(self.application_start_date <= now <= self.application_end_date)
+    
+    @property
+    def academic_year_label(self) -> str:
+        """Get academic year label for display"""
+        return f"{self.academic_year}學年度 {self.get_semester_label()}"
+    
+    def get_semester_label(self) -> str:
+        """Get semester label"""
+        return {
+            Semester.FIRST: "第一學期",
+            Semester.SECOND: "第二學期",
+        }.get(self.semester, "")
+    
+    def is_valid_sub_type_selection(self, selected: List[str]) -> bool:
+        """Validate sub-type selection based on selection mode"""
+        if self.sub_type_selection_mode == SubTypeSelectionMode.SINGLE:
+            return len(selected) == 1 and selected[0] in self.sub_type_list
+        elif self.sub_type_selection_mode == SubTypeSelectionMode.MULTIPLE:
+            return all(s in self.sub_type_list for s in selected)
+        elif self.sub_type_selection_mode == SubTypeSelectionMode.HIERARCHICAL:
+            expected = self.sub_type_list[:len(selected)]
+            return selected == expected
+        return False
     
     def is_student_in_whitelist(self, student_id: int) -> bool:
         """Check if student is in whitelist"""
@@ -165,6 +220,34 @@ class ScholarshipType(Base):
                 translations["en"][ScholarshipSubType.GENERAL.value] = "General Scholarship"
         
         return translations
+    
+    def get_semester_key(self) -> str:
+        """Get unique key for this scholarship semester (for application limit checking)"""
+        return f"{self.academic_year}_{self.semester.value}"
+    
+    def can_student_apply(self, student_id: int, existing_applications: List['Application']) -> bool:
+        """
+        Check if student can apply for this scholarship based on semester limits
+        
+        Args:
+            student_id: Student ID to check
+            existing_applications: List of existing applications for this student
+            
+        Returns:
+            bool: True if student can apply, False otherwise
+        """
+        # Check whitelist first
+        if not self.is_student_in_whitelist(student_id):
+            return False
+        
+        # Check if student already has an application for this semester
+        semester_key = self.get_semester_key()
+        for application in existing_applications:
+            if (application.scholarship_type_id == self.id and 
+                application.student_id == student_id):
+                return False
+        
+        return True
 
 class ScholarshipSubTypeConfig(Base):
     """
@@ -222,10 +305,6 @@ class ScholarshipSubTypeConfig(Base):
         elif self.scholarship_type:
             return self.scholarship_type.amount
         return None
-
-
-
-
 
 class ScholarshipRule(Base):
     """

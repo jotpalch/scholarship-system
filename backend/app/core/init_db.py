@@ -18,7 +18,7 @@ from app.models.student import (
 )
 
 from app.db.base_class import Base
-from app.models.scholarship import ScholarshipRule, ScholarshipType, ScholarshipStatus, ScholarshipCategory, ScholarshipSubTypeConfig
+from app.models.scholarship import ScholarshipRule, ScholarshipType, ScholarshipStatus, ScholarshipCategory, ScholarshipSubTypeConfig, Semester, CycleType, SubTypeSelectionMode
 from app.models.notification import Notification, NotificationType, NotificationPriority
 from app.models.application_field import ApplicationField, ApplicationDocument
 from app.core.config import settings
@@ -645,14 +645,21 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "description": "適用於學士班新生，需符合 GPA ≥ 3.38 或前35%排名",
             "description_en": "For undergraduate freshmen, requires GPA ≥ 3.38 or top 35% ranking",
             "category": ScholarshipCategory.UNDERGRADUATE_FRESHMAN.value,
+            "academic_year": 113,  # 民國113年
+            "semester": Semester.FIRST,
+            "application_cycle": CycleType.SEMESTER,
             "amount": 10000.00,
             "currency": "TWD",
             "whitelist_enabled": not settings.debug,
             "whitelist_student_ids": student_ids if not settings.debug else [],
             "application_start_date": start_date,
             "application_end_date": end_date,
+            "professor_review_start": start_date + timedelta(days=7),
+            "professor_review_end": end_date + timedelta(days=14),
+            "college_review_start": start_date + timedelta(days=14),
+            "college_review_end": end_date + timedelta(days=21),
+            "sub_type_selection_mode": SubTypeSelectionMode.SINGLE,
             "status": ScholarshipStatus.ACTIVE.value,
-            "max_applications_per_year": 1,
             "requires_professor_recommendation": False,
             "requires_college_review": False,
             "created_by": 1,
@@ -665,6 +672,9 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "description": "適用於一般博士生，需完整研究計畫和教授推薦 國科會/教育部博士生獎學金",
             "description_en": "For regular PhD students, requires complete research plan and professor recommendation",
             "category": ScholarshipCategory.PHD.value,
+            "academic_year": 113,  # 民國113年
+            "semester": Semester.FIRST,
+            "application_cycle": CycleType.SEMESTER,
             "sub_type_list": ["nstc", "moe_1w", "moe_2w"],
             "amount": 40000.00,
             "currency": "TWD",
@@ -672,8 +682,12 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "whitelist_student_ids": [],
             "application_start_date": start_date,
             "application_end_date": end_date,
+            "professor_review_start": start_date + timedelta(days=7),
+            "professor_review_end": end_date + timedelta(days=14),
+            "college_review_start": start_date + timedelta(days=14),
+            "college_review_end": end_date + timedelta(days=21),
+            "sub_type_selection_mode": SubTypeSelectionMode.MULTIPLE,
             "status": ScholarshipStatus.ACTIVE.value,
-            "max_applications_per_year": 1,
             "requires_professor_recommendation": True,
             "requires_college_review": True,
             "created_by": 1,
@@ -686,14 +700,21 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "description": "適用於逕讀博士班學生，需完整研究計畫",
             "description_en": "For direct PhD students, requires complete research plan",
             "category": ScholarshipCategory.DIRECT_PHD.value,
+            "academic_year": 113,  # 民國113年
+            "semester": Semester.FIRST,
+            "application_cycle": CycleType.SEMESTER,
             "amount": 10000.00,
             "currency": "TWD",
             "whitelist_enabled": not settings.debug,
             "whitelist_student_ids": student_ids if not settings.debug else [],
             "application_start_date": start_date,
             "application_end_date": end_date,
+            "professor_review_start": start_date + timedelta(days=7),
+            "professor_review_end": end_date + timedelta(days=14),
+            "college_review_start": start_date + timedelta(days=14),
+            "college_review_end": end_date + timedelta(days=21),
+            "sub_type_selection_mode": SubTypeSelectionMode.SINGLE,
             "status": ScholarshipStatus.ACTIVE.value,
-            "max_applications_per_year": 1,
             "requires_professor_recommendation": False,
             "requires_college_review": False,
             "created_by": 1,
