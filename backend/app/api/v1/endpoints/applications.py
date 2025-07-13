@@ -42,16 +42,15 @@ async def create_application(
         
         if not student:
             print(f"[API Error] Student profile not found for user: {current_user.id}")
-            print(f"[API Debug] User data: {current_user.dict(exclude={'hashed_password'})}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={
-                    "message": "Student profile not found",
-                    "user_id": current_user.id,
-                    "student_no": getattr(current_user, 'student_no', None),
+            print(f"[API Debug] User data: {current_user.nycu_id}, {current_user.name}, {current_user.email}")
+            return {
+                "success": False,
+                "message": "Student profile not found",
+                "data": {
+                    "student_no": getattr(current_user, 'nycu_id', None),
                     "error_code": "STUDENT_NOT_FOUND"
                 }
-            )
+            }
             
         print(f"[API Debug] Found student profile: {student.id}")
         

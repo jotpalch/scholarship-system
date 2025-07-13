@@ -46,33 +46,48 @@ export async function setupAuthMocks(page: Page, userRole: 'student' | 'professo
     const userData = {
       student: {
         id: '1',
-        username: 'student1',
+        nycu_id: 'student1',
         email: 'student@test.com',
         role: 'student',
-        full_name: 'Test Student',
-        is_active: true,
+        name: 'Test Student',
+        user_type: 'student',
+        status: '在學',
         created_at: '2025-01-01',
-        updated_at: '2025-01-01'
+        updated_at: '2025-01-01',
+        raw_data: {
+          chinese_name: '測試學生',
+          english_name: 'Test Student'
+        }
       },
       professor: {
         id: '2',
-        username: 'professor1',
+        nycu_id: 'professor1',
         email: 'professor@test.com',
         role: 'professor',
-        full_name: 'Test Professor',
-        is_active: true,
+        name: 'Test Professor',
+        user_type: 'employee',
+        status: '在職',
         created_at: '2025-01-01',
-        updated_at: '2025-01-01'
+        updated_at: '2025-01-01',
+        raw_data: {
+          chinese_name: '測試教授',
+          english_name: 'Test Professor'
+        }
       },
       admin: {
         id: '3',
-        username: 'admin1',
+        nycu_id: 'admin1',
         email: 'admin@test.com',
         role: 'admin',
-        full_name: 'Test Admin',
-        is_active: true,
+        name: 'Test Admin',
+        user_type: 'employee',
+        status: '在職',
         created_at: '2025-01-01',
-        updated_at: '2025-01-01'
+        updated_at: '2025-01-01',
+        raw_data: {
+          chinese_name: '測試管理員',
+          english_name: 'Test Admin'
+        }
       }
     };
 

@@ -32,14 +32,6 @@ export const translations = {
       sysadmin: "系統管理員",
     },
 
-    // 獎學金類型
-    scholarships: {
-      undergraduate_freshman: "學士班新生獎學金",
-      phd_nstc: "國科會博士生獎學金",
-      phd_moe: "教育部博士生獎學金",
-      direct_phd: "逕博獎學金"
-    },
-
     // 狀態
     status: {
       draft: "草稿",
@@ -123,13 +115,6 @@ export const translations = {
       OTHER: "其他",
     },
 
-    scholarship_subtypes: {
-      general: "一般獎學金",
-      nstc: "國科會博士生獎學金",
-      moe_1w: "教育部博士生獎學金 (指導教授配合款一萬)",
-      moe_2w: "教育部博士生獎學金 (指導教授配合款兩萬)"
-    },
-
     eligibility_tags: {
       // Basic eligibility
       "博士生": "博士生",
@@ -184,16 +169,6 @@ export const translations = {
       reviewer: "Reviewer",
       admin: "Administrator",
       sysadmin: "System Administrator",
-    },
-
-    // Scholarship Types
-    scholarships: {
-      undergraduate_freshman: "Undergraduate Freshman Scholarship",
-      phd_nstc: "PhD Research Scholarship",
-      phd_moe: "MOE PhD Scholarship",
-      direct_phd: "Direct PhD Scholarship",
-      phd_nsc: "NSC PhD Research Scholarship",
-      academic_excellence: "Academic Excellence Scholarship",
     },
 
     // Status
@@ -279,13 +254,6 @@ export const translations = {
       OTHER: "Other",
     },
 
-    scholarship_subtypes: {
-      general: "General Scholarship",
-      nstc: "NSTC PHD Scholarship",
-      moe_1w: "MOE PHD Scholarship (Professor Match 10K)",
-      moe_2w: "MOE PHD Scholarship (Professor Match 20K)"
-    },
-
     eligibility_tags: {
       // Basic eligibility
       "碩士生": "Master Student",
@@ -325,16 +293,4 @@ export function getTranslation(locale: 'zh' | 'en', key: string): string {
   }
   
   return value || key
-}
-
-// Utility function to get Chinese scholarship type name by code
-export function getScholarshipTypeZh(scholarshipType: string): string {
-  const scholarshipTypeMap: Record<string, string> = {
-    "undergraduate_freshman": "學士班新生獎學金",
-    "phd_nstc": "國科會博士生獎學金", 
-    "phd_moe": "教育部博士生獎學金",
-    "direct_phd": "逕博獎學金"
-  }
-  
-  return scholarshipTypeMap[scholarshipType] || scholarshipType
 }

@@ -38,7 +38,7 @@ async def get_scholarship_eligibility(
     if not student:
         raise HTTPException(
             status_code=404, 
-            detail=f"Student profile not found for user {current_user.username}"
+            detail=f"Student profile not found for user {current_user.nycu_id}"
         )
 
     eligible_scholarships = await get_eligible_scholarships(student, db, include_validation_details=False)

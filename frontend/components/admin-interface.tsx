@@ -10,17 +10,32 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Settings, Users, FileText, Database, Upload, Download, Play, Pause, Edit, Plus, Mail, Save, Eye, MessageSquare, AlertCircle, Trash2, RefreshCw, Clock, Timer } from "lucide-react"
-import apiClient, { EmailTemplate, NotificationResponse, AnnouncementCreate, AnnouncementUpdate, UserListResponse, UserStats, UserCreate } from "@/lib/api"
+import { Settings, Users, FileText, Database, Upload, Download, Play, Pause, Edit, Plus, Mail, Save, Eye, MessageSquare, AlertCircle, Trash2, RefreshCw, Clock, Timer, X } from "lucide-react"
+import apiClient, { EmailTemplate, NotificationResponse, AnnouncementCreate, AnnouncementUpdate, UserListResponse, UserStats, UserCreate, Workflow, ScholarshipRule, SystemStats, ScholarshipPermission } from "@/lib/api"
 import { UserEditModal } from "@/components/user-edit-modal"
+import { Modal } from "@/components/ui/modal"
 
 
 
 interface User {
   id: string
+  nycu_id: string
   name: string
   email: string
   role: "student" | "professor" | "college" | "admin" | "super_admin"
+  user_type?: 'student' | 'employee'
+  status?: '在學' | '畢業' | '在職' | '退休'
+  dept_code?: string
+  dept_name?: string
+  comment?: string
+  last_login_at?: string
+  created_at: string
+  updated_at: string
+  raw_data?: {
+    chinese_name?: string
+    english_name?: string
+    [key: string]: any
+  }
 }
 
 interface AdminInterfaceProps {
@@ -63,58 +78,29 @@ const DRAGGABLE_VARIABLES: Record<string, { label: string; desc: string }[]> = {
 };
 
 export function AdminInterface({ user }: AdminInterfaceProps) {
-  const [workflows] = useState([
-    {
-      id: "wf_001",
-      name: "大學部新生獎學金審核流程",
-      version: "v2.1",
-      status: "active",
-      lastModified: "2025-06-01",
-      steps: 3,
-    },
-    {
-      id: "wf_002",
-      name: "博士班獎學金審核流程",
-      version: "v1.8",
-      status: "active",
-      lastModified: "2025-05-28",
-      steps: 5,
-    },
-    {
-      id: "wf_003",
-      name: "直升博士獎學金審核流程",
-      version: "v1.2",
-      status: "draft",
-      lastModified: "2025-06-02",
-      steps: 4,
-    },
-  ])
+  // 工作流程狀態
+  const [workflows, setWorkflows] = useState<Workflow[]>([])
+  const [loadingWorkflows, setLoadingWorkflows] = useState(false)
+  const [workflowsError, setWorkflowsError] = useState<string | null>(null)
 
-  const [scholarshipRules] = useState([
-    {
-      id: "rule_001",
-      name: "大學部新生資格檢核",
-      type: "undergraduate_freshman",
-      criteria: { gpa_min: 3.38, rank_top_percent: 30 },
-      active: true,
-    },
-    {
-      id: "rule_002",
-      name: "博士班基本資格",
-      type: "phd_basic",
-      criteria: { enrollment_status: "active", advisor_required: true },
-      active: true,
-    },
-  ])
+  // 獎學金規則狀態
+  const [scholarshipRules, setScholarshipRules] = useState<ScholarshipRule[]>([])
+  const [loadingRules, setLoadingRules] = useState(false)
+  const [rulesError, setRulesError] = useState<string | null>(null)
 
-  const [systemStats] = useState({
-    totalUsers: 2847,
-    activeApplications: 156,
-    completedReviews: 89,
-    systemUptime: "99.8%",
-    avgResponseTime: "245ms",
-    storageUsed: "2.3TB",
+  // 系統統計狀態
+  const [systemStats, setSystemStats] = useState<SystemStats>({
+    totalUsers: 0,
+    activeApplications: 0,
+    completedReviews: 0,
+    systemUptime: "0%",
+    avgResponseTime: "0ms",
+    storageUsed: "0TB",
+    pendingReviews: 0,
+    totalScholarships: 0
   })
+  const [loadingStats, setLoadingStats] = useState(false)
+  const [statsError, setStatsError] = useState<string | null>(null)
 
   const [emailTab, setEmailTab] = useState(EMAIL_TEMPLATE_KEYS[0].key);
   const [emailTemplate, setEmailTemplate] = useState<EmailTemplate | null>(null);
@@ -152,25 +138,44 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
   });
   const [showUserForm, setShowUserForm] = useState(false);
   const [editingUser, setEditingUser] = useState<UserListResponse | null>(null);
-  const [userForm, setUserForm] = useState<UserCreate & { is_active: boolean }>({
+  const [userForm, setUserForm] = useState<UserCreate>({
+    nycu_id: '',
     email: '',
+    name: '',
+    role: 'student',
+    user_type: 'student',
+    status: '在學',
+    dept_code: '',
+    dept_name: '',
+    comment: '',
+    raw_data: {
+      chinese_name: '',
+      english_name: ''
+    },
+    // 向後相容性欄位
     username: '',
     full_name: '',
     chinese_name: '',
     english_name: '',
-    role: 'student',
     password: '',
-    is_active: true
+    student_no: ''
   });
   const [userPagination, setUserPagination] = useState({
     page: 1,
-    size: 20,
-    total: 0,
+    size: 10,
+    total: 0
   });
   const [userSearch, setUserSearch] = useState('');
   const [userRoleFilter, setUserRoleFilter] = useState('');
-  const [userStatusFilter, setUserStatusFilter] = useState('');
   const [userFormLoading, setUserFormLoading] = useState(false);
+
+  // 獎學金權限管理狀態
+  const [scholarshipPermissions, setScholarshipPermissions] = useState<ScholarshipPermission[]>([]);
+  const [loadingPermissions, setLoadingPermissions] = useState(false);
+  const [permissionsError, setPermissionsError] = useState<string | null>(null);
+  const [availableScholarships, setAvailableScholarships] = useState<Array<{ id: number; name: string; name_en?: string; code: string }>>([]);
+  const [loadingScholarships, setLoadingScholarships] = useState(false);
+
 
   const subjectRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -385,27 +390,47 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
     try {
       const params: any = {
         page: userPagination.page,
-        size: userPagination.size
+        size: userPagination.size,
+        roles: 'college,admin,super_admin,professor' // 包含教授角色，因為新用戶預設為教授
       };
       
       if (userSearch) params.search = userSearch;
       if (userRoleFilter) params.role = userRoleFilter;
-      if (userStatusFilter) params.is_active = userStatusFilter === 'true';
       
       const response = await apiClient.users.getAll(params);
       
       if (response.success && response.data) {
-        setUsers(response.data.items || []);
+        // 先過濾出管理角色和教授的使用者
+        const managementUsers = (response.data.items || []).filter((user: any) => 
+          ['college', 'admin', 'super_admin', 'professor'].includes(user.role)
+        );
+        
+        // 對使用者列表進行角色排序
+        const sortedUsers = managementUsers.sort((a, b) => {
+          const roleOrder = {
+            'super_admin': 1,
+            'admin': 2,
+            'college': 3,
+            'professor': 4
+          };
+          
+          const aOrder = roleOrder[a.role as keyof typeof roleOrder] || 999;
+          const bOrder = roleOrder[b.role as keyof typeof roleOrder] || 999;
+          
+          return aOrder - bOrder;
+        });
+        
+        setUsers(sortedUsers);
         setUserPagination(prev => ({
           ...prev,
-          total: response.data?.total || 0
+          total: sortedUsers.length // 使用過濾後的數量
         }));
       } else {
         const errorMsg = response.message || '獲取使用者失敗';
         setUsersError(errorMsg);
       }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : '網絡錯誤，請檢查連接';
+      const errorMsg = error instanceof Error ? error.message : '網絡錯誤';
       setUsersError(errorMsg);
     } finally {
       setLoadingUsers(false);
@@ -428,7 +453,7 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
   };
 
   const handleCreateUser = async () => {
-    if (!userForm.email || !userForm.username || !userForm.full_name || !userForm.password) return;
+    if (!userForm.nycu_id || !userForm.role) return;
     
     setUserFormLoading(true);
     
@@ -441,17 +466,17 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
         fetchUsers();
         fetchUserStats();
       } else {
-        alert('創建使用者失敗: ' + (response.message || '未知錯誤'));
+        alert('建立使用者權限失敗: ' + (response.message || '未知錯誤'));
       }
     } catch (error) {
-      alert('創建使用者失敗: ' + (error instanceof Error ? error.message : '網絡錯誤'));
+      alert('建立使用者權限失敗: ' + (error instanceof Error ? error.message : '網絡錯誤'));
     } finally {
       setUserFormLoading(false);
     }
   };
 
   const handleUpdateUser = async () => {
-    if (!editingUser || !userForm.email || !userForm.username || !userForm.full_name) return;
+    if (!editingUser || !userForm.role) return;
     
     setUserFormLoading(true);
     
@@ -464,89 +489,40 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
         resetUserForm();
         fetchUsers();
       } else {
-        alert('更新使用者失敗: ' + (response.message || '未知錯誤'));
+        alert('更新使用者權限失敗: ' + (response.message || '未知錯誤'));
       }
     } catch (error) {
-      alert('更新使用者失敗: ' + (error instanceof Error ? error.message : '網絡錯誤'));
+      alert('更新使用者權限失敗: ' + (error instanceof Error ? error.message : '網絡錯誤'));
     } finally {
       setUserFormLoading(false);
     }
   };
 
-  const handleDeleteUser = async (userId: number) => {
-    if (!confirm('確定要刪除此使用者嗎？此操作不可復原。')) return;
-    
-    try {
-      const response = await apiClient.users.delete(userId);
-      
-      if (response.success) {
-        fetchUsers();
-        fetchUserStats();
-      } else {
-        alert('刪除使用者失敗: ' + (response.message || '未知錯誤'));
-      }
-    } catch (error) {
-      alert('刪除使用者失敗: ' + (error instanceof Error ? error.message : '網絡錯誤'));
-    }
-  };
 
-  const handleActivateUser = async (userId: number) => {
-    try {
-      const response = await apiClient.users.activate(userId);
-      if (response.success) {
-        fetchUsers();
-        fetchUserStats();
-      } else {
-        alert('啟用使用者失敗: ' + (response.message || '未知錯誤'));
-      }
-    } catch (error) {
-      alert('啟用使用者失敗: ' + (error instanceof Error ? error.message : '網絡錯誤'));
-    }
-  };
-
-  const handleDeactivateUser = async (userId: number) => {
-    if (!confirm('確定要停用此使用者嗎？')) return;
-    
-    try {
-      const response = await apiClient.users.deactivate(userId);
-      if (response.success) {
-        fetchUsers();
-        fetchUserStats();
-      } else {
-        alert('停用使用者失敗: ' + (response.message || '未知錯誤'));
-      }
-    } catch (error) {
-      alert('停用使用者失敗: ' + (error instanceof Error ? error.message : '網絡錯誤'));
-    }
-  };
-
-  const handleResetPassword = async (userId: number) => {
-    if (!confirm('確定要重設此使用者的密碼嗎？系統會生成新的臨時密碼。')) return;
-    
-    try {
-      const response = await apiClient.users.resetPassword(userId);
-      if (response.success && response.data) {
-        alert(`密碼重設成功！\n\n新的臨時密碼: ${response.data.temporary_password}\n\n請將此密碼安全地傳送給使用者。`);
-      } else {
-        alert('重設密碼失敗: ' + (response.message || '未知錯誤'));
-      }
-    } catch (error) {
-      alert('重設密碼失敗: ' + (error instanceof Error ? error.message : '網絡錯誤'));
-    }
-  };
 
   const handleEditUser = (user: UserListResponse) => {
     setEditingUser(user);
     setUserForm({
+      nycu_id: user.nycu_id,
       email: user.email,
-      username: user.username,
-      full_name: user.full_name,
+      name: user.name,
+      role: user.role as any,
+      user_type: user.user_type as any,
+      status: user.status as any,
+      dept_code: user.dept_code || '',
+      dept_name: user.dept_name || '',
+      comment: user.comment || '',
+      raw_data: {
+        chinese_name: user.raw_data?.chinese_name || '',
+        english_name: user.raw_data?.english_name || ''
+      },
+      // 向後相容性欄位
+      username: user.username || '',
+      full_name: user.full_name || '',
       chinese_name: user.chinese_name || '',
       english_name: user.english_name || '',
-      role: user.role as any,
       password: '', // 編輯時不需要密碼
-      student_no: user.student_no || '',
-      is_active: user.is_active
+      student_no: user.student_no || ''
     });
     setShowUserForm(true);
   };
@@ -555,15 +531,26 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
     setShowUserForm(false);
     setEditingUser(null);
     setUserForm({
+      nycu_id: '',
       email: '',
+      name: '',
+      role: 'college',
+      user_type: 'student',
+      status: '在學',
+      dept_code: '',
+      dept_name: '',
+      comment: '',
+      raw_data: {
+        chinese_name: '',
+        english_name: ''
+      },
+      // 向後相容性欄位
       username: '',
       full_name: '',
       chinese_name: '',
       english_name: '',
-      role: 'student',
       password: '',
-      student_no: '',
-      is_active: true
+      student_no: ''
     });
   };
 
@@ -588,7 +575,6 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
   const clearFilters = () => {
     setUserSearch('');
     setUserRoleFilter('');
-    setUserStatusFilter('');
     setUserPagination(prev => ({ ...prev, page: 1 }));
   };
 
@@ -603,12 +589,114 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
   // 載入使用者數據
   useEffect(() => {
     fetchUsers();
-  }, [userPagination.page, userPagination.size, userSearch, userRoleFilter, userStatusFilter]);
+  }, [userPagination.page, userPagination.size, userSearch, userRoleFilter]);
 
   // 載入使用者統計（只在初次載入時執行）
   useEffect(() => {
     fetchUserStats();
   }, []);
+
+  // 載入系統管理數據（只在初次載入時執行）
+  useEffect(() => {
+    fetchWorkflows();
+    fetchScholarshipRules();
+    fetchSystemStats();
+    fetchScholarshipPermissions();
+    fetchAvailableScholarships();
+  }, []);
+
+  // 獲取工作流程列表
+  const fetchWorkflows = async () => {
+    setLoadingWorkflows(true);
+    setWorkflowsError(null);
+    
+    try {
+      const response = await apiClient.admin.getWorkflows();
+      if (response.success && response.data) {
+        setWorkflows(response.data);
+      } else {
+        setWorkflowsError(response.message || '獲取工作流程失敗');
+      }
+    } catch (error) {
+      setWorkflowsError(error instanceof Error ? error.message : '網絡錯誤');
+    } finally {
+      setLoadingWorkflows(false);
+    }
+  };
+
+  // 獲取獎學金規則列表
+  const fetchScholarshipRules = async () => {
+    setLoadingRules(true);
+    setRulesError(null);
+    
+    try {
+      const response = await apiClient.admin.getScholarshipRules();
+      if (response.success && response.data) {
+        setScholarshipRules(response.data);
+      } else {
+        setRulesError(response.message || '獲取獎學金規則失敗');
+      }
+    } catch (error) {
+      setRulesError(error instanceof Error ? error.message : '網絡錯誤');
+    } finally {
+      setLoadingRules(false);
+    }
+  };
+
+  // 獲取系統統計
+  const fetchSystemStats = async () => {
+    setLoadingStats(true);
+    setStatsError(null);
+    
+    try {
+      const response = await apiClient.admin.getSystemStats();
+      if (response.success && response.data) {
+        setSystemStats(response.data);
+      } else {
+        setStatsError(response.message || '獲取系統統計失敗');
+      }
+    } catch (error) {
+      setStatsError(error instanceof Error ? error.message : '網絡錯誤');
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
+  // 獲取獎學金權限列表
+  const fetchScholarshipPermissions = async () => {
+    setLoadingPermissions(true);
+    setPermissionsError(null);
+    
+    try {
+      const response = await apiClient.admin.getScholarshipPermissions();
+      if (response.success && response.data) {
+        setScholarshipPermissions(response.data);
+      } else {
+        setPermissionsError(response.message || '獲取獎學金權限失敗');
+      }
+    } catch (error) {
+      setPermissionsError(error instanceof Error ? error.message : '網絡錯誤');
+    } finally {
+      setLoadingPermissions(false);
+    }
+  };
+
+  // 獲取可用獎學金列表
+  const fetchAvailableScholarships = async () => {
+    setLoadingScholarships(true);
+    
+    try {
+      const response = await apiClient.admin.getAllScholarshipsForPermissions();
+      if (response.success && response.data) {
+        setAvailableScholarships(response.data);
+      }
+    } catch (error) {
+      console.error('獲取獎學金列表失敗:', error);
+    } finally {
+      setLoadingScholarships(false);
+    }
+  };
+
 
 
 
@@ -656,82 +744,126 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
       <Tabs defaultValue="dashboard" className="space-y-4">
         <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="dashboard">系統概覽</TabsTrigger>
-          <TabsTrigger value="workflows">工作流程</TabsTrigger>
+          <TabsTrigger value="users">使用者權限</TabsTrigger>
           <TabsTrigger value="rules">審核規則</TabsTrigger>
-          <TabsTrigger value="users">使用者管理</TabsTrigger>
           <TabsTrigger value="announcements">系統公告</TabsTrigger>
-          <TabsTrigger value="settings">系統設定</TabsTrigger>
           <TabsTrigger value="email">郵件模板管理</TabsTrigger>
+          <TabsTrigger value="settings">系統設定</TabsTrigger>
+          <TabsTrigger value="workflows">工作流程</TabsTrigger>
         </TabsList>
 
         <TabsContent value="dashboard" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">總使用者數</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{systemStats.totalUsers}</div>
-                <p className="text-xs text-muted-foreground">+5% 較上月</p>
-              </CardContent>
-            </Card>
+          {loadingStats ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="flex items-center gap-3">
+                <div className="animate-spin rounded-full h-6 w-6 border-2 border-nycu-blue-600 border-t-transparent"></div>
+                <span className="text-nycu-navy-600">載入系統統計中...</span>
+              </div>
+            </div>
+          ) : statsError ? (
+            <div className="text-center py-12">
+              <AlertCircle className="h-16 w-16 mx-auto mb-4 text-red-400" />
+              <p className="text-lg font-medium text-red-600 mb-2">載入系統統計失敗</p>
+              <p className="text-sm text-gray-600 mb-4">{statsError}</p>
+              <Button 
+                onClick={fetchSystemStats}
+                variant="outline"
+                className="border-red-300 text-red-600 hover:bg-red-50"
+              >
+                重試
+              </Button>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">總使用者數</CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{systemStats.totalUsers}</div>
+                  <p className="text-xs text-muted-foreground">系統註冊用戶</p>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">進行中申請</CardTitle>
-                <FileText className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{systemStats.activeApplications}</div>
-                <p className="text-xs text-muted-foreground">待處理案件</p>
-              </CardContent>
-            </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">進行中申請</CardTitle>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{systemStats.activeApplications}</div>
+                  <p className="text-xs text-muted-foreground">待處理案件</p>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">系統正常運行時間</CardTitle>
-                <Settings className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{systemStats.systemUptime}</div>
-                <p className="text-xs text-muted-foreground">本月平均</p>
-              </CardContent>
-            </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">待審核申請</CardTitle>
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{systemStats.pendingReviews}</div>
+                  <p className="text-xs text-muted-foreground">等待審核</p>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">平均回應時間</CardTitle>
-                <Database className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{systemStats.avgResponseTime}</div>
-                <p className="text-xs text-muted-foreground">API 回應時間</p>
-              </CardContent>
-            </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">系統正常運行時間</CardTitle>
+                  <Settings className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{systemStats.systemUptime}</div>
+                  <p className="text-xs text-muted-foreground">本月平均</p>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">儲存空間使用</CardTitle>
-                <Database className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{systemStats.storageUsed}</div>
-                <p className="text-xs text-muted-foreground">總容量 10TB</p>
-              </CardContent>
-            </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">平均回應時間</CardTitle>
+                  <Database className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{systemStats.avgResponseTime}</div>
+                  <p className="text-xs text-muted-foreground">API 回應時間</p>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">完成審核</CardTitle>
-                <FileText className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{systemStats.completedReviews}</div>
-                <p className="text-xs text-muted-foreground">本月完成</p>
-              </CardContent>
-            </Card>
-          </div>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">儲存空間使用</CardTitle>
+                  <Database className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{systemStats.storageUsed}</div>
+                  <p className="text-xs text-muted-foreground">總容量 10TB</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">完成審核</CardTitle>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{systemStats.completedReviews}</div>
+                  <p className="text-xs text-muted-foreground">本月完成</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">獎學金種類</CardTitle>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{systemStats.totalScholarships}</div>
+                  <p className="text-xs text-muted-foreground">可用獎學金</p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="workflows" className="space-y-4">
@@ -749,54 +881,89 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
             </div>
           </div>
 
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>流程名稱</TableHead>
-                    <TableHead>版本</TableHead>
-                    <TableHead>狀態</TableHead>
-                    <TableHead>步驟數</TableHead>
-                    <TableHead>最後修改</TableHead>
-                    <TableHead>操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {workflows.map((workflow) => (
-                    <TableRow key={workflow.id}>
-                      <TableCell className="font-medium">{workflow.name}</TableCell>
-                      <TableCell>{workflow.version}</TableCell>
-                      <TableCell>
-                        <Badge variant={workflow.status === "active" ? "default" : "secondary"}>
-                          {workflow.status === "active" ? "啟用" : "草稿"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{workflow.steps} 步驟</TableCell>
-                      <TableCell>{workflow.lastModified}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button variant="outline" size="sm">
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            {workflow.status === "active" ? (
-                              <Pause className="h-4 w-4" />
-                            ) : (
-                              <Play className="h-4 w-4" />
-                            )}
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            <Download className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+          {loadingWorkflows ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="flex items-center gap-3">
+                <div className="animate-spin rounded-full h-6 w-6 border-2 border-nycu-blue-600 border-t-transparent"></div>
+                <span className="text-nycu-navy-600">載入工作流程中...</span>
+              </div>
+            </div>
+          ) : workflowsError ? (
+            <div className="text-center py-12">
+              <AlertCircle className="h-16 w-16 mx-auto mb-4 text-red-400" />
+              <p className="text-lg font-medium text-red-600 mb-2">載入工作流程失敗</p>
+              <p className="text-sm text-gray-600 mb-4">{workflowsError}</p>
+              <Button 
+                onClick={fetchWorkflows}
+                variant="outline"
+                className="border-red-300 text-red-600 hover:bg-red-50"
+              >
+                重試
+              </Button>
+            </div>
+          ) : workflows.length > 0 ? (
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>流程名稱</TableHead>
+                      <TableHead>版本</TableHead>
+                      <TableHead>狀態</TableHead>
+                      <TableHead>步驟數</TableHead>
+                      <TableHead>最後修改</TableHead>
+                      <TableHead>操作</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {workflows.map((workflow) => (
+                      <TableRow key={workflow.id}>
+                        <TableCell className="font-medium">{workflow.name}</TableCell>
+                        <TableCell>{workflow.version}</TableCell>
+                        <TableCell>
+                          <Badge variant={workflow.status === "active" ? "default" : "secondary"}>
+                            {workflow.status === "active" ? "啟用" : "草稿"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{workflow.steps} 步驟</TableCell>
+                        <TableCell>{workflow.lastModified}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            <Button variant="outline" size="sm">
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="outline" size="sm">
+                              {workflow.status === "active" ? (
+                                <Pause className="h-4 w-4" />
+                              ) : (
+                                <Play className="h-4 w-4" />
+                              )}
+                            </Button>
+                            <Button variant="outline" size="sm">
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="text-center py-12 text-gray-500">
+              <FileText className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+              <p className="text-lg font-medium">尚無工作流程</p>
+              <p className="text-sm mt-2 mb-4">點擊「新增流程」開始建立工作流程</p>
+              <Button 
+                onClick={fetchWorkflows}
+                variant="outline"
+                size="sm"
+              >
+                重新載入
+              </Button>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="rules" className="space-y-4">
@@ -808,48 +975,83 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
             </Button>
           </div>
 
-          <div className="grid gap-4">
-            {scholarshipRules.map((rule) => (
-              <Card key={rule.id}>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">{rule.name}</CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Switch checked={rule.active} />
-                      <Badge variant="outline">{rule.type}</Badge>
+          {loadingRules ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="flex items-center gap-3">
+                <div className="animate-spin rounded-full h-6 w-6 border-2 border-nycu-blue-600 border-t-transparent"></div>
+                <span className="text-nycu-navy-600">載入審核規則中...</span>
+              </div>
+            </div>
+          ) : rulesError ? (
+            <div className="text-center py-12">
+              <AlertCircle className="h-16 w-16 mx-auto mb-4 text-red-400" />
+              <p className="text-lg font-medium text-red-600 mb-2">載入審核規則失敗</p>
+              <p className="text-sm text-gray-600 mb-4">{rulesError}</p>
+              <Button 
+                onClick={fetchScholarshipRules}
+                variant="outline"
+                className="border-red-300 text-red-600 hover:bg-red-50"
+              >
+                重試
+              </Button>
+            </div>
+          ) : scholarshipRules.length > 0 ? (
+            <div className="grid gap-4">
+              {scholarshipRules.map((rule) => (
+                <Card key={rule.id}>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">{rule.name}</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <Switch checked={rule.active} />
+                        <Badge variant="outline">{rule.type}</Badge>
+                      </div>
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <Label>規則條件 (JSON)</Label>
-                    <Textarea value={JSON.stringify(rule.criteria, null, 2)} rows={3} className="font-mono text-sm" />
-                  </div>
-                  <div className="flex gap-2 mt-4">
-                    <Button variant="outline" size="sm">
-                      <Edit className="h-4 w-4 mr-1" />
-                      編輯
-                    </Button>
-                    <Button variant="outline" size="sm">
-                      測試規則
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      <Label>規則條件 (JSON)</Label>
+                      <Textarea value={JSON.stringify(rule.criteria, null, 2)} rows={3} className="font-mono text-sm" />
+                    </div>
+                    <div className="flex gap-2 mt-4">
+                      <Button variant="outline" size="sm">
+                        <Edit className="h-4 w-4 mr-1" />
+                        編輯
+                      </Button>
+                      <Button variant="outline" size="sm">
+                        測試規則
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-gray-500">
+              <FileText className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+              <p className="text-lg font-medium">尚無審核規則</p>
+              <p className="text-sm mt-2 mb-4">點擊「新增規則」開始建立審核規則</p>
+              <Button 
+                onClick={fetchScholarshipRules}
+                variant="outline"
+                size="sm"
+              >
+                重新載入
+              </Button>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="users" className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold">使用者管理</h3>
+            <h3 className="text-lg font-semibold">使用者權限管理</h3>
             <div className="flex gap-2">
               <Button 
                 onClick={() => setShowUserForm(true)}
                 className="nycu-gradient text-white"
               >
                 <Plus className="h-4 w-4 mr-1" />
-                新增使用者
+                新增使用者權限
               </Button>
               <Button variant="outline">
                 <Upload className="h-4 w-4 mr-1" />
@@ -878,7 +1080,7 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{userStats.active_users || 0}</div>
-                <p className="text-xs text-muted-foreground">啟用中帳戶</p>
+                <p className="text-xs text-muted-foreground">最近30天登入</p>
               </CardContent>
             </Card>
 
@@ -908,11 +1110,11 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
           {/* 搜尋和篩選 */}
           <Card className="border-nycu-blue-200">
             <CardContent className="pt-4">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label>搜尋使用者</Label>
                   <Input
-                    placeholder="姓名、信箱或帳號"
+                    placeholder="姓名、信箱或 NYCU ID"
                     value={userSearch}
                     onChange={(e) => setUserSearch(e.target.value)}
                     className="border-nycu-blue-200"
@@ -925,27 +1127,14 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
                     onChange={(e) => setUserRoleFilter(e.target.value)}
                     className="w-full px-3 py-2 border border-nycu-blue-200 rounded-md"
                   >
-                    <option value="">全部角色</option>
-                    <option value="student">學生</option>
-                    <option value="professor">教授</option>
-                    <option value="college">學院</option>
-                    <option value="admin">管理員</option>
+                    <option value="">全部管理角色</option>
                     <option value="super_admin">超級管理員</option>
+                    <option value="admin">管理員</option>
+                    <option value="college">學院</option>
+                    <option value="professor">教授</option>
                   </select>
                 </div>
-                <div>
-                  <Label>狀態篩選</Label>
-                  <select
-                    value={userStatusFilter}
-                    onChange={(e) => setUserStatusFilter(e.target.value)}
-                    className="w-full px-3 py-2 border border-nycu-blue-200 rounded-md"
-                  >
-                    <option value="">全部狀態</option>
-                    <option value="true">啟用</option>
-                    <option value="false">停用</option>
-                  </select>
-                </div>
-                                <div className="flex items-end gap-2">
+                <div className="flex items-end gap-2">
                   <Button 
                     onClick={handleSearch}
                     className="flex-1 nycu-gradient text-white"
@@ -959,7 +1148,7 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
                   >
                     清除
                   </Button>
-                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -969,7 +1158,7 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                使用者列表
+                使用者權限列表
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -998,160 +1187,178 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>使用者資訊</TableHead>
-                        <TableHead>角色</TableHead>
-                        <TableHead>狀態</TableHead>
-                        <TableHead>註冊時間</TableHead>
-                        <TableHead>最後登入</TableHead>
-                        <TableHead>操作</TableHead>
+                        <TableHead className="font-bold px-5 py-3">使用者資訊</TableHead>
+                        <TableHead className="font-bold px-5 py-3">角色</TableHead>
+                        <TableHead className="font-bold px-5 py-3 w-40">單位</TableHead>
+                        <TableHead className="font-bold px-5 py-3">獎學金管理權限</TableHead>
+                        <TableHead className="font-bold px-5 py-3">註冊時間</TableHead>
+                        <TableHead className="font-bold px-5 py-3">最後登入</TableHead>
+                        <TableHead className="font-bold px-5 py-3">權限操作</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {users.map((user) => (
-                        <TableRow key={user.id}>
-                          <TableCell>
-                            <div className="space-y-1">
-                              <div className="font-medium">{user.full_name}</div>
-                              <div className="text-sm text-gray-500">{user.email}</div>
-                              <div className="text-sm text-gray-500">@{user.username}</div>
-                              {user.student_no && (
-                                <div className="text-sm text-gray-500">學號: {user.student_no}</div>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={
-                                user.role === 'super_admin' ? 'destructive' :
-                                user.role === 'admin' ? 'default' :
-                                user.role === 'college' ? 'secondary' :
-                                user.role === 'professor' ? 'outline' : 'default'
-                              }
-                            >
-                              {getRoleLabel(user.role)}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Badge variant={user.is_active ? "default" : "secondary"}>
-                                {user.is_active ? "啟用" : "停用"}
+                      {users.map((user) => {
+                        const isActive = user.status === '在職' || user.status === '在學';
+                        return (
+                          <TableRow
+                            key={user.id}
+                            className={`align-middle h-20 ${!isActive ? 'bg-gray-100 opacity-60 pointer-events-none' : ''}`}
+                          >
+                            <TableCell className="px-5 py-4 align-middle">
+                              <div className="space-y-1">
+                                <div className="font-medium">{user.name}</div>
+                                <div className="text-sm text-gray-500">{user.email}</div>
+                                <div className="text-sm text-gray-500">@{user.nycu_id}</div>
+                                {user.raw_data?.chinese_name && (
+                                  <div className="text-sm text-gray-500">中文名: {user.raw_data.chinese_name}</div>
+                                )}
+                                {user.raw_data?.english_name && (
+                                  <div className="text-sm text-gray-500">英文名: {user.raw_data.english_name}</div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="px-5 py-4 align-middle">
+                              <Badge
+                                variant={
+                                  user.role === 'super_admin' ? 'destructive' :
+                                  user.role === 'admin' ? 'default' :
+                                  user.role === 'college' ? 'secondary' :
+                                  user.role === 'professor' ? 'outline' : 'default'
+                                }
+                                className="text-xs px-3 py-1 rounded-full whitespace-nowrap"
+                              >
+                                {getRoleLabel(user.role)}
                               </Badge>
-                              {user.is_verified && (
-                                <Badge variant="outline" className="text-xs">已驗證</Badge>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm text-gray-600">
-                              {new Date(user.created_at).toLocaleDateString('zh-TW', {
-                                year: 'numeric',
-                                month: '2-digit',
-                                day: '2-digit'
-                              })}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm text-gray-600">
-                              {user.last_login_at 
-                                ? new Date(user.last_login_at).toLocaleDateString('zh-TW', {
-                                    year: 'numeric',
-                                    month: '2-digit',
-                                    day: '2-digit',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                  })
-                                : '從未登入'
-                              }
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleEditUser(user)}
-                                className="hover:bg-nycu-blue-50 hover:border-nycu-blue-300"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              {user.is_active ? (
+                            </TableCell>
+                            <TableCell className="px-5 py-4 align-middle w-40">
+                              <div className="space-y-1">
+                                {user.dept_name ? (
+                                  <div className="text-sm font-medium text-gray-900 truncate">{user.dept_name}</div>
+                                ) : (
+                                  <div className="text-sm text-gray-400">未設定</div>
+                                )}
+                                {user.dept_code && (
+                                  <div className="text-xs text-gray-500">代碼: {user.dept_code}</div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="px-5 py-4 align-middle">
+                              <div className="flex flex-wrap gap-2 min-h-[32px]">
+                                {loadingPermissions ? (
+                                  <div className="text-xs text-gray-400">載入中...</div>
+                                ) : user.role === 'super_admin' ? (
+                                  // super_admin 自動擁有所有獎學金權限
+                                  availableScholarships.map((scholarship) => (
+                                    <Badge 
+                                      key={scholarship.id} 
+                                      variant="default" 
+                                      className="text-xs px-3 py-1 rounded-full mb-1"
+                                    >
+                                      {scholarship.name}
+                                    </Badge>
+                                  ))
+                                ) : user.role === 'professor' ? (
+                                  // 教授角色顯示說明
+                                  <div className="text-xs text-amber-600 font-medium">教授無需管理權限</div>
+                                ) : (
+                                  // 其他管理角色顯示資料庫中的權限
+                                  scholarshipPermissions
+                                    .filter(p => p.user_id === user.id)
+                                    .map(permission => (
+                                      <Badge 
+                                        key={permission.id} 
+                                        variant="secondary" 
+                                        className="text-xs px-3 py-1 rounded-full mb-1"
+                                      >
+                                        {permission.scholarship_name}
+                                      </Badge>
+                                    ))
+                                )}
+                                {!loadingPermissions && user.role !== 'super_admin' && user.role !== 'professor' && scholarshipPermissions.filter(p => p.user_id === user.id).length === 0 && (
+                                  <div className="text-xs text-gray-400">無獎學金權限</div>
+                                )}
+                                {user.role === 'super_admin' && (
+                                  <div className="text-xs text-green-600 font-medium w-full">擁有所有獎學金權限</div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="px-5 py-4 align-middle">
+                              <div className="text-sm text-gray-600">
+                                {new Date(user.created_at).toLocaleDateString('zh-TW', {
+                                  year: 'numeric',
+                                  month: '2-digit',
+                                  day: '2-digit'
+                                })}
+                              </div>
+                            </TableCell>
+                            <TableCell className="px-5 py-4 align-middle">
+                              <div className="text-sm text-gray-600">
+                                {user.last_login_at 
+                                  ? new Date(user.last_login_at).toLocaleString('zh-TW', {
+                                      year: 'numeric',
+                                      month: '2-digit',
+                                      day: '2-digit',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      second: '2-digit',
+                                      hour12: false
+                                    })
+                                  : '從未登入'
+                                }
+                              </div>
+                            </TableCell>
+                            <TableCell className="px-5 py-4 align-middle">
+                              <div className="flex gap-1">
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => handleDeactivateUser(user.id)}
-                                  className="hover:bg-yellow-50 hover:border-yellow-300 hover:text-yellow-600"
+                                  onClick={() => handleEditUser(user)}
+                                  className="hover:bg-nycu-blue-50 hover:border-nycu-blue-300"
                                 >
-                                  停用
+                                  <Edit className="h-4 w-4" />
+                                  {user.role === 'professor' ? '更改角色' : '編輯權限'}
                                 </Button>
-                              ) : (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleActivateUser(user.id)}
-                                  className="hover:bg-green-50 hover:border-green-300 hover:text-green-600"
-                                >
-                                  啟用
-                                </Button>
-                              )}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleResetPassword(user.id)}
-                                className="hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600"
-                              >
-                                重設密碼
-                              </Button>
-                              {user.role !== 'super_admin' && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleDeleteUser(user.id)}
-                                  className="hover:bg-red-50 hover:border-red-300 hover:text-red-600"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
 
-                  {/* 分頁控制 */}
-                  {userPagination.total > userPagination.size && (
-                    <div className="flex items-center justify-between p-4 border-t border-gray-200">
-                      <div className="text-sm text-gray-600">
-                        顯示第 {(userPagination.page - 1) * userPagination.size + 1} - {Math.min(userPagination.page * userPagination.size, userPagination.total)} 項，共 {userPagination.total} 項使用者
-                      </div>
-                      <div className="flex gap-3">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={userPagination.page <= 1}
-                          onClick={() => setUserPagination(prev => ({ ...prev, page: prev.page - 1 }))}
-                          className="hover:bg-nycu-blue-50 hover:border-nycu-blue-300"
-                        >
-                          ← 上一頁
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={userPagination.page * userPagination.size >= userPagination.total}
-                          onClick={() => setUserPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-                          className="hover:bg-nycu-blue-50 hover:border-nycu-blue-300"
-                        >
-                          下一頁 →
-                        </Button>
-                      </div>
+                  {/* 分頁 */}
+                  <div className="flex items-center justify-between p-4 border-t">
+                    <div className="text-sm text-gray-600">
+                      顯示 {((userPagination.page - 1) * userPagination.size) + 1} 到 {Math.min(userPagination.page * userPagination.size, userPagination.total)} 筆，共 {userPagination.total} 筆
                     </div>
-                  )}
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setUserPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                        disabled={userPagination.page <= 1}
+                      >
+                        上一頁
+                      </Button>
+                      <span className="flex items-center px-3 text-sm">
+                        第 {userPagination.page} 頁
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setUserPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                        disabled={userPagination.page * userPagination.size >= userPagination.total}
+                      >
+                        下一頁
+                      </Button>
+                    </div>
+                  </div>
                 </>
               ) : (
                 <div className="text-center py-12 text-gray-500">
                   <Users className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-                  <p className="text-lg font-medium">尚無使用者資料</p>
-                  <p className="text-sm mt-2 mb-4">點擊「新增使用者」開始建立使用者帳戶</p>
+                  <p className="text-lg font-medium">尚無使用者權限資料</p>
+                  <p className="text-sm mt-2 mb-4">點擊「新增使用者權限」開始設定使用者權限</p>
                   <Button 
                     onClick={fetchUsers}
                     variant="outline"
@@ -1164,15 +1371,37 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
             </CardContent>
           </Card>
 
+
+
           {/* 使用者編輯 Modal */}
           <UserEditModal
             isOpen={showUserForm}
-            onClose={resetUserForm}
+            onClose={() => setShowUserForm(false)}
             editingUser={editingUser}
             userForm={userForm}
             onUserFormChange={handleUserFormChange}
             onSubmit={handleUserSubmit}
             isLoading={userFormLoading}
+            scholarshipPermissions={scholarshipPermissions.filter(p => p.user_id === editingUser?.id)}
+            availableScholarships={availableScholarships}
+            onPermissionChange={(permissions) => {
+              // 更新該用戶的獎學金權限
+              const userId = editingUser?.id
+              if (userId) {
+                // 移除該用戶的舊權限
+                const otherUserPermissions = scholarshipPermissions.filter(p => p.user_id !== userId)
+                // 添加新的權限（包含獎學金名稱）
+                const newPermissions = permissions.map(permission => {
+                  const scholarship = availableScholarships.find(s => s.id === permission.scholarship_id)
+                  return {
+                    ...permission,
+                    scholarship_name: scholarship?.name || '未知獎學金',
+                    scholarship_name_en: scholarship?.name_en
+                  }
+                })
+                setScholarshipPermissions([...otherUserPermissions, ...newPermissions])
+              }
+            }}
           />
         </TabsContent>
 
@@ -1785,6 +2014,39 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* 使用者權限編輯 Modal */}
+      <UserEditModal
+        isOpen={showUserForm}
+        onClose={() => setShowUserForm(false)}
+        editingUser={editingUser}
+        userForm={userForm}
+        onUserFormChange={handleUserFormChange}
+        onSubmit={handleUserSubmit}
+        isLoading={userFormLoading}
+        scholarshipPermissions={scholarshipPermissions.filter(p => p.user_id === editingUser?.id)}
+        availableScholarships={availableScholarships}
+        onPermissionChange={(permissions) => {
+          // 更新該用戶的獎學金權限
+          const userId = editingUser?.id
+          if (userId) {
+            // 移除該用戶的舊權限
+            const otherUserPermissions = scholarshipPermissions.filter(p => p.user_id !== userId)
+            // 添加新的權限（包含獎學金名稱）
+            const newPermissions = permissions.map(permission => {
+              const scholarship = availableScholarships.find(s => s.id === permission.scholarship_id)
+              return {
+                ...permission,
+                scholarship_name: scholarship?.name || '未知獎學金',
+                scholarship_name_en: scholarship?.name_en
+              }
+            })
+            setScholarshipPermissions([...otherUserPermissions, ...newPermissions])
+          }
+        }}
+      />
+
+
     </div>
-  )
+  );
 }

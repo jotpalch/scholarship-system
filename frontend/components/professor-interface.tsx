@@ -17,13 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Search, Eye, Edit, CheckCircle, Users, FileText } from "lucide-react"
 import apiClient from "@/lib/api"
-
-interface User {
-  id: string
-  name: string
-  email: string
-  role: "student" | "professor" | "college" | "admin" | "super_admin"
-}
+import { User } from "@/types/user"
 
 interface ProfessorInterfaceProps {
   user: User

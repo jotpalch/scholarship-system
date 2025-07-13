@@ -33,6 +33,11 @@ import { api } from "@/lib/api"
 
 // Use the Application type from the API
 import { Application } from "@/lib/api"
+import { User } from "@/types/user"
+
+interface ScholarshipSpecificDashboardProps {
+  user: User
+}
 
 // Dashboard-specific Application interface for the data we actually receive
 interface DashboardApplication {
@@ -197,7 +202,7 @@ const transformApplicationData = (app: any): DashboardApplication => {
   return transformed
 }
 
-export function ScholarshipSpecificDashboard() {
+export function ScholarshipSpecificDashboard({ user }: ScholarshipSpecificDashboardProps) {
   // 使用 hook 獲取真實資料
   const { 
     applicationsByType, 

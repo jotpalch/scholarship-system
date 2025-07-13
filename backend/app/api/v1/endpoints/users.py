@@ -12,7 +12,7 @@ from app.db.deps import get_db
 from app.schemas.user import UserResponse, UserUpdate, UserCreate, UserListResponse
 from app.schemas.common import MessageResponse, PaginatedResponse
 from app.core.security import get_current_user, require_admin, require_super_admin
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, UserType, EmployeeStatus
 from app.services.auth_service import AuthService
 
 router = APIRouter()
@@ -22,15 +22,15 @@ def convert_user_to_dict(user: User) -> dict:
     """Convert User model to dictionary for Pydantic validation"""
     return {
         "id": user.id,
+        "nycu_id": user.nycu_id,
+        "name": user.name,
         "email": user.email,
-        "username": user.username,
-        "full_name": user.full_name,
-        "chinese_name": user.chinese_name,
-        "english_name": user.english_name,
+        "user_type": user.user_type.value if user.user_type else None,
+        "status": user.status.value if user.status else None,
+        "dept_code": user.dept_code,
+        "dept_name": user.dept_name,
         "role": user.role.value if hasattr(user.role, 'value') else str(user.role),
-        "is_active": user.is_active,
-        "is_verified": user.is_verified,
-        "student_no": user.student_no,
+        "comment": user.comment,
         "created_at": user.created_at.isoformat(),
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
         "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None
@@ -137,8 +137,7 @@ async def get_all_users(
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
     role: Optional[str] = Query(None, description="Filter by role"),
-    search: Optional[str] = Query(None, description="Search by name, email, or username"),
-    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    search: Optional[str] = Query(None, description="Search by name, email, or nycu_id"),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
@@ -157,15 +156,14 @@ async def get_all_users(
     
     if search:
         stmt = stmt.where(
-            (User.full_name.icontains(search)) |
+            (User.name.icontains(search)) |
             (User.email.icontains(search)) |
-            (User.username.icontains(search)) |
-            (User.chinese_name.icontains(search)) |
-            (User.english_name.icontains(search))
+            (User.nycu_id.icontains(search)) |
+            (User.dept_name.icontains(search))
         )
     
-    if is_active is not None:
-        stmt = stmt.where(User.is_active == is_active)
+    # Remove is_active filter since we removed that field
+    # All users are considered active in the new model
     
     # Get total count
     count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -230,12 +228,12 @@ async def create_user(
     if existing_user:
         raise HTTPException(status_code=409, detail="User with this email already exists")
     
-    existing_username = await auth_service.get_user_by_username(user_data.username)
-    if existing_username:
-        raise HTTPException(status_code=409, detail="Username already taken")
+    existing_nycu_id = await auth_service.get_user_by_nycu_id(user_data.nycu_id)
+    if existing_nycu_id:
+        raise HTTPException(status_code=409, detail="NYCU ID already taken")
     
     # Create user
-    user = await auth_service.create_user(user_data)
+    user = await auth_service.register_user(user_data)
     
     return {
         "success": True,
@@ -274,114 +272,6 @@ async def update_user(
     }
 
 
-@router.delete("/{user_id}")
-async def delete_user(
-    user_id: int,
-    current_user: User = Depends(require_super_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Delete user (super admin only)"""
-    if current_user.id == user_id:
-        raise HTTPException(status_code=400, detail="Cannot delete yourself")
-    
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Soft delete - set is_active to False
-    user.is_active = False
-    await db.commit()
-    
-    return {
-        "success": True,
-        "message": "User deleted successfully",
-        "data": {"user_id": user_id}
-    }
-
-
-@router.post("/{user_id}/activate")
-async def activate_user(
-    user_id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Activate user (admin only)"""
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    user.is_active = True
-    await db.commit()
-    
-    return {
-        "success": True,
-        "message": "User activated successfully",
-        "data": {"user_id": user_id}
-    }
-
-
-@router.post("/{user_id}/deactivate")
-async def deactivate_user(
-    user_id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Deactivate user (admin only)"""
-    if current_user.id == user_id:
-        raise HTTPException(status_code=400, detail="Cannot deactivate yourself")
-    
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    user.is_active = False
-    await db.commit()
-    
-    return {
-        "success": True,
-        "message": "User deactivated successfully",
-        "data": {"user_id": user_id}
-    }
-
-
-@router.post("/{user_id}/reset-password")
-async def reset_user_password(
-    user_id: int,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Reset user password (admin only)"""
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Generate temporary password
-    import secrets
-    import string
-    temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
-    
-    # Hash and set password
-    auth_service = AuthService(db)
-    user.hashed_password = auth_service.get_password_hash(temp_password)
-    await db.commit()
-    
-    return {
-        "success": True,
-        "message": "Password reset successfully",
-        "data": {
-            "user_id": user_id,
-            "temporary_password": temp_password
-        }
-    }
-
 
 @router.get("/stats/overview")
 async def get_user_stats(
@@ -397,14 +287,21 @@ async def get_user_stats(
         count = result.scalar()
         role_stats[role.value] = count
     
-    # Active vs inactive users
-    active_stmt = select(func.count(User.id)).where(User.is_active == True)
-    active_result = await db.execute(active_stmt)
-    active_count = active_result.scalar()
+    # User type distribution
+    user_type_stats = {}
+    for user_type in UserType:
+        stmt = select(func.count(User.id)).where(User.user_type == user_type)
+        result = await db.execute(stmt)
+        count = result.scalar()
+        user_type_stats[user_type.value] = count
     
-    inactive_stmt = select(func.count(User.id)).where(User.is_active == False)
-    inactive_result = await db.execute(inactive_stmt)
-    inactive_count = inactive_result.scalar()
+    # Status distribution
+    status_stats = {}
+    for status in EmployeeStatus:
+        stmt = select(func.count(User.id)).where(User.status == status)
+        result = await db.execute(stmt)
+        count = result.scalar()
+        status_stats[status.value] = count
     
     # Recent registrations (last 30 days)
     from datetime import datetime, timedelta
@@ -419,8 +316,8 @@ async def get_user_stats(
         "data": {
             "total_users": sum(role_stats.values()),
             "role_distribution": role_stats,
-            "active_users": active_count,
-            "inactive_users": inactive_count,
+            "user_type_distribution": user_type_stats,
+            "status_distribution": status_stats,
             "recent_registrations": recent_count
         }
     } 

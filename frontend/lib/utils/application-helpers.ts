@@ -163,16 +163,8 @@ export const formatFieldValue = async (fieldName: string, value: any, locale: Lo
     } catch (error) {
       console.warn(`Failed to fetch scholarship type for code: ${value}`, error)
     }
-    
-    // 如果 API 失敗，使用本地映射作為備用
-    const fallbackMap = {
-      'undergraduate_freshman': locale === "zh" ? "學士班新生獎學金" : "Undergraduate Freshman Scholarship",
-      'phd': locale === "zh" ? "博士生獎學金" : "PhD Scholarship",
-      'direct_phd': locale === "zh" ? "逕讀博士獎學金" : "Direct PhD Scholarship",
-      'phd_moe': locale === "zh" ? "教育部博士生獎學金" : "MOE PhD Scholarship",
-      'phd_nstc': locale === "zh" ? "國科會博士生獎學金" : "NSTC PhD Scholarship",
-    };
-    return fallbackMap[value as keyof typeof fallbackMap] || value;
+    // API 失敗時直接顯示 code
+    return value
   }
   return value;
 }

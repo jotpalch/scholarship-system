@@ -15,14 +15,27 @@ export interface ApiResponse<T> {
 
 export interface User {
   id: string
+  nycu_id: string  // 改為 nycu_id
   email: string
-  username: string
+  name: string  // 改為 name
   role: 'student' | 'professor' | 'college' | 'admin' | 'super_admin'
-  full_name: string
-  name: string // Added for component compatibility
-  is_active: boolean
+  user_type?: 'student' | 'employee'
+  status?: '在學' | '畢業' | '在職' | '退休'
+  dept_code?: string
+  dept_name?: string
+  comment?: string
+  last_login_at?: string
   created_at: string
   updated_at: string
+  raw_data?: {
+    chinese_name?: string
+    english_name?: string
+    [key: string]: any
+  }
+  // 向後相容性欄位
+  username?: string  // 映射到 nycu_id
+  full_name?: string  // 映射到 name
+  is_active?: boolean  // 所有用戶都視為活躍
 }
 
 export interface Student {
@@ -257,34 +270,60 @@ export interface ScholarshipRule {
 // User management types
 export interface UserListResponse {
   id: number
+  nycu_id: string
   email: string
-  username: string
-  full_name: string
-  chinese_name?: string
-  english_name?: string
+  name: string
+  user_type?: string
+  status?: string
+  dept_code?: string
+  dept_name?: string
   role: string
-  is_active: boolean
-  is_verified: boolean
-  student_no?: string
+  comment?: string
   created_at: string
   updated_at?: string
   last_login_at?: string
+  raw_data?: {
+    chinese_name?: string
+    english_name?: string
+    [key: string]: any
+  }
+  // 向後相容性欄位
+  username?: string
+  full_name?: string
+  chinese_name?: string
+  english_name?: string
+  is_active?: boolean
+  is_verified?: boolean
+  student_no?: string
 }
 
 export interface UserResponse {
   id: number
+  nycu_id: string
   email: string
-  username: string
-  full_name: string
-  chinese_name?: string
-  english_name?: string
+  name: string
+  user_type?: string
+  status?: string
+  dept_code?: string
+  dept_name?: string
   role: string
-  is_active: boolean
-  is_verified: boolean
-  student_no?: string
+  comment?: string
   created_at: string
   updated_at?: string
   last_login_at?: string
+  raw_data?: {
+    chinese_name?: string
+    english_name?: string
+    [key: string]: any
+  }
+  // 向後相容性欄位
+  username?: string
+  full_name?: string
+  chinese_name?: string
+  english_name?: string
+  is_active?: boolean
+  is_verified?: boolean
+  student_no?: string
 }
 
 export interface PaginatedResponse<T> {
@@ -295,24 +334,50 @@ export interface PaginatedResponse<T> {
 }
 
 export interface UserCreate {
+  nycu_id: string
   email: string
-  username: string
-  full_name: string
+  name: string
+  user_type?: 'student' | 'employee'
+  status?: '在學' | '畢業' | '在職' | '退休'
+  dept_code?: string
+  dept_name?: string
+  role: "student" | "professor" | "college" | "admin" | "super_admin"
+  comment?: string
+  raw_data?: {
+    chinese_name?: string
+    english_name?: string
+    [key: string]: any
+  }
+  // 向後相容性欄位
+  username?: string
+  full_name?: string
   chinese_name?: string
   english_name?: string
-  role: "student" | "professor" | "college" | "admin" | "super_admin"
-  password: string
+  password?: string  // 不再需要，但保留向後相容性
   student_no?: string
   is_active?: boolean
 }
 
 export interface UserUpdate {
+  nycu_id?: string
   email?: string
+  name?: string
+  user_type?: 'student' | 'employee'
+  status?: '在學' | '畢業' | '在職' | '退休'
+  dept_code?: string
+  dept_name?: string
+  role?: "student" | "professor" | "college" | "admin" | "super_admin"
+  comment?: string
+  raw_data?: {
+    chinese_name?: string
+    english_name?: string
+    [key: string]: any
+  }
+  // 向後相容性欄位
   username?: string
   full_name?: string
   chinese_name?: string
   english_name?: string
-  role?: "student" | "professor" | "college" | "admin" | "super_admin"
   is_active?: boolean
   is_verified?: boolean
   student_no?: string
@@ -513,6 +578,58 @@ export interface SubTypeStats {
   avg_wait_days: number
 }
 
+// 新增系統管理相關介面
+export interface Workflow {
+  id: string
+  name: string
+  version: string
+  status: 'active' | 'draft' | 'inactive'
+  lastModified: string
+  steps: number
+  description?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ScholarshipRule {
+  id: string
+  name: string
+  type: string
+  criteria: Record<string, any>
+  active: boolean
+  description?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface SystemStats {
+  totalUsers: number
+  activeApplications: number
+  completedReviews: number
+  systemUptime: string
+  avgResponseTime: string
+  storageUsed: string
+  pendingReviews: number
+  totalScholarships: number
+}
+
+export interface ScholarshipPermission {
+  id: number
+  user_id: number
+  scholarship_id: number
+  scholarship_name: string
+  scholarship_name_en?: string
+  comment?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ScholarshipPermissionCreate {
+  user_id: number
+  scholarship_id: number
+  comment?: string
+}
+
 class ApiClient {
   private baseURL: string
   private token: string | null = null
@@ -701,10 +818,10 @@ class ApiClient {
       return this.request('/auth/mock-sso/users')
     },
 
-    mockSSOLogin: async (username: string): Promise<ApiResponse<{ access_token: string; token_type: string; expires_in: number; user: User }>> => {
+    mockSSOLogin: async (nycu_id: string): Promise<ApiResponse<{ access_token: string; token_type: string; expires_in: number; user: User }>> => {
       return this.request('/auth/mock-sso/login', {
         method: 'POST',
-        body: JSON.stringify({ username }),
+        body: JSON.stringify({ nycu_id }),
       })
     },
   }
@@ -739,7 +856,6 @@ class ApiClient {
       size?: number
       role?: string
       search?: string
-      is_active?: boolean
     }) => this.request<PaginatedResponse<UserListResponse>>('/users', {
       method: 'GET',
       params
@@ -762,23 +878,13 @@ class ApiClient {
       body: JSON.stringify(userData)
     }),
 
-    // Delete user (soft delete)
+    // Delete user (hard delete)
     delete: (userId: number) => this.request<{ success: boolean; message: string; data: { user_id: number } }>(`/users/${userId}`, {
       method: 'DELETE'
     }),
 
-    // Activate user
-    activate: (userId: number) => this.request<{ success: boolean; message: string; data: { user_id: number } }>(`/users/${userId}/activate`, {
-      method: 'POST'
-    }),
-
-    // Deactivate user
-    deactivate: (userId: number) => this.request<{ success: boolean; message: string; data: { user_id: number } }>(`/users/${userId}/deactivate`, {
-      method: 'POST'
-    }),
-
-    // Reset user password
-    resetPassword: (userId: number) => this.request<{ user_id: number; temporary_password: string }>(`/users/${userId}/reset-password`, {
+    // Reset user password (not supported in SSO model)
+    resetPassword: (userId: number) => this.request<{ success: boolean; message: string; data: { user_id: number } }>(`/users/${userId}/reset-password`, {
       method: 'POST'
     }),
 
@@ -1158,6 +1264,94 @@ class ApiClient {
 
     getSubTypeTranslations: async (): Promise<ApiResponse<Record<string, Record<string, string>>>> => {
       return this.request('/admin/scholarships/sub-type-translations')
+    },
+
+    // === 系統管理相關 API === //
+    
+    // 工作流程管理
+    getWorkflows: async (): Promise<ApiResponse<Workflow[]>> => {
+      return this.request('/admin/workflows')
+    },
+
+    createWorkflow: async (workflow: Omit<Workflow, 'id' | 'created_at' | 'updated_at'>): Promise<ApiResponse<Workflow>> => {
+      return this.request('/admin/workflows', {
+        method: 'POST',
+        body: JSON.stringify(workflow),
+      })
+    },
+
+    updateWorkflow: async (id: string, workflow: Partial<Workflow>): Promise<ApiResponse<Workflow>> => {
+      return this.request(`/admin/workflows/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(workflow),
+      })
+    },
+
+    deleteWorkflow: async (id: string): Promise<ApiResponse<{ message: string }>> => {
+      return this.request(`/admin/workflows/${id}`, {
+        method: 'DELETE',
+      })
+    },
+
+    // 獎學金規則管理
+    getScholarshipRules: async (): Promise<ApiResponse<ScholarshipRule[]>> => {
+      return this.request('/admin/scholarship-rules')
+    },
+
+    createScholarshipRule: async (rule: Omit<ScholarshipRule, 'id' | 'created_at' | 'updated_at'>): Promise<ApiResponse<ScholarshipRule>> => {
+      return this.request('/admin/scholarship-rules', {
+        method: 'POST',
+        body: JSON.stringify(rule),
+      })
+    },
+
+    updateScholarshipRule: async (id: string, rule: Partial<ScholarshipRule>): Promise<ApiResponse<ScholarshipRule>> => {
+      return this.request(`/admin/scholarship-rules/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(rule),
+      })
+    },
+
+    deleteScholarshipRule: async (id: string): Promise<ApiResponse<{ message: string }>> => {
+      return this.request(`/admin/scholarship-rules/${id}`, {
+        method: 'DELETE',
+      })
+    },
+
+    // 系統統計
+    getSystemStats: async (): Promise<ApiResponse<SystemStats>> => {
+      return this.request('/admin/system-stats')
+    },
+
+    // 獎學金權限管理
+    getScholarshipPermissions: async (userId?: number): Promise<ApiResponse<ScholarshipPermission[]>> => {
+      const params = userId ? `?user_id=${userId}` : ''
+      return this.request(`/admin/scholarship-permissions${params}`)
+    },
+
+    createScholarshipPermission: async (permission: ScholarshipPermissionCreate): Promise<ApiResponse<ScholarshipPermission>> => {
+      return this.request('/admin/scholarship-permissions', {
+        method: 'POST',
+        body: JSON.stringify(permission),
+      })
+    },
+
+    updateScholarshipPermission: async (id: number, permission: Partial<ScholarshipPermissionCreate>): Promise<ApiResponse<ScholarshipPermission>> => {
+      return this.request(`/admin/scholarship-permissions/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(permission),
+      })
+    },
+
+    deleteScholarshipPermission: async (id: number): Promise<ApiResponse<{ message: string }>> => {
+      return this.request(`/admin/scholarship-permissions/${id}`, {
+        method: 'DELETE',
+      })
+    },
+
+    // 獲取所有獎學金列表（用於權限管理）
+    getAllScholarshipsForPermissions: async (): Promise<ApiResponse<Array<{ id: number; name: string; name_en?: string; code: string }>>> => {
+      return this.request('/admin/scholarships/all-for-permissions')
     },
   }
 

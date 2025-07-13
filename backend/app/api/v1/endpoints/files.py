@@ -6,7 +6,7 @@ from typing import Optional
 import urllib.parse
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -17,6 +17,7 @@ from app.core.security import get_current_user, verify_token
 from app.models.user import User, UserRole
 from app.models.application import ApplicationFile, Application
 from app.services.minio_service import minio_service
+from app.services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -43,10 +44,14 @@ async def get_file_proxy(
         except Exception:
             raise HTTPException(status_code=401, detail="Invalid token")
         
-        # Get user from database
-        user_result = await db.get(User, user_id)
-        if not user_result or not user_result.is_active:
-            raise HTTPException(status_code=401, detail="User not found or inactive")
+        # Get user from token
+        auth_service = AuthService(db)
+        user_result = await auth_service.get_user_by_id(user_id)
+        if not user_result:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid user"
+            )
         
         current_user = user_result
         
@@ -145,10 +150,14 @@ async def download_file_proxy(
         except Exception:
             raise HTTPException(status_code=401, detail="Invalid token")
         
-        # Get user from database
-        user_result = await db.get(User, user_id)
-        if not user_result or not user_result.is_active:
-            raise HTTPException(status_code=401, detail="User not found or inactive")
+        # Get user from token
+        auth_service = AuthService(db)
+        user_result = await auth_service.get_user_by_id(user_id)
+        if not user_result:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid user"
+            )
         
         current_user = user_result
         

@@ -52,8 +52,8 @@ async def get_all_applications(
     
     if search:
         stmt = stmt.where(
-            (User.full_name.icontains(search)) |
-            (User.username.icontains(search)) |
+            (User.name.icontains(search)) |
+            (User.nycu_id.icontains(search)) |
             (User.email.icontains(search))
         )
     
@@ -105,8 +105,8 @@ async def get_all_applications(
             "updated_at": app.updated_at,
             "meta_data": app.meta_data,
             # Additional fields for display
-            "student_name": user.full_name if user else None,
-            "student_no": getattr(user, 'student_no', None),
+            "student_name": user.name if user else None,
+            "student_no": getattr(user, 'nycu_id', None),
             "days_waiting": None
         }
         
@@ -381,8 +381,8 @@ async def get_recent_applications(
             "updated_at": app.updated_at,
             "meta_data": app.meta_data,
             # Additional fields for display
-            "student_name": user.full_name if user else None,
-            "student_no": getattr(user, 'student_no', None),
+            "student_name": user.name if user else None,
+            "student_no": getattr(user, 'nycu_id', None),
             "days_waiting": None
         }
         
@@ -918,8 +918,8 @@ async def get_applications_by_scholarship(
             "updated_at": app.updated_at,
             "meta_data": app.meta_data,
             # Additional fields for display
-            "student_name": user.full_name if user else None,
-            "student_no": getattr(user, 'student_no', None),
+            "student_name": user.name if user else None,
+            "student_no": getattr(user, 'nycu_id', None),
             "days_waiting": None
         }
         
@@ -1253,7 +1253,10 @@ async def delete_sub_type_config(
     config = result.scalar_one_or_none()
     
     if not config:
-        raise HTTPException(status_code=404, detail="Sub-type configuration not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sub-type configuration not found"
+        )
     
     # Soft delete
     config.is_active = False
@@ -1264,4 +1267,38 @@ async def delete_sub_type_config(
         success=True,
         message="Sub-type configuration deleted successfully",
         data=MessageResponse(message="Sub-type configuration deleted successfully")
+    ) 
+
+
+# === 獎學金權限管理相關 API === #
+
+@router.get("/scholarships/all-for-permissions", response_model=ApiResponse[List[Dict[str, Any]]])
+async def get_all_scholarships_for_permissions(
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all scholarships for permission management (admin only)"""
+    
+    # Get all active scholarships
+    stmt = select(ScholarshipType).where(
+        ScholarshipType.status == ScholarshipStatus.ACTIVE.value
+    ).order_by(ScholarshipType.name)
+    
+    result = await db.execute(stmt)
+    scholarships = result.scalars().all()
+    
+    # Convert to response format
+    scholarship_list = []
+    for scholarship in scholarships:
+        scholarship_list.append({
+            "id": scholarship.id,
+            "name": scholarship.name,
+            "name_en": scholarship.name_en,
+            "code": scholarship.code
+        })
+    
+    return ApiResponse(
+        success=True,
+        message=f"Retrieved {len(scholarship_list)} scholarships for permission management",
+        data=scholarship_list
     ) 

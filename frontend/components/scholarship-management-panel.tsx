@@ -37,324 +37,7 @@ interface ScholarshipManagementPanelProps {
   className?: string
 }
 
-const SCHOLARSHIP_CONFIG = {
-  undergraduate_freshman: {
-    title: "學士班新生獎學金",
-    icon: GraduationCap,
-    color: "blue",
-    hasWhitelist: true,
-  },
-  direct_phd: {
-    title: "逕博獎學金",
-    icon: GraduationCap,
-    color: "purple",
-    hasWhitelist: true,
-  },
-  phd: {
-    title: "博士生獎學金",
-    icon: GraduationCap,
-    color: "green",
-    hasWhitelist: false,
-  }
-}
-
-const getDefaultFields = (type: ScholarshipType): Partial<ApplicationField>[] => {
-  switch (type) {
-    case "undergraduate_freshman":
-      return [
-        {
-          field_name: "academic_performance",
-          field_label: "學業表現說明",
-          field_type: "textarea",
-          is_required: true,
-          placeholder: "請說明您在高中階段的學業表現和特殊成就",
-          max_length: 1500,
-          display_order: 1,
-          is_active: true
-        },
-        {
-          field_name: "family_income",
-          field_label: "家庭收入範圍",
-          field_type: "select",
-          is_required: true,
-          placeholder: "請選擇家庭年收入範圍",
-          field_options: [
-            {value: "low", label: "50萬以下"},
-            {value: "medium", label: "50-100萬"},
-            {value: "high", label: "100萬以上"}
-          ],
-          display_order: 2,
-          is_active: true
-        },
-        {
-          field_name: "extracurricular",
-          field_label: "課外活動與服務",
-          field_type: "textarea",
-          is_required: false,
-          placeholder: "請描述您參與的課外活動、社會服務或特殊才能表現",
-          max_length: 1000,
-          display_order: 3,
-          is_active: true
-        },
-        {
-          field_name: "future_goals",
-          field_label: "學習目標與規劃",
-          field_type: "textarea",
-          is_required: true,
-          placeholder: "請說明您的學習目標和未來職涯規劃",
-          max_length: 1000,
-          display_order: 4,
-          is_active: true
-        }
-      ]
-    case "direct_phd":
-      return [
-        {
-          field_name: "personal_statement",
-          field_label: "個人陳述",
-          field_type: "textarea",
-          is_required: true,
-          placeholder: "請詳述申請逕博獎學金的理由和未來研究計畫",
-          max_length: 2000,
-          display_order: 1,
-          is_active: true
-        },
-        {
-          field_name: "research_plan",
-          field_label: "研究計畫",
-          field_type: "textarea",
-          is_required: true,
-          placeholder: "請描述您的研究計畫和預期成果",
-          max_length: 3000,
-          display_order: 2,
-          is_active: true
-        },
-        {
-          field_name: "advisor_name",
-          field_label: "指導教授姓名",
-          field_type: "text",
-          is_required: true,
-          placeholder: "請輸入指導教授姓名",
-          max_length: 50,
-          display_order: 3,
-          is_active: true
-        },
-        {
-          field_name: "gpa",
-          field_label: "學業成績(GPA)",
-          field_type: "number",
-          is_required: true,
-          placeholder: "請輸入您的GPA",
-          min_value: 0,
-          max_value: 4.0,
-          step_value: 0.01,
-          display_order: 4,
-          is_active: true
-        },
-        {
-          field_name: "expected_graduation",
-          field_label: "預計畢業日期",
-          field_type: "date",
-          is_required: true,
-          placeholder: "",
-          display_order: 5,
-          is_active: true
-        }
-      ]
-    case "phd":
-      return [
-        {
-          field_name: "research_proposal",
-          field_label: "研究計畫書",
-          field_type: "textarea",
-          is_required: true,
-          placeholder: "請詳述您的博士研究計畫",
-          max_length: 5000,
-          display_order: 1,
-          is_active: true
-        },
-        {
-          field_name: "advisor_agreement",
-          field_label: "指導教授同意書",
-          field_type: "checkbox",
-          is_required: true,
-          placeholder: "我已獲得指導教授同意",
-          display_order: 2,
-          is_active: true
-        },
-        {
-          field_name: "funding_source",
-          field_label: "其他經費來源",
-          field_type: "select",
-          is_required: false,
-          placeholder: "請選擇其他經費來源",
-          field_options: [
-            {value: "none", label: "無"},
-            {value: "nstc", label: "國科會計畫"},
-            {value: "industry", label: "產學合作"},
-            {value: "other", label: "其他"}
-          ],
-          display_order: 3,
-          is_active: true
-        }
-      ]
-    default:
-      return []
-  }
-}
-
-const getDefaultDocuments = (type: ScholarshipType): Partial<ApplicationDocument>[] => {
-  switch (type) {
-    case "undergraduate_freshman":
-      return [
-        {
-          document_name: "高中成績單",
-          description: "高中三年完整成績單",
-          is_required: true,
-          accepted_file_types: ["PDF", "JPG", "PNG"],
-          max_file_size: "5MB",
-          max_file_count: 1,
-          display_order: 1,
-          is_active: true,
-          upload_instructions: "請上傳清晰完整的成績單掃描檔或照片"
-        },
-        {
-          document_name: "戶籍謄本",
-          description: "最近三個月內申請的戶籍謄本",
-          is_required: true,
-          accepted_file_types: ["PDF", "JPG", "PNG"],
-          max_file_size: "5MB",
-          max_file_count: 1,
-          display_order: 2,
-          is_active: true,
-          upload_instructions: "請確保文件有效期限內且資訊清晰可讀"
-        },
-        {
-          document_name: "家庭收入證明",
-          description: "父母親最近一年度綜合所得稅各類所得資料清單",
-          is_required: true,
-          accepted_file_types: ["PDF", "JPG", "PNG"],
-          max_file_size: "5MB",
-          max_file_count: 2,
-          display_order: 3,
-          is_active: true,
-          upload_instructions: "請同時上傳父母雙方的所得資料清單"
-        },
-        {
-          document_name: "自傳",
-          description: "個人自傳，包含成長背景、學習歷程等",
-          is_required: true,
-          accepted_file_types: ["PDF", "DOC", "DOCX"],
-          max_file_size: "5MB",
-          max_file_count: 1,
-          display_order: 4,
-          is_active: true,
-          upload_instructions: "自傳字數建議800-1200字"
-        }
-      ]
-    case "direct_phd":
-      return [
-        {
-          document_name: "學士學位證書",
-          description: "申請人之學士學位證書正本或影本",
-          is_required: true,
-          accepted_file_types: ["PDF", "JPG", "PNG"],
-          max_file_size: "5MB",
-          max_file_count: 1,
-          display_order: 1,
-          is_active: true,
-          upload_instructions: "請確保證書資訊清晰完整"
-        },
-        {
-          document_name: "歷年成績單",
-          description: "大學歷年成績單正本或影本",
-          is_required: true,
-          accepted_file_types: ["PDF", "JPG", "PNG"],
-          max_file_size: "10MB",
-          max_file_count: 1,
-          display_order: 2,
-          is_active: true,
-          upload_instructions: "需包含完整的學分和成績記錄"
-        },
-        {
-          document_name: "研究計畫書",
-          description: "詳細的博士論文研究計畫",
-          is_required: true,
-          accepted_file_types: ["PDF", "DOC", "DOCX"],
-          max_file_size: "10MB",
-          max_file_count: 1,
-          display_order: 3,
-          is_active: true,
-          upload_instructions: "建議5000-8000字，需包含研究背景、目標、方法等"
-        },
-        {
-          document_name: "指導教授推薦信",
-          description: "指導教授親筆簽名推薦信",
-          is_required: true,
-          accepted_file_types: ["PDF", "JPG", "PNG"],
-          max_file_size: "5MB",
-          max_file_count: 1,
-          display_order: 4,
-          is_active: true,
-          upload_instructions: "推薦信需有教授親筆簽名"
-        }
-      ]
-    case "phd":
-      return [
-        {
-          document_name: "研究計畫書",
-          description: "博士學位論文研究計畫書",
-          is_required: true,
-          accepted_file_types: ["PDF", "DOC", "DOCX"],
-          max_file_size: "10MB",
-          max_file_count: 1,
-          display_order: 1,
-          is_active: true,
-          upload_instructions: "需詳述研究目標、方法、預期成果等"
-        },
-        {
-          document_name: "歷年成績單",
-          description: "研究所歷年成績單",
-          is_required: true,
-          accepted_file_types: ["PDF", "JPG", "PNG"],
-          max_file_size: "5MB",
-          max_file_count: 1,
-          display_order: 2,
-          is_active: true,
-          upload_instructions: "需包含到目前為止的所有學期成績"
-        },
-        {
-          document_name: "指導教授同意書",
-          description: "指導教授簽署的指導同意書",
-          is_required: true,
-          accepted_file_types: ["PDF", "JPG", "PNG"],
-          max_file_size: "5MB",
-          max_file_count: 1,
-          display_order: 3,
-          is_active: true,
-          upload_instructions: "需有指導教授親筆簽名和日期"
-        },
-        {
-          document_name: "研究進度報告",
-          description: "目前研究進度報告",
-          is_required: false,
-          accepted_file_types: ["PDF", "DOC", "DOCX"],
-          max_file_size: "10MB",
-          max_file_count: 1,
-          display_order: 4,
-          is_active: true,
-          upload_instructions: "可包含已完成的研究成果或發表論文"
-        }
-      ]
-    default:
-      return []
-  }
-}
-
 export function ScholarshipManagementPanel({ type, className }: ScholarshipManagementPanelProps) {
-  const config = SCHOLARSHIP_CONFIG[type]
-  const IconComponent = config.icon
-
   // State for form configuration
   const [formConfig, setFormConfig] = useState<ScholarshipFormConfig | null>(null)
   const [applicationFields, setApplicationFields] = useState<ApplicationField[]>([])
@@ -392,50 +75,27 @@ export function ScholarshipManagementPanel({ type, className }: ScholarshipManag
     try {
       setIsLoading(true)
       setError(null)
-      
       // 管理端需要看到所有欄位（包括停用的）
       const response = await api.applicationFields.getFormConfig(type, true)
-      
       if (response.success && response.data) {
         setFormConfig(response.data)
         setApplicationFields(response.data.fields || [])
         setDocumentRequirements(response.data.documents || [])
       } else {
-        // If no configuration exists, initialize with defaults
-        initializeDefaultConfig()
+        setApplicationFields([])
+        setDocumentRequirements([])
+        setFormConfig(null)
+        setError('尚未設定表單配置，請先於後台建立。')
       }
     } catch (err) {
       console.error('Failed to load form configuration:', err)
-      // Initialize with defaults if API fails
-      initializeDefaultConfig()
+      setApplicationFields([])
+      setDocumentRequirements([])
+      setFormConfig(null)
+      setError('載入表單配置時發生錯誤，請稍後再試')
     } finally {
       setIsLoading(false)
     }
-  }
-
-  const initializeDefaultConfig = () => {
-    const defaultFields = getDefaultFields(type)
-    const defaultDocuments = getDefaultDocuments(type)
-    
-    // Convert to ApplicationField[] format (without id for new items)
-    const fields = defaultFields.map((field, index) => ({
-      id: 0, // Will be assigned by backend
-      scholarship_type: type,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      ...field
-    })) as ApplicationField[]
-    
-    const documents = defaultDocuments.map((doc, index) => ({
-      id: 0, // Will be assigned by backend  
-      scholarship_type: type,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      ...doc
-    })) as ApplicationDocument[]
-    
-    setApplicationFields(fields)
-    setDocumentRequirements(documents)
   }
 
   const handleSaveSettings = async () => {
@@ -486,7 +146,7 @@ export function ScholarshipManagementPanel({ type, className }: ScholarshipManag
       const response = await api.applicationFields.saveFormConfig(type, configData)
       
       if (response.success) {
-        setSuccessMessage(`${config.title}設定已成功保存`)
+        setSuccessMessage(`${formConfig?.title}設定已成功保存`)
         // 不要重新載入配置，保持當前狀態
         // 只有在需要獲取新的 ID 時才重新載入
         if (response.data) {
@@ -654,12 +314,12 @@ export function ScholarshipManagementPanel({ type, className }: ScholarshipManag
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className={`p-3 rounded-lg ${config.color === 'blue' ? 'bg-blue-100' : config.color === 'purple' ? 'bg-purple-100' : 'bg-green-100'}`}>
-            <IconComponent className={`h-6 w-6 ${config.color === 'blue' ? 'text-blue-600' : config.color === 'purple' ? 'text-purple-600' : 'text-green-600'}`} />
+          <div className={`p-3 rounded-lg ${formConfig?.color === 'blue' ? 'bg-blue-100' : formConfig?.color === 'purple' ? 'bg-purple-100' : 'bg-green-100'}`}>
+            <GraduationCap className={`h-6 w-6 ${formConfig?.color === 'blue' ? 'text-blue-600' : formConfig?.color === 'purple' ? 'text-purple-600' : 'text-green-600'}`} />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-gray-900">{config.title}管理設定</h2>
-            <p className="text-sm text-gray-600">管理申請要求、文件設定{config.hasWhitelist ? "和白名單" : ""}</p>
+            <h2 className="text-xl font-bold text-gray-900">{formConfig?.title}管理設定</h2>
+            <p className="text-sm text-gray-600">管理申請要求、文件設定{formConfig?.hasWhitelist ? "和白名單" : ""}</p>
           </div>
         </div>
         <Button 
@@ -683,7 +343,7 @@ export function ScholarshipManagementPanel({ type, className }: ScholarshipManag
 
       {/* Main Content */}
       <Tabs defaultValue="fields" className="space-y-6">
-        <TabsList className={`grid w-full ${config.hasWhitelist ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        <TabsList className={`grid w-full ${formConfig?.hasWhitelist ? 'grid-cols-3' : 'grid-cols-2'}`}>
           <TabsTrigger value="fields" className="flex items-center gap-2">
             <FormInput className="h-4 w-4" />
             申請欄位
@@ -692,7 +352,7 @@ export function ScholarshipManagementPanel({ type, className }: ScholarshipManag
             <FileText className="h-4 w-4" />
             文件要求
           </TabsTrigger>
-          {config.hasWhitelist && (
+          {formConfig?.hasWhitelist && (
             <TabsTrigger value="whitelist" className="flex items-center gap-2">
               <UserCheck className="h-4 w-4" />
               白名單管理
@@ -711,7 +371,7 @@ export function ScholarshipManagementPanel({ type, className }: ScholarshipManag
                     申請表單欄位管理
                   </CardTitle>
                   <CardDescription className="text-gray-600">
-                    設定{config.title}申請表單中的欄位類型、驗證規則和要求
+                    設定{formConfig?.title}申請表單中的欄位類型、驗證規則和要求
                   </CardDescription>
                 </div>
                 <Button
@@ -822,7 +482,7 @@ export function ScholarshipManagementPanel({ type, className }: ScholarshipManag
                     申請文件管理
                   </CardTitle>
                   <CardDescription className="text-gray-600">
-                    設定{config.title}申請時需要上傳的文件類型、格式和大小限制
+                    設定{formConfig?.title}申請時需要上傳的文件類型、格式和大小限制
                   </CardDescription>
                 </div>
                 <Button
@@ -931,11 +591,11 @@ export function ScholarshipManagementPanel({ type, className }: ScholarshipManag
         </TabsContent>
 
         {/* Whitelist Tab */}
-        {config.hasWhitelist && (
+        {formConfig?.hasWhitelist && (
           <TabsContent value="whitelist" className="space-y-4">
             <WhitelistManagement 
               scholarshipType={type}
-              title={`${config.title}白名單管理`}
+              title={`${formConfig.title}白名單管理`}
             />
           </TabsContent>
         )}

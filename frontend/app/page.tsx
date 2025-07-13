@@ -32,6 +32,7 @@ import { DevLoginPage } from "@/components/dev-login-page"
 import { SSOLoginPage } from "@/components/sso-login-page"
 import { useAdminDashboard } from "@/hooks/use-admin"
 import { apiClient } from "@/lib/api"
+import { User } from "@/types/user"
 
 export default function ScholarshipManagementSystem() {
   const [locale, setLocale] = useState<"zh" | "en">("zh")
@@ -134,16 +135,11 @@ export default function ScholarshipManagementSystem() {
       return statusMap[status as keyof typeof statusMap] || status
     }
 
-    // 獎學金類型中文化映射
-    const getScholarshipTypeName = (type: string, typeZh?: string) => {
+    // 直接使用 API 回傳的獎學金名稱
+    const getScholarshipTypeName = (type: string, typeZh?: string, typeName?: string) => {
       if (typeZh) return typeZh
-      
-      const typeMap = {
-        'undergraduate_freshman': '學士班新生獎學金',
-        'phd': '博士生獎學金',
-        'direct_phd': '逕讀博士獎學金'
-      }
-      return typeMap[type as keyof typeof typeMap] || type
+      if (typeName) return typeName
+      return type
     }
 
     // 格式化日期
@@ -180,7 +176,7 @@ export default function ScholarshipManagementSystem() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-600">
                   <div>
                     <strong>認證狀態:</strong> {isAuthenticated ? '✅ 已認證' : '❌ 未認證'}<br/>
-                    <strong>用戶:</strong> {user?.full_name || '未知'} ({user?.role || '未知'})<br/>
+                    <strong>用戶:</strong> {user?.name || '未知'} ({user?.role || '未知'})<br/>
                     <strong>用戶ID:</strong> {user?.id || '未知'}
                   </div>
                   <div>
@@ -389,7 +385,7 @@ export default function ScholarshipManagementSystem() {
                       <div className="flex-1">
                         <div className="flex items-center justify-between mb-2">
                           <p className="font-medium text-nycu-navy-800">
-                            {getScholarshipTypeName(app.scholarship_type, app.scholarship_type_zh)}
+                            {getScholarshipTypeName(app.scholarship_type, app.scholarship_type_zh, app.scholarship_name)}
                           </p>
                           <Badge 
                             variant={
@@ -625,7 +621,10 @@ export default function ScholarshipManagementSystem() {
 
           {/* 主要功能頁面 */}
           <TabsContent value="main" className="space-y-4">
-            {user.role === "student" && <EnhancedStudentPortal user={{...user, studentType: "undergraduate"} as any} locale={locale} />}
+            {user.role === "student" && <EnhancedStudentPortal user={{
+              ...user,
+              studentType: "undergraduate" // 默認值，實際應該從用戶數據中獲取
+            } as User & { studentType: "undergraduate" }} locale={locale} />}
             {user.role === "professor" && <ProfessorInterface user={user} />}
             {user.role === "college" && <CollegeDashboard user={user} />}
             {(user.role === "professor" || user.role === "college" || user.role === "admin" || user.role === "super_admin") && <ScholarshipSpecificDashboard user={user} />}

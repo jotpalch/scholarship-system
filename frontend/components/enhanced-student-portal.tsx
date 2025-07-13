@@ -14,7 +14,7 @@ import { ProgressTimeline } from "@/components/progress-timeline"
 import { FileUpload } from "@/components/file-upload"
 import { DynamicApplicationForm } from "@/components/dynamic-application-form"
 import { ApplicationDetailDialog } from "@/components/application-detail-dialog"
-import { Edit, Eye, Trash2, Save, AlertTriangle, Info, FileText, Calendar, User, Loader2, Check } from "lucide-react"
+import { Edit, Eye, Trash2, Save, AlertTriangle, Info, FileText, Calendar, User as UserIcon, Loader2, Check } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { getTranslation } from "@/lib/i18n"
 import { useApplications } from "@/hooks/use-applications"
@@ -27,16 +27,13 @@ import {
   ApplicationStatus 
 } from "@/lib/utils/application-helpers"
 import { clsx } from "@/lib/utils"
+import { User } from "@/types/user"
 
 // 使用API的Application類型
 type Application = ApiApplication
 
 interface EnhancedStudentPortalProps {
-  user: {
-    id: string
-    name: string
-    email: string
-    role: string
+  user: User & {
     studentType: "phd" | "master" | "undergraduate" | "other"
   }
   locale: Locale
@@ -54,13 +51,10 @@ export function EnhancedStudentPortal({ user, locale }: EnhancedStudentPortalPro
   
 
   
+  // 直接從 eligibleScholarships (API) 取得名稱，找不到就顯示 code
   const getScholarshipTypeName = (scholarshipType: string): string => {
     const scholarship = eligibleScholarships.find(s => s.code === scholarshipType)
-    if (scholarship) {
-      return locale === "zh" ? scholarship.name : (scholarship.name_en || scholarship.name)
-    }
-
-    return scholarshipType
+    return scholarship ? (locale === "zh" ? scholarship.name : (scholarship.name_en || scholarship.name)) : scholarshipType
   }
   
   // Debug authentication status

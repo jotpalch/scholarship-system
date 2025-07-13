@@ -31,10 +31,10 @@ from app.services.student_service import StudentService
 
 async def get_student_from_user(user: User, db: AsyncSession) -> Optional[Student]:
     """Get student record from user"""
-    if user.role != UserRole.STUDENT or not user.student_no:
+    if user.role != UserRole.STUDENT or not user.nycu_id:
         return None
     
-    stmt = select(Student).where(Student.stdNo == user.student_no)
+    stmt = select(Student).where(Student.stdNo == user.nycu_id)
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
