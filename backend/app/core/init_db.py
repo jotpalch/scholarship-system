@@ -9,7 +9,7 @@ from datetime import datetime, date, timezone, timedelta
 from typing import List
 
 from app.db.session import async_engine, AsyncSessionLocal
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, UserType, EmployeeStatus
 from app.models.student import (
     # 查詢表
     Degree, Identity, StudyingStatus, SchoolIdentity, Academy, Department, EnrollType,
@@ -217,89 +217,93 @@ async def createTestUsers(session: AsyncSession) -> list[User]:
     
     test_users_data = [
         {
-            "username": "admin",
+            "nycu_id": "admin",
+            "name": "系統管理員",
             "email": "admin@nycu.edu.tw",
-            "password": "admin123",
-            "fullName": "系統管理員",
-            "chineseName": "系統管理員",
-            "englishName": "System Administrator",
+            "user_type": "employee",
+            "status": "在職",
+            "dept_code": "9000",
+            "dept_name": "教務處",
             "role": UserRole.ADMIN
         },
         {
-            "username": "super_admin",
+            "nycu_id": "super_admin",
+            "name": "超級管理員",
             "email": "super_admin@nycu.edu.tw",
-            "password": "super123",
-            "fullName": "超級管理員",
-            "chineseName": "超級管理員", 
-            "englishName": "Super Administrator",
+            "user_type": "employee",
+            "status": "在職",
+            "dept_code": "9000",
+            "dept_name": "教務處",
             "role": UserRole.SUPER_ADMIN
         },
         {
-            "username": "professor",
+            "nycu_id": "professor",
+            "name": "李教授",
             "email": "professor@nycu.edu.tw",
-            "password": "professor123",
-            "fullName": "李教授",
-            "chineseName": "李教授",
-            "englishName": "Professor Li",
+            "user_type": "employee",
+            "status": "在職",
+            "dept_code": "7000",
+            "dept_name": "資訊學院",
             "role": UserRole.PROFESSOR
         },
         {
-            "username": "college",
+            "nycu_id": "college",
+            "name": "學院審核員",
             "email": "college@nycu.edu.tw",
-            "password": "college123",
-            "fullName": "學院審核員",
-            "chineseName": "學院審核員",
-            "englishName": "College Reviewer",
+            "user_type": "employee",
+            "status": "在職",
+            "dept_code": "7000",
+            "dept_name": "資訊學院",
             "role": UserRole.COLLEGE
         },
         {
-            "username": "stu_under",
+            "nycu_id": "stu_under",
+            "name": "陳小明",
             "email": "stu_under@nycu.edu.tw",
-            "password": "stuunder123",
-            "fullName": "陳小明",
-            "chineseName": "陳小明",
-            "englishName": "Chen Xiao Ming",
-            "studentNo": "U1120001",
+            "user_type": "student",
+            "status": "在學",
+            "dept_code": "CS",
+            "dept_name": "資訊工程學系",
             "role": UserRole.STUDENT
         },
         {
-            "username": "stu_phd",
+            "nycu_id": "stu_phd",
+            "name": "王博士",
             "email": "stu_phd@nycu.edu.tw",
-            "password": "stuphd123",
-            "fullName": "王博士",
-            "chineseName": "王博士",
-            "englishName": "Wang PhD",
-            "studentNo": "P1120001",
+            "user_type": "student",
+            "status": "在學",
+            "dept_code": "CS",
+            "dept_name": "資訊工程學系",
             "role": UserRole.STUDENT
         },
         {
-            "username": "stu_direct",
+            "nycu_id": "stu_direct",
+            "name": "李逕升",
             "email": "stu_direct@nycu.edu.tw",
-            "password": "studirect123",
-            "fullName": "李逕升",
-            "chineseName": "李逕升",
-            "englishName": "Li Direct",
-            "studentNo": "D1120001",
+            "user_type": "student",
+            "status": "在學",
+            "dept_code": "CS",
+            "dept_name": "資訊工程學系",
             "role": UserRole.STUDENT
         },
         {
-            "username": "stu_master",
+            "nycu_id": "stu_master",
+            "name": "張碩士",
             "email": "stu_master@nycu.edu.tw",
-            "password": "stumaster123",
-            "fullName": "張碩士",
-            "chineseName": "張碩士",
-            "englishName": "Zhang Master",
-            "studentNo": "M1120001",
+            "user_type": "student",
+            "status": "在學",
+            "dept_code": "CS",
+            "dept_name": "資訊工程學系",
             "role": UserRole.STUDENT
         },
         {
-            "username": "phd_china",
+            "nycu_id": "phd_china",
+            "name": "陸生",
             "email": "phd_china@nycu.edu.tw",
-            "password": "stuchina123",
-            "fullName": "陸生",
-            "chineseName": "陸生",
-            "englishName": "China Student",
-            "studentNo": "P1160002",
+            "user_type": "student",
+            "status": "在學",
+            "dept_code": "CS",
+            "dept_name": "資訊工程學系",
             "role": UserRole.STUDENT
         }
     ]
@@ -308,21 +312,19 @@ async def createTestUsers(session: AsyncSession) -> list[User]:
     
     for user_data in test_users_data:
         # Check if user exists
-        result = await session.execute(select(User).where(User.username == user_data["username"]))
+        result = await session.execute(select(User).where(User.nycu_id == user_data["nycu_id"]))
         existing = result.scalar_one_or_none()
         
         if not existing:            
             user = User(
-                username=user_data["username"],
+                nycu_id=user_data["nycu_id"],
+                name=user_data["name"],
                 email=user_data["email"],
-                hashed_password=get_password_hash(user_data["password"]),
-                full_name=user_data["fullName"],
-                chinese_name=user_data["chineseName"],
-                english_name=user_data["englishName"],
-                role=user_data["role"],
-                student_no=user_data.get("studentNo"),
-                is_active=True,
-                is_verified=True
+                user_type=UserType(user_data["user_type"]),
+                status=EmployeeStatus(user_data["status"]),
+                dept_code=user_data["dept_code"],
+                dept_name=user_data["dept_name"],
+                role=user_data["role"]
             )
             session.add(user)
             created_users.append(user)
@@ -586,7 +588,7 @@ async def createTestStudents(session: AsyncSession, users: List[User]) -> None:
     }
 
     for user in student_users:
-        student_info = student_data[user.username]
+        student_info = student_data[user.nycu_id]
 
         result = await session.execute(select(Student).where(Student.pid == student_info["pid"]))
         existing = result.scalar_one_or_none()
@@ -596,10 +598,10 @@ async def createTestStudents(session: AsyncSession, users: List[User]) -> None:
                 pid=student_info["pid"],
                 sex=student_info["sex"],
                 birthDate=student_info["birthDate"],
-                stdNo=user.student_no,
-                stdCode=user.student_no,
-                cname=user.chinese_name,
-                ename=user.english_name,
+                stdNo=user.nycu_id,
+                stdCode=user.nycu_id,
+                cname=user.name,
+                ename=user.name,
             )
             student.academicRecords.append(StudentAcademicRecord(**student_info["academic_record"]))
             student.contacts = StudentContact(**student_info["contact"])
@@ -607,7 +609,7 @@ async def createTestStudents(session: AsyncSession, users: List[User]) -> None:
             session.add(student)
         
         await session.commit()
-        print(f"✅ Student {user.username} created successfully!")
+        print(f"✅ Student {user.nycu_id} created successfully!")
 
     print("✅ Test student data created successfully!")
 
@@ -624,7 +626,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
     # 獲取對應的學生資料
     student_ids = []
     for user in student_users:
-        result = await session.execute(select(Student).where(Student.stdNo == user.student_no))
+        result = await session.execute(select(Student).where(Student.stdNo == user.nycu_id))
         student = result.scalar_one_or_none()
         if student:
             student_ids.append(student.id)
@@ -1220,7 +1222,7 @@ async def createApplicationFields(session: AsyncSession) -> None:
     print("📝 Creating application field configurations...")
     
     # 獲取管理員用戶ID
-    result = await session.execute(select(User).where(User.username == "admin"))
+    result = await session.execute(select(User).where(User.nycu_id == "admin"))
     admin_user = result.scalar_one_or_none()
     admin_id = admin_user.id if admin_user else 1
     
