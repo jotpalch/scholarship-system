@@ -16,7 +16,7 @@ from app.models.student import (
     # 學生資料
     Student, StudentAcademicRecord, StudentContact, StudentTermRecord,
 )
-from app.core.security import get_password_hash
+
 from app.db.base_class import Base
 from app.models.scholarship import ScholarshipRule, ScholarshipType, ScholarshipStatus, ScholarshipCategory, ScholarshipSubTypeConfig
 from app.models.notification import Notification, NotificationType, NotificationPriority

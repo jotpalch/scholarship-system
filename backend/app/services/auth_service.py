@@ -7,7 +7,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.core.security import verify_password, get_password_hash, create_access_token, create_refresh_token
+from app.core.security import create_access_token, create_refresh_token
 from app.core.exceptions import AuthenticationError, ConflictError, NotFoundError
 from app.models.user import User, UserRole
 from app.schemas.user import UserCreate, UserLogin, TokenResponse, UserResponse

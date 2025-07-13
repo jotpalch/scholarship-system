@@ -9,7 +9,7 @@ from sqlalchemy import select, delete
 from pydantic import BaseModel
 
 from app.models.user import User, UserRole, UserType, EmployeeStatus
-from app.core.security import get_password_hash
+
 from app.services.auth_service import AuthService
 
 
