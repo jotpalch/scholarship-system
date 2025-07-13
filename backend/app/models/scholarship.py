@@ -36,65 +36,6 @@ class ScholarshipSubType(enum.Enum):
     MOE_1W = "moe_1w"    # 教育部 (Ministry of Education) + 指導教授配合款一萬
     MOE_2W = "moe_2w"  # 教育部 (Ministry of Education) + 指導教授配合款兩萬
 
-
-class ScholarshipSubTypeConfig(Base):
-    """
-    Scholarship sub-type configuration model
-    
-    This table stores the configuration for scholarship sub-types,
-    including display names, descriptions, and specific settings.
-    """
-    __tablename__ = "scholarship_sub_type_configs"
-
-    id = Column(Integer, primary_key=True, index=True)
-    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=False)
-    sub_type_code = Column(String(50), nullable=False)  # "nstc", "moe_1w", "moe_2w"
-    
-    # 顯示名稱
-    name = Column(String(200), nullable=False)  # 中文名稱
-    name_en = Column(String(200))  # 英文名稱
-    
-    # 描述
-    description = Column(Text)
-    description_en = Column(Text)
-    
-    # 子類型特定設定
-    amount = Column(Numeric(10, 2))  # 子類型特定金額，如果為 None 則使用主獎學金金額
-    currency = Column(String(10), default="TWD")
-    
-    # 顯示設定
-    display_order = Column(Integer, default=0)  # 顯示順序
-    is_active = Column(Boolean, default=True)  # 是否啟用
-    
-    # 時間戳記
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    created_by = Column(Integer, ForeignKey("users.id"))
-    updated_by = Column(Integer, ForeignKey("users.id"))
-    
-    # 關聯
-    scholarship_type = relationship("ScholarshipType", back_populates="sub_type_configs")
-    creator = relationship("User", foreign_keys=[created_by])
-    updater = relationship("User", foreign_keys=[updated_by])
-
-    def __repr__(self):
-        return f"<ScholarshipSubTypeConfig(id={self.id}, sub_type_code={self.sub_type_code}, name={self.name})>"
-    
-    @property
-    def display_name(self) -> str:
-        """Get display name based on current locale"""
-        return self.name_en or self.name
-    
-    @property
-    def effective_amount(self) -> Optional[Decimal]:
-        """Get effective amount (sub-type specific or fallback to main scholarship)"""
-        if self.amount is not None:
-            return self.amount
-        elif self.scholarship_type:
-            return self.scholarship_type.amount
-        return None
-
-
 class ScholarshipType(Base):
     """
     Scholarship type configuration model
@@ -224,6 +165,66 @@ class ScholarshipType(Base):
                 translations["en"][ScholarshipSubType.GENERAL.value] = "General Scholarship"
         
         return translations
+
+class ScholarshipSubTypeConfig(Base):
+    """
+    Scholarship sub-type configuration model
+    
+    This table stores the configuration for scholarship sub-types,
+    including display names, descriptions, and specific settings.
+    """
+    __tablename__ = "scholarship_sub_type_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=False)
+    sub_type_code = Column(String(50), nullable=False)  # "nstc", "moe_1w", "moe_2w"
+    
+    # 顯示名稱
+    name = Column(String(200), nullable=False)  # 中文名稱
+    name_en = Column(String(200))  # 英文名稱
+    
+    # 描述
+    description = Column(Text)
+    description_en = Column(Text)
+    
+    # 子類型特定設定
+    amount = Column(Numeric(10, 2))  # 子類型特定金額，如果為 None 則使用主獎學金金額
+    currency = Column(String(10), default="TWD")
+    
+    # 顯示設定
+    display_order = Column(Integer, default=0)  # 顯示順序
+    is_active = Column(Boolean, default=True)  # 是否啟用
+    
+    # 時間戳記
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_by = Column(Integer, ForeignKey("users.id"))
+    updated_by = Column(Integer, ForeignKey("users.id"))
+    
+    # 關聯
+    scholarship_type = relationship("ScholarshipType", back_populates="sub_type_configs")
+    creator = relationship("User", foreign_keys=[created_by])
+    updater = relationship("User", foreign_keys=[updated_by])
+
+    def __repr__(self):
+        return f"<ScholarshipSubTypeConfig(id={self.id}, sub_type_code={self.sub_type_code}, name={self.name})>"
+    
+    @property
+    def display_name(self) -> str:
+        """Get display name based on current locale"""
+        return self.name_en or self.name
+    
+    @property
+    def effective_amount(self) -> Optional[Decimal]:
+        """Get effective amount (sub-type specific or fallback to main scholarship)"""
+        if self.amount is not None:
+            return self.amount
+        elif self.scholarship_type:
+            return self.scholarship_type.amount
+        return None
+
+
+
 
 
 class ScholarshipRule(Base):
