@@ -204,22 +204,44 @@ class ApplicationReviewResponse(BaseModel):
     reviewed_at: Optional[datetime]
 
 
+class ProfessorReviewItemCreate(BaseModel):
+    """Professor review item creation schema"""
+    sub_type_code: str = Field(..., description="Scholarship sub-type code (e.g., 'moe_1w')")
+    is_recommended: bool = Field(..., description="Whether to recommend this sub-type")
+    comments: Optional[str] = Field(None, description="Comments for this specific sub-type")
+
+
+class ProfessorReviewItemResponse(BaseModel):
+    """Professor review item response schema"""
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    review_id: int
+    sub_type_code: str
+    is_recommended: bool
+    comments: Optional[str] = None
+    created_at: datetime
+
+
 class ProfessorReviewCreate(BaseModel):
     application_id: int
-    selected_awards: Optional[List[str]] = None
     recommendation: Optional[str] = None
     review_status: Optional[str] = None
+    items: List[ProfessorReviewItemCreate] = Field(default=[], description="Individual sub-type recommendations")
 
 
 class ProfessorReviewResponse(BaseModel):
+    """Professor review response schema"""
+    model_config = ConfigDict(from_attributes=True)
+    
     id: int
     application_id: int
     professor_id: int
-    selected_awards: Optional[List[str]] = None
     recommendation: Optional[str] = None
     review_status: Optional[str] = None
     reviewed_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
+    items: List[ProfessorReviewItemResponse] = Field(default=[], description="Individual sub-type recommendations")
 
 
 class ApplicationResponse(BaseModel):
@@ -234,7 +256,7 @@ class ApplicationResponse(BaseModel):
     scholarship_subtype_list: Optional[List[str]] = []
     status: str
     status_name: Optional[str]
-    academic_year: str
+    academic_year: int
     semester: str
     student_data: Dict[str, Any]
     submitted_form_data: Dict[str, Any]  # 包含整合後的文件資訊
@@ -282,7 +304,6 @@ class ApplicationReviewCreate(BaseModel):
     score: Optional[Decimal] = None
     comments: Optional[str] = None
     recommendation: Optional[str] = None
-    selected_awards: Optional[List[str]] = None
 
 
 class ApplicationListResponse(BaseModel):
@@ -299,7 +320,7 @@ class ApplicationListResponse(BaseModel):
     scholarship_subtype_list: Optional[List[str]] = []  # 獎學金子類型列表
     status: str
     status_name: Optional[str]
-    academic_year: str
+    academic_year: int
     semester: str
     student_data: Dict[str, Any]
     submitted_form_data: Dict[str, Any]  # 包含整合後的文件資訊
@@ -357,20 +378,5 @@ class DashboardStats(BaseModel):
     recent_activities: List[Dict[str, Any]] = Field([], description="Recent application activities")
 
 
-class ProfessorReviewCreate(BaseModel):
-    application_id: int
-    selected_awards: Optional[List[str]] = None
-    recommendation: Optional[str] = None
-    review_status: Optional[str] = None
 
-
-class ProfessorReviewResponse(BaseModel):
-    id: int
-    application_id: int
-    professor_id: int
-    selected_awards: Optional[List[str]] = None
-    recommendation: Optional[str] = None
-    review_status: Optional[str] = None
-    reviewed_at: Optional[datetime] = None
-    created_at: Optional[datetime] = None 
     

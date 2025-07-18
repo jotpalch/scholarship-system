@@ -17,8 +17,8 @@ from app.core.exceptions import (
 )
 from app.models.user import User, UserRole
 from app.models.student import Student, StudentType
-from app.models.application import Application, ApplicationStatus, ApplicationReview, ProfessorReview
-from app.models.scholarship import ScholarshipType
+from app.models.application import Application, ApplicationStatus, ApplicationReview, ProfessorReview, ProfessorReviewItem, Semester
+from app.models.scholarship import ScholarshipType, SubTypeSelectionMode
 from app.schemas.application import (
     ApplicationCreate, ApplicationUpdate, ApplicationResponse,
     ApplicationListResponse, ApplicationStatusUpdate,
@@ -192,10 +192,11 @@ class ApplicationService:
             student_id=student_id,
             scholarship_type_id=scholarship.id,
             scholarship_subtype_list=application_data.scholarship_subtype_list,
+            sub_type_selection_mode=scholarship.sub_type_selection_mode or "single",
             status=status,
             status_name=status_name,
-            academic_year=str(datetime.now().year),
-            semester="1",
+            academic_year=int(datetime.now().year),
+            semester=Semester.FIRST.value,  # Default to first semester
             student_data=student_snapshot,
             submitted_form_data=serialized_form_data,
             agree_terms=application_data.agree_terms or False
@@ -845,8 +846,8 @@ class ApplicationService:
             "filename": getattr(file, 'filename', 'unknown')
         }
     
-    async def submit_professor_review(self, application_id: int, user: User, review_data: ApplicationReviewCreate) -> ApplicationResponse:
-        """Professor submits review and selects awards for an application"""
+    async def submit_professor_review(self, application_id: int, user: User, review_data) -> ApplicationResponse:
+        """Submit professor review for an application"""
         stmt = select(Application).where(Application.id == application_id)
         result = await self.db.execute(stmt)
         application = result.scalar_one_or_none()
@@ -855,12 +856,30 @@ class ApplicationService:
         # Only the assigned professor can submit
         if application.professor_id != user.id:
             raise AuthorizationError("You are not the assigned professor for this application")
-        # Update selected awards and review status
-        application.professor_selected_awards = review_data.selected_awards or []
-        application.professor_review_status = "completed"
-        # Optionally, store recommendation/comments
-        if review_data.recommendation:
-            application.review_comments = review_data.recommendation
+        
+        # Create professor review record
+        from app.models.application import ProfessorReview, ProfessorReviewItem
+        
+        review = ProfessorReview(
+            application_id=application_id,
+            professor_id=user.id,
+            recommendation=review_data.recommendation,
+            review_status=review_data.review_status or "completed",
+            reviewed_at=datetime.utcnow()
+        )
+        self.db.add(review)
+        await self.db.flush()  # Get the review ID
+        
+        # Create review items for each sub-type
+        for item_data in review_data.items:
+            review_item = ProfessorReviewItem(
+                review_id=review.id,
+                sub_type_code=item_data.sub_type_code,
+                is_recommended=item_data.is_recommended,
+                comments=item_data.comments
+            )
+            self.db.add(review_item)
+        
         await self.db.commit()
         
         # Return fresh copy with all relationships loaded
@@ -868,7 +887,7 @@ class ApplicationService:
     
     async def create_professor_review(self, application_id: int, user: User, review_data) -> ApplicationResponse:
         """Create a professor review record and notify college reviewers"""
-        from app.models.application import ProfessorReview
+        from app.models.application import ProfessorReview, ProfessorReviewItem
         stmt = select(Application).where(Application.id == application_id)
         result = await self.db.execute(stmt)
         application = result.scalar_one_or_none()
@@ -877,16 +896,28 @@ class ApplicationService:
         # Only the assigned professor can submit
         if application.professor_id != user.id:
             raise AuthorizationError("You are not the assigned professor for this application")
+        
         # Create review record
         review = ProfessorReview(
             application_id=application_id,
             professor_id=user.id,
-            selected_awards=review_data.selected_awards or [],
             recommendation=review_data.recommendation,
             review_status=review_data.review_status or "completed",
             reviewed_at=datetime.utcnow()
         )
         self.db.add(review)
+        await self.db.flush()  # Get the review ID
+        
+        # Create review items for each sub-type
+        for item_data in review_data.items:
+            review_item = ProfessorReviewItem(
+                review_id=review.id,
+                sub_type_code=item_data.sub_type_code,
+                is_recommended=item_data.is_recommended,
+                comments=item_data.comments
+            )
+            self.db.add(review_item)
+        
         await self.db.commit()
         
         # 自動寄信通知學院審查人員

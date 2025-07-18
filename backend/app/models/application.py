@@ -4,12 +4,13 @@ Application models for scholarship applications
 
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Numeric, Text, JSON
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Numeric, Text, JSON, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
 
 from app.db.base_class import Base
+from app.models.scholarship import SubTypeSelectionMode
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -52,6 +53,15 @@ class FileType(enum.Enum):
     OTHER = "other"  # 其他
 
 
+class Semester(enum.Enum):
+    """Semester enum"""
+    FIRST = "first"
+    SECOND = "second"
+
+
+
+
+
 class Application(Base):
     """Scholarship application model"""
     __tablename__ = "applications"
@@ -64,16 +74,17 @@ class Application(Base):
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
     
     # 獎學金類型
-    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=True)  # 主獎學金ID
-    scholarship_subtype_list = Column(JSON, nullable=True, default=[])
+    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=False)  # 主獎學金ID
+    scholarship_subtype_list = Column(JSON, nullable=False, default=[])
+    sub_type_selection_mode = Column(Enum(SubTypeSelectionMode), nullable=False)
     
     # 申請狀態
     status = Column(String(50), default=ApplicationStatus.DRAFT.value)
     status_name = Column(String(100))
     
     # 學期資訊 (申請當時的學期)
-    academic_year = Column(String(10))  # trm_year 民國年
-    semester = Column(String(10))  # trm_term
+    academic_year = Column(Integer, nullable=False)  # 民國年，例如 113
+    semester = Column(Enum(Semester), nullable=False)
     
     # 申請資料 (申請當時)
     student_data = Column(JSON)  # Student 資料
@@ -137,6 +148,18 @@ class Application(Base):
             ApplicationStatus.UNDER_REVIEW.value,
             ApplicationStatus.RECOMMENDED.value
         ])
+    
+    @property
+    def academic_term_label(self) -> str:
+        """Get academic term label in Chinese"""
+        return f"{self.academic_year}學年度 {self.get_semester_label()}"
+    
+    def get_semester_label(self) -> str:
+        """Get semester label in Chinese"""
+        return {
+            Semester.FIRST: "第一學期",
+            Semester.SECOND: "第二學期",
+        }.get(self.semester, "")
 
 
 class ApplicationFile(Base):
@@ -231,18 +254,47 @@ class ApplicationReview(Base):
 
 
 class ProfessorReview(Base):
+    """Professor review model for scholarship applications"""
     __tablename__ = "professor_reviews"
+    
     id = Column(Integer, primary_key=True, index=True)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)
     professor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    selected_awards = Column(JSON)
-    recommendation = Column(Text)
+    
+    # 整體推薦意見
+    recommendation = Column(Text)  # 對整體申請的意見（可留可不留）
     review_status = Column(String(20), default="pending")
     reviewed_at = Column(DateTime(timezone=True))
+    
+    # 時間戳記
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-
+    
+    # 關聯
     application = relationship("Application", back_populates="professor_reviews")
     professor = relationship("User")
+    items = relationship("ProfessorReviewItem", back_populates="review", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<ProfessorReview(id={self.id}, application_id={self.application_id}, professor_id={self.professor_id})>" 
+        return f"<ProfessorReview(id={self.id}, application_id={self.application_id}, professor_id={self.professor_id})>"
+
+
+class ProfessorReviewItem(Base):
+    """Professor review item for individual scholarship sub-types"""
+    __tablename__ = "professor_review_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    review_id = Column(Integer, ForeignKey("professor_reviews.id"), nullable=False)
+    sub_type_code = Column(String(50), nullable=False)  # e.g., "moe_1w"
+    
+    # 推薦結果
+    is_recommended = Column(Boolean, nullable=False, default=False)
+    comments = Column(Text)  # 教授針對該子項目的意見
+    
+    # 時間戳記
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # 關聯
+    review = relationship("ProfessorReview", back_populates="items")
+
+    def __repr__(self):
+        return f"<ProfessorReviewItem(id={self.id}, review_id={self.review_id}, sub_type_code={self.sub_type_code})>" 

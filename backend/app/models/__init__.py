@@ -23,8 +23,18 @@ from app.models.student import (
     StudentType,
     StudyStatus
 )
-from app.models.scholarship import ScholarshipType, ScholarshipRule
-from app.models.application import Application, ApplicationStatus, ApplicationReview
+from app.models.scholarship import ScholarshipType, ScholarshipRule, SubTypeSelectionMode
+from app.models.application import (
+    Application, 
+    ApplicationStatus, 
+    ApplicationReview, 
+    ProfessorReview, 
+    ProfessorReviewItem,
+    ApplicationFile,
+    Semester,
+    ReviewStatus,
+    FileType
+)
 from app.models.notification import Notification, NotificationType
 from app.models.audit_log import AuditLog, AuditAction
 from app.models.system_setting import SystemSetting
@@ -53,6 +63,13 @@ __all__ = [
     "Application",
     "ApplicationStatus",
     "ApplicationReview",
+    "ProfessorReview",
+    "ProfessorReviewItem",
+    "ApplicationFile",
+    "Semester",
+    "SubTypeSelectionMode",
+    "ReviewStatus",
+    "FileType",
     
     # Application Field models
     "ApplicationField",
