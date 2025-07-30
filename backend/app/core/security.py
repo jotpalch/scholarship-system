@@ -8,7 +8,6 @@ from typing import Optional, Dict, Any
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.config import settings
 from app.core.exceptions import AuthenticationError, AuthorizationError
 from app.db.deps import get_db
@@ -16,6 +15,9 @@ from app.models.user import User, UserRole
 
 # JWT token bearer
 security = HTTPBearer(auto_error=False)
+
+# Note: Password functions removed since this system uses SSO authentication
+# For testing purposes, you can add them back if needed, but they're not used in production
 
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
