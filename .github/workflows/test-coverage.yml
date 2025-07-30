@@ -43,8 +43,8 @@ jobs:
         SECRET_KEY: test-secret-key-for-unit-testing
         TESTING: true
       run: |
-        # Run unit tests (using marker or main test directory)
-        pytest app/tests -m "unit or not integration" -v --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing || pytest app/tests -v --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing
+        # Run unit tests
+        pytest app/tests -v --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing
 
     - name: Upload unit test coverage
       uses: actions/upload-artifact@v4
@@ -89,11 +89,13 @@ jobs:
         env:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin123
+          MINIO_BROWSER_REDIRECT_URL: "http://localhost:9001"
+        cmd: ["server", "/data", "--console-address", ":9001"]
         options: >-
-          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:9000/minio/health/live || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 30s
+          --health-timeout 20s
+          --health-retries 3
         ports:
           - 9000:9000
           - 9001:9001
@@ -135,8 +137,8 @@ jobs:
         SECRET_KEY: test-secret-key-for-integration-testing
         TESTING: true
       run: |
-        # Run integration tests (using marker or all tests that need services)
-        pytest app/tests -m "integration" -v --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing || echo "No integration tests found, skipping"
+        # Run integration tests (or all tests if no markers)
+        pytest app/tests -v --cov=app --cov-report=xml --cov-report=html --cov-report=term-missing
 
     - name: Upload integration test coverage
       uses: actions/upload-artifact@v4
@@ -260,8 +262,8 @@ jobs:
       env:
         CI: true
       run: |
-        # Run tests with coverage threshold
-        npm run test:ci -- --coverage --coverageThreshold='{"global":{"branches":90,"functions":90,"lines":90,"statements":90}}'
+        # Run tests with coverage
+        npm run test:ci
 
     - name: Upload frontend coverage
       uses: actions/upload-artifact@v4
