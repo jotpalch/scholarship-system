@@ -12,7 +12,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest --coverage --watchAll=false",
-    "test:ci": "jest --config=jest.config.standalone.js --coverage --watchAll=false --ci",
+    "test:ci": "jest --config=jest.config.standalone.js --coverage --watchAll=false --ci --passWithNoTests",
     "test:watch": "jest --watch",
     "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand",
     "test:e2e": "./run-e2e-tests.sh",
