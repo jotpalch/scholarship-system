@@ -14,15 +14,63 @@ from sqlalchemy.orm import joinedload
 
 router = APIRouter()
 
-@router.get("/", response_model=List[EligibleScholarshipResponse])
+@router.get("/", response_model=ApiResponse[List[dict]])
 async def get_all_scholarships(
     db: AsyncSession = Depends(get_db)
 ):
-    """Get all scholarships"""
+    """Get all scholarships for timeline display"""
     stmt = select(ScholarshipType)
     result = await db.execute(stmt)
     scholarships = result.scalars().all()
-    return scholarships
+    
+    # Convert to dictionary format for timeline component
+    scholarship_list = []
+    for scholarship in scholarships:
+        scholarship_dict = {
+            "id": scholarship.id,
+            "code": scholarship.code,
+            "name": scholarship.name,
+            "name_en": scholarship.name_en,
+            "description": scholarship.description,
+            "description_en": scholarship.description_en,
+            "category": scholarship.category,
+            "sub_type_list": scholarship.sub_type_list or [],
+            "sub_type_selection_mode": scholarship.sub_type_selection_mode.value if scholarship.sub_type_selection_mode else "single",
+            "academic_year": scholarship.academic_year,
+            "semester": scholarship.semester.value if scholarship.semester else "first",
+            "application_cycle": scholarship.application_cycle.value if scholarship.application_cycle else "semester",
+            "amount": float(scholarship.amount) if scholarship.amount else 0,
+            "currency": scholarship.currency,
+            "whitelist_enabled": scholarship.whitelist_enabled,
+            "whitelist_student_ids": scholarship.whitelist_student_ids or [],
+            "renewal_application_start_date": scholarship.renewal_application_start_date.isoformat() if scholarship.renewal_application_start_date else None,
+            "renewal_application_end_date": scholarship.renewal_application_end_date.isoformat() if scholarship.renewal_application_end_date else None,
+            "application_start_date": scholarship.application_start_date.isoformat() if scholarship.application_start_date else None,
+            "application_end_date": scholarship.application_end_date.isoformat() if scholarship.application_end_date else None,
+            "renewal_professor_review_start": scholarship.renewal_professor_review_start.isoformat() if scholarship.renewal_professor_review_start else None,
+            "renewal_professor_review_end": scholarship.renewal_professor_review_end.isoformat() if scholarship.renewal_professor_review_end else None,
+            "renewal_college_review_start": scholarship.renewal_college_review_start.isoformat() if scholarship.renewal_college_review_start else None,
+            "renewal_college_review_end": scholarship.renewal_college_review_end.isoformat() if scholarship.renewal_college_review_end else None,
+            "requires_professor_recommendation": scholarship.requires_professor_recommendation,
+            "professor_review_start": scholarship.professor_review_start.isoformat() if scholarship.professor_review_start else None,
+            "professor_review_end": scholarship.professor_review_end.isoformat() if scholarship.professor_review_end else None,
+            "requires_college_review": scholarship.requires_college_review,
+            "college_review_start": scholarship.college_review_start.isoformat() if scholarship.college_review_start else None,
+            "college_review_end": scholarship.college_review_end.isoformat() if scholarship.college_review_end else None,
+            "review_deadline": scholarship.review_deadline.isoformat() if scholarship.review_deadline else None,
+            "status": scholarship.status,
+            "created_at": scholarship.created_at.isoformat() if scholarship.created_at else None,
+            "updated_at": scholarship.updated_at.isoformat() if scholarship.updated_at else None,
+            "created_by": scholarship.created_by,
+            "updated_by": scholarship.updated_by
+        }
+        scholarship_list.append(scholarship_dict)
+    
+    return ApiResponse(
+        success=True,
+        message=f"Retrieved {len(scholarship_list)} scholarships",
+        data=scholarship_list
+    )
 
 # 學生查看自己可以申請的獎學金
 @router.get("/eligible", response_model=List[EligibleScholarshipResponse])

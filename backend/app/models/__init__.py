@@ -15,15 +15,13 @@ from app.models.student import (
     
     # 學生資料模型
     Student,
-    StudentAcademicRecord,
-    StudentContact,
-    StudentTermRecord,
     
     # Enum 類別
     StudentType,
     StudyStatus
 )
-from app.models.scholarship import ScholarshipType, ScholarshipRule, SubTypeSelectionMode
+from app.models.scholarship import ScholarshipType, ScholarshipRule
+from app.models.enums import Semester, SubTypeSelectionMode, CycleType
 from app.models.application import (
     Application, 
     ApplicationStatus, 
@@ -31,7 +29,6 @@ from app.models.application import (
     ProfessorReview, 
     ProfessorReviewItem,
     ApplicationFile,
-    Semester,
     ReviewStatus,
     FileType
 )
@@ -53,9 +50,6 @@ __all__ = [
     "Department",
     "EnrollType",
     "Student",
-    "StudentAcademicRecord",
-    "StudentContact",
-    "StudentTermRecord",
     "StudentType",
     "StudyStatus",
     
@@ -66,10 +60,13 @@ __all__ = [
     "ProfessorReview",
     "ProfessorReviewItem",
     "ApplicationFile",
-    "Semester",
-    "SubTypeSelectionMode",
     "ReviewStatus",
     "FileType",
+    
+    # Shared enums
+    "Semester",
+    "SubTypeSelectionMode",
+    "CycleType",
     
     # Application Field models
     "ApplicationField",

@@ -11,6 +11,7 @@ from decimal import Decimal
 from typing import Optional, List, Dict
 
 from app.db.base_class import Base
+from app.models.enums import Semester, SubTypeSelectionMode, CycleType
 
 
 class ScholarshipStatus(enum.Enum):
@@ -27,23 +28,7 @@ class ScholarshipCategory(enum.Enum):
     DIRECT_PHD = "direct_phd"  # 逕讀博士獎學金
 
 
-class Semester(enum.Enum):
-    """Semester enum"""
-    FIRST = "first"
-    SECOND = "second"
 
-
-class CycleType(enum.Enum):
-    """Application cycle type enum"""
-    SEMESTER = "semester"
-    YEARLY = "yearly"
-
-
-class SubTypeSelectionMode(enum.Enum):
-    """Sub-type selection mode enum"""
-    SINGLE = "single"          # 僅能選擇一個子項目
-    MULTIPLE = "multiple"      # 可自由多選
-    HIERARCHICAL = "hierarchical"  # 需依序選取：A → AB → ABC
 
 
 class ScholarshipSubType(enum.Enum):
@@ -92,9 +77,21 @@ class ScholarshipType(Base):
     whitelist_student_ids = Column(JSON, default=[])  # 白名單學生ID列表
     
     # 申請時間
+    # 續領申請期間（優先處理）
+    renewal_application_start_date = Column(DateTime(timezone=True), nullable=True)
+    renewal_application_end_date = Column(DateTime(timezone=True), nullable=True)
+    
+    # 一般申請期間（續領處理完畢後）
     application_start_date = Column(DateTime(timezone=True), nullable=True)
     application_end_date = Column(DateTime(timezone=True), nullable=True)
 
+    # 續領審查期間
+    renewal_professor_review_start = Column(DateTime(timezone=True), nullable=True)
+    renewal_professor_review_end = Column(DateTime(timezone=True), nullable=True)
+    renewal_college_review_start = Column(DateTime(timezone=True), nullable=True)
+    renewal_college_review_end = Column(DateTime(timezone=True), nullable=True)
+
+    # 一般申請審查期間
     requires_professor_recommendation = Column(Boolean, default=False)
     professor_review_start = Column(DateTime(timezone=True), nullable=True)
     professor_review_end = Column(DateTime(timezone=True), nullable=True)
@@ -131,11 +128,42 @@ class ScholarshipType(Base):
     
     @property
     def is_application_period(self) -> bool:
-        """Check if within application period"""
+        """Check if within application period (renewal or general)"""
+        now = datetime.now(timezone.utc)
+        
+        # 檢查續領申請期間
+        if self.is_renewal_application_period:
+            return True
+            
+        # 檢查一般申請期間
+        if not self.application_start_date or not self.application_end_date:
+            return False
+        return bool(self.application_start_date <= now <= self.application_end_date)
+    
+    @property
+    def is_renewal_application_period(self) -> bool:
+        """Check if within renewal application period"""
+        now = datetime.now(timezone.utc)
+        if not self.renewal_application_start_date or not self.renewal_application_end_date:
+            return False
+        return bool(self.renewal_application_start_date <= now <= self.renewal_application_end_date)
+    
+    @property
+    def is_general_application_period(self) -> bool:
+        """Check if within general application period"""
         now = datetime.now(timezone.utc)
         if not self.application_start_date or not self.application_end_date:
             return False
         return bool(self.application_start_date <= now <= self.application_end_date)
+    
+    @property
+    def current_application_type(self) -> Optional[str]:
+        """Get current application type: 'renewal' or 'general' or None"""
+        if self.is_renewal_application_period:
+            return "renewal"
+        elif self.is_general_application_period:
+            return "general"
+        return None
     
     @property
     def academic_year_label(self) -> str:
@@ -148,6 +176,64 @@ class ScholarshipType(Base):
             Semester.FIRST: "第一學期",
             Semester.SECOND: "第二學期",
         }.get(self.semester, "")
+    
+    def is_renewal_professor_review_period(self) -> bool:
+        """Check if within renewal professor review period"""
+        now = datetime.now(timezone.utc)
+        if not self.renewal_professor_review_start or not self.renewal_professor_review_end:
+            return False
+        return bool(self.renewal_professor_review_start <= now <= self.renewal_professor_review_end)
+    
+    def is_renewal_college_review_period(self) -> bool:
+        """Check if within renewal college review period"""
+        now = datetime.now(timezone.utc)
+        if not self.renewal_college_review_start or not self.renewal_college_review_end:
+            return False
+        return bool(self.renewal_college_review_start <= now <= self.renewal_college_review_end)
+    
+    def is_professor_review_period(self) -> bool:
+        """Check if within professor review period (renewal or general)"""
+        now = datetime.now(timezone.utc)
+        
+        # 檢查續領教授審查期間
+        if self.is_renewal_professor_review_period():
+            return True
+            
+        # 檢查一般教授審查期間
+        if not self.professor_review_start or not self.professor_review_end:
+            return False
+        return bool(self.professor_review_start <= now <= self.professor_review_end)
+    
+    def is_college_review_period(self) -> bool:
+        """Check if within college review period (renewal or general)"""
+        now = datetime.now(timezone.utc)
+        
+        # 檢查續領學院審查期間
+        if self.is_renewal_college_review_period():
+            return True
+            
+        # 檢查一般學院審查期間
+        if not self.college_review_start or not self.college_review_end:
+            return False
+        return bool(self.college_review_start <= now <= self.college_review_end)
+    
+    def get_current_review_stage(self) -> Optional[str]:
+        """Get current review stage: 'renewal_professor', 'renewal_college', 'general_professor', 'general_college' or None"""
+        now = datetime.now(timezone.utc)
+        
+        # 續領階段
+        if self.is_renewal_professor_review_period():
+            return "renewal_professor"
+        elif self.is_renewal_college_review_period():
+            return "renewal_college"
+        
+        # 一般申請階段
+        elif self.is_professor_review_period() and not self.is_renewal_professor_review_period():
+            return "general_professor"
+        elif self.is_college_review_period() and not self.is_renewal_college_review_period():
+            return "general_college"
+        
+        return None
     
     def is_valid_sub_type_selection(self, selected: List[str]) -> bool:
         """Validate sub-type selection based on selection mode"""
@@ -225,13 +311,14 @@ class ScholarshipType(Base):
         """Get unique key for this scholarship semester (for application limit checking)"""
         return f"{self.academic_year}_{self.semester.value}"
     
-    def can_student_apply(self, student_id: int, existing_applications: List['Application']) -> bool:
+    def can_student_apply(self, student_id: int, existing_applications: List['Application'], is_renewal: bool = None) -> bool:
         """
-        Check if student can apply for this scholarship based on semester limits
+        Check if student can apply for this scholarship based on semester limits and application type
         
         Args:
             student_id: Student ID to check
             existing_applications: List of existing applications for this student
+            is_renewal: True for renewal, False for general, None to auto-detect based on current period
             
         Returns:
             bool: True if student can apply, False otherwise
@@ -240,14 +327,82 @@ class ScholarshipType(Base):
         if not self.is_student_in_whitelist(student_id):
             return False
         
+        # Auto-detect application type if not provided
+        if is_renewal is None:
+            is_renewal = self.current_application_type == "renewal"
+        
+        # Check if we're in the correct application period
+        if is_renewal and not self.is_renewal_application_period:
+            return False
+        elif not is_renewal and not self.is_general_application_period:
+            return False
+        
         # Check if student already has an application for this semester
         semester_key = self.get_semester_key()
         for application in existing_applications:
             if (application.scholarship_type_id == self.id and 
-                application.student_id == student_id):
+                application.student_id == student_id and
+                application.is_renewal == is_renewal):
                 return False
         
         return True
+    
+    def can_student_apply_renewal(self, student_id: int, existing_applications: List['Application']) -> bool:
+        """Check if student can apply for renewal"""
+        return self.can_student_apply(student_id, existing_applications, True)
+    
+    def can_student_apply_general(self, student_id: int, existing_applications: List['Application']) -> bool:
+        """Check if student can apply for general application"""
+        return self.can_student_apply(student_id, existing_applications, False)
+    
+    def get_application_timeline(self) -> Dict[str, Dict[str, datetime]]:
+        """Get complete application timeline"""
+        timeline = {
+            "renewal": {
+                "application_start": self.renewal_application_start_date,
+                "application_end": self.renewal_application_end_date,
+                "professor_review_start": self.renewal_professor_review_start,
+                "professor_review_end": self.renewal_professor_review_end,
+                "college_review_start": self.renewal_college_review_start,
+                "college_review_end": self.renewal_college_review_end,
+            },
+            "general": {
+                "application_start": self.application_start_date,
+                "application_end": self.application_end_date,
+                "professor_review_start": self.professor_review_start,
+                "professor_review_end": self.professor_review_end,
+                "college_review_start": self.college_review_start,
+                "college_review_end": self.college_review_end,
+            }
+        }
+        return timeline
+    
+    def get_next_deadline(self) -> Optional[datetime]:
+        """Get the next upcoming deadline"""
+        now = datetime.now(timezone.utc)
+        deadlines = []
+        
+        # Collect all deadlines
+        if self.renewal_application_end_date and self.renewal_application_end_date > now:
+            deadlines.append(("續領申請截止", self.renewal_application_end_date))
+        if self.renewal_professor_review_end and self.renewal_professor_review_end > now:
+            deadlines.append(("續領教授審查截止", self.renewal_professor_review_end))
+        if self.renewal_college_review_end and self.renewal_college_review_end > now:
+            deadlines.append(("續領學院審查截止", self.renewal_college_review_end))
+        if self.application_end_date and self.application_end_date > now:
+            deadlines.append(("一般申請截止", self.application_end_date))
+        if self.professor_review_end and self.professor_review_end > now:
+            deadlines.append(("一般教授審查截止", self.professor_review_end))
+        if self.college_review_end and self.college_review_end > now:
+            deadlines.append(("一般學院審查截止", self.college_review_end))
+        if self.review_deadline and self.review_deadline > now:
+            deadlines.append(("總審查截止", self.review_deadline))
+        
+        if not deadlines:
+            return None
+        
+        # Return the earliest deadline
+        return min(deadlines, key=lambda x: x[1])[1]
 
 class ScholarshipSubTypeConfig(Base):
     """

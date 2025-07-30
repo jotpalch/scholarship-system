@@ -34,7 +34,7 @@ async def get_student_from_user(user: User, db: AsyncSession) -> Optional[Studen
     if user.role != UserRole.STUDENT or not user.nycu_id:
         return None
     
-    stmt = select(Student).where(Student.stdNo == user.nycu_id)
+    stmt = select(Student).where(Student.std_stdcode == user.nycu_id)
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -153,11 +153,7 @@ class ApplicationService:
         result = await self.db.execute(stmt)
         user = result.scalar_one()
         
-        stmt = select(Student).options(
-            selectinload(Student.academicRecords),
-            selectinload(Student.contacts),
-            selectinload(Student.termRecords)
-        ).where(Student.id == student_id)
+        stmt = select(Student).where(Student.id == student_id)
         result = await self.db.execute(stmt)
         student = result.scalar_one()
         
@@ -195,6 +191,7 @@ class ApplicationService:
             sub_type_selection_mode=scholarship.sub_type_selection_mode or "single",
             status=status,
             status_name=status_name,
+            is_renewal=application_data.is_renewal or False,  # 設置續領申請標識
             academic_year=int(datetime.now().year),
             semester=Semester.FIRST.value,  # Default to first semester
             student_data=student_snapshot,
@@ -287,6 +284,7 @@ class ApplicationService:
                 scholarship_subtype_list=application.scholarship_subtype_list or [],
                 status=application.status,
                 status_name=application.status_name,
+                is_renewal=application.is_renewal,  # 添加續領申請標識
                 academic_year=application.academic_year,
                 semester=application.semester,
                 student_data=application.student_data,
@@ -504,6 +502,10 @@ class ApplicationService:
         # 更新狀態
         if update_data.status:
             application.status = update_data.status
+            
+        # 更新續領申請標識
+        if update_data.is_renewal is not None:
+            application.is_renewal = update_data.is_renewal
             
         await self.db.commit()
         await self.db.refresh(application)

@@ -27,15 +27,16 @@ import {
 } from "lucide-react"
 import { useScholarshipSpecificApplications } from "@/hooks/use-admin"
 import { ApplicationDetailDialog } from "@/components/application-detail-dialog"
-import { ScholarshipManagementPanel } from "@/components/scholarship-management-panel"
+import { AdminScholarshipManagementInterface } from "@/components/admin-scholarship-management-interface"
 import { Locale } from "@/lib/validators"
-import { api } from "@/lib/api"
+import { apiClient } from "@/lib/api"
 
 // Use the Application type from the API
 import { Application } from "@/lib/api"
 import { User } from "@/types/user"
+import { useScholarshipPermissions } from "@/hooks/use-scholarship-permissions"
 
-interface ScholarshipSpecificDashboardProps {
+interface AdminScholarshipDashboardProps {
   user: User
 }
 
@@ -202,7 +203,7 @@ const transformApplicationData = (app: any): DashboardApplication => {
   return transformed
 }
 
-export function ScholarshipSpecificDashboard({ user }: ScholarshipSpecificDashboardProps) {
+export function AdminScholarshipDashboard({ user }: AdminScholarshipDashboardProps) {
   // 使用 hook 獲取真實資料
   const { 
     applicationsByType, 
@@ -213,6 +214,9 @@ export function ScholarshipSpecificDashboard({ user }: ScholarshipSpecificDashbo
     refetch,
     updateApplicationStatus 
   } = useScholarshipSpecificApplications()
+
+  // Get user's scholarship permissions for debugging
+  const { permissions, isLoading: permissionsLoading, error: permissionsError } = useScholarshipPermissions()
 
   // Locale state for internationalization (管理員頁面固定使用中文)
   const [locale] = useState<Locale>("zh")
@@ -277,7 +281,7 @@ export function ScholarshipSpecificDashboard({ user }: ScholarshipSpecificDashbo
       
       setTranslationsLoading(true)
       try {
-        const response = await api.admin.getSubTypeTranslations()
+        const response = await apiClient.admin.getSubTypeTranslations()
         if (response.success && response.data) {
           // 使用中文翻譯
           setSubTypeTranslations(response.data.zh || {})
@@ -779,7 +783,12 @@ export function ScholarshipSpecificDashboard({ user }: ScholarshipSpecificDashbo
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">獎學金申請管理</h2>
-          <p className="text-muted-foreground">管理各類型獎學金申請案件</p>
+          <p className="text-muted-foreground">
+            管理各類型獎學金申請案件 - {user.role === 'super_admin' ? '超級管理員' : 
+            user.role === 'admin' ? '管理員' : 
+            user.role === 'college' ? '學院審核人員' : 
+            user.role === 'professor' ? '教授' : '未知角色'}
+          </p>
         </div>
         <Button onClick={refetch} variant="outline" disabled={isLoading}>
           <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
@@ -787,9 +796,91 @@ export function ScholarshipSpecificDashboard({ user }: ScholarshipSpecificDashbo
         </Button>
       </div>
 
+      {/* Permission Status */}
+      <Card className="bg-blue-50 border-blue-200">
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-3 w-3 bg-blue-500 rounded-full"></div>
+              <div>
+                <h3 className="font-semibold text-blue-900">權限狀態</h3>
+                <p className="text-sm text-blue-700">
+                  {user.role === 'super_admin' 
+                    ? '可管理所有獎學金類型' 
+                    : user.role === 'admin' 
+                    ? '可管理指定權限的獎學金類型' 
+                    : user.role === 'college' 
+                    ? '可管理指定權限的獎學金類型' 
+                    : user.role === 'professor' 
+                    ? '可查看指導學生的申請案件' 
+                    : '無管理權限'}
+                </p>
+                {/* Debug information */}
+                {process.env.NODE_ENV === 'development' && (
+                  <div className="mt-2 text-xs text-blue-600">
+                    <p>用戶ID: {user.id}</p>
+                    <p>用戶角色: {user.role}</p>
+                    <p>權限載入中: {permissionsLoading ? '是' : '否'}</p>
+                    <p>權限錯誤: {permissionsError || '無'}</p>
+                    <p>權限數量: {permissions.length}</p>
+                    <p>獎學金類型數量: {scholarshipTypes.length}</p>
+                    <p>獎學金統計數量: {Object.keys(scholarshipStats).length}</p>
+                    {permissions.length > 0 && (
+                      <p>權限詳情: {permissions.map(p => `${p.scholarship_name}(${p.scholarship_id})`).join(', ')}</p>
+                    )}
+                    {scholarshipTypes.length > 0 && (
+                      <p>獎學金類型: {scholarshipTypes.join(', ')}</p>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          console.log('Testing permissions API...')
+                          const response = await apiClient.admin.getCurrentUserScholarshipPermissions()
+                          console.log('Permissions API response:', response)
+                          alert(`權限 API 測試結果: ${response.success ? '成功' : '失敗'}\n權限數量: ${response.data?.length || 0}`)
+                        } catch (error) {
+                          console.error('Permissions API test failed:', error)
+                          alert(`權限 API 測試失敗: ${error}`)
+                        }
+                      }}
+                      className="mt-2"
+                    >
+                      測試權限 API
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          console.log('Testing scholarship stats API...')
+                          const response = await apiClient.admin.getScholarshipStats()
+                          console.log('Scholarship stats API response:', response)
+                          alert(`獎學金統計 API 測試結果: ${response.success ? '成功' : '失敗'}\n獎學金數量: ${response.data ? Object.keys(response.data).length : 0}`)
+                        } catch (error) {
+                          console.error('Scholarship stats API test failed:', error)
+                          alert(`獎學金統計 API 測試失敗: ${error}`)
+                        }
+                      }}
+                      className="mt-2 ml-2"
+                    >
+                      測試獎學金統計 API
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+            <Badge variant="outline" className="text-blue-700 border-blue-300">
+              {scholarshipTypes.length} 個獎學金類型
+            </Badge>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* 獎學金類型標籤頁 */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full" style={{ gridTemplateColumns: `repeat(${scholarshipTypes.length}, 1fr)` }}>
           {scholarshipTypes.map((type) => (
             <TabsTrigger key={type} value={type} className="text-sm">
               {getScholarshipDisplayName(type)}
@@ -817,7 +908,7 @@ export function ScholarshipSpecificDashboard({ user }: ScholarshipSpecificDashbo
       {/* 獎學金管理面板 */}
       {activeTab && (
         <div className="mt-8">
-          <ScholarshipManagementPanel 
+          <AdminScholarshipManagementInterface 
             type={activeTab as any} 
             className="border-t pt-6"
           />

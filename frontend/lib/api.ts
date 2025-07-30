@@ -72,6 +72,7 @@ export interface Application {
   scholarship_type: string
   scholarship_type_zh?: string  // 中文獎學金類型名稱
   status: 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'withdrawn'
+  is_renewal?: boolean  // 是否為續領申請
   personal_statement?: string
   gpa_requirement_met: boolean
   submitted_at?: string
@@ -127,6 +128,7 @@ export interface ApplicationCreate {
     }>
   }
   agree_terms?: boolean
+  is_renewal?: boolean  // 是否為續領申請
   [key: string]: any  // 允許動態欄位
 }
 
@@ -904,7 +906,7 @@ class ApiClient {
       return this.request(`/scholarships/${id}`)
     },
     
-    getAll: async (): Promise<ApiResponse<ScholarshipType[]>> => {
+    getAll: async (): Promise<ApiResponse<any[]>> => {
       return this.request('/scholarships')
     },
     
@@ -1327,6 +1329,11 @@ class ApiClient {
     getScholarshipPermissions: async (userId?: number): Promise<ApiResponse<ScholarshipPermission[]>> => {
       const params = userId ? `?user_id=${userId}` : ''
       return this.request(`/admin/scholarship-permissions${params}`)
+    },
+
+    // 獲取當前用戶的獎學金權限
+    getCurrentUserScholarshipPermissions: async (): Promise<ApiResponse<ScholarshipPermission[]>> => {
+      return this.request('/admin/scholarship-permissions/current-user')
     },
 
     createScholarshipPermission: async (permission: ScholarshipPermissionCreate): Promise<ApiResponse<ScholarshipPermission>> => {

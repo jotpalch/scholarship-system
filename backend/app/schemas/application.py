@@ -130,6 +130,10 @@ class ApplicationCreate(BaseModel):
         False,
         description="同意條款"
     )
+    is_renewal: Optional[bool] = Field(
+        False,
+        description="是否為續領申請"
+    )
     
     class Config:
         json_encoders = {
@@ -168,6 +172,7 @@ class ApplicationUpdate(BaseModel):
     form_data: Optional[ApplicationFormData] = Field(None, description="表單資料")
     status: Optional[str] = Field(None, description="申請狀態")
     agree_terms: Optional[bool] = Field(None, description="同意條款")
+    is_renewal: Optional[bool] = Field(None, description="是否為續領申請")
 
     class Config:
         json_encoders = {
@@ -256,6 +261,7 @@ class ApplicationResponse(BaseModel):
     scholarship_subtype_list: Optional[List[str]] = []
     status: str
     status_name: Optional[str]
+    is_renewal: bool = Field(False, description="是否為續領申請")
     academic_year: int
     semester: str
     student_data: Dict[str, Any]
@@ -320,6 +326,7 @@ class ApplicationListResponse(BaseModel):
     scholarship_subtype_list: Optional[List[str]] = []  # 獎學金子類型列表
     status: str
     status_name: Optional[str]
+    is_renewal: bool = Field(False, description="是否為續領申請")
     academic_year: int
     semester: str
     student_data: Dict[str, Any]

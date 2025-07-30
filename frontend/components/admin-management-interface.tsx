@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -38,7 +38,7 @@ interface User {
   }
 }
 
-interface AdminInterfaceProps {
+interface AdminManagementInterfaceProps {
   user: User
 }
 
@@ -77,7 +77,7 @@ const DRAGGABLE_VARIABLES: Record<string, { label: string; desc: string }[]> = {
   ]
 };
 
-export function AdminInterface({ user }: AdminInterfaceProps) {
+export function AdminManagementInterface({ user }: AdminManagementInterfaceProps) {
   // 工作流程狀態
   const [workflows, setWorkflows] = useState<Workflow[]>([])
   const [loadingWorkflows, setLoadingWorkflows] = useState(false)
@@ -176,6 +176,39 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
   const [availableScholarships, setAvailableScholarships] = useState<Array<{ id: number; name: string; name_en?: string; code: string }>>([]);
   const [loadingScholarships, setLoadingScholarships] = useState(false);
 
+  // 使用 useCallback 來確保 onPermissionChange 捕獲最新的狀態
+  const handlePermissionChange = useCallback((permissions: any[]) => {
+    
+    // 更新該用戶的獎學金權限
+    const userId = editingUser?.id
+    if (userId) {
+      // 移除該用戶的舊權限
+      const otherUserPermissions = scholarshipPermissions.filter(p => p.user_id !== Number(userId))
+
+      
+      // 處理新權限，保留現有權限的 ID
+      const newPermissions = permissions.map(permission => {
+        const scholarship = availableScholarships.find(s => s.id === permission.scholarship_id)
+        
+        // 檢查是否已存在此權限（通過 scholarship_id 匹配）
+        const existingPermission = scholarshipPermissions.find(p => 
+          p.user_id === Number(userId) && p.scholarship_id === permission.scholarship_id
+        )
+        
+        return {
+          ...permission,
+          // 如果已存在，保留原 ID；否則使用新 ID
+          id: existingPermission ? existingPermission.id : permission.id,
+          user_id: Number(userId), // 確保 user_id 正確
+          scholarship_name: scholarship?.name || '未知獎學金',
+          scholarship_name_en: scholarship?.name_en
+        }
+      })
+      
+      const updatedPermissions = [...otherUserPermissions, ...newPermissions];
+      setScholarshipPermissions(updatedPermissions)
+    }
+  }, [editingUser, scholarshipPermissions, availableScholarships]);
 
   const subjectRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -450,6 +483,24 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
 
   const handleUserFormChange = (field: keyof UserCreate, value: any) => {
     setUserForm(prev => ({ ...prev, [field]: value }));
+    
+    // 當角色改變時，處理獎學金權限
+    if (field === 'role') {
+      
+      
+      // 如果角色不是 college 或 admin，清除該用戶的所有獎學金權限
+      if (!['college', 'admin'].includes(value)) {
+        if (editingUser) {
+          // 編輯現有用戶時，清除該用戶的權限
+          setScholarshipPermissions(prev => prev.filter(p => p.user_id !== Number(editingUser.id)));
+
+        } else {
+          // 創建新用戶時，清除臨時權限
+          setScholarshipPermissions(prev => prev.filter(p => p.user_id !== -1));
+
+        }
+      }
+    }
   };
 
   const handleCreateUser = async () => {
@@ -458,13 +509,39 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
     setUserFormLoading(true);
     
     try {
+      // First create the user
       const response = await apiClient.users.create(userForm);
       
       if (response.success) {
+        // If user creation successful and we have scholarship permissions to save
+        const newUserId = response.data?.id;
+        if (newUserId && ['college', 'admin', 'super_admin'].includes(userForm.role)) {
+          // Get temporary permissions (user_id = -1) for the new user
+          const tempPermissions = scholarshipPermissions.filter(p => p.user_id === -1);
+          if (tempPermissions.length > 0) {
+            // Save scholarship permissions for the new user
+            for (const permission of tempPermissions) {
+              try {
+                await apiClient.admin.createScholarshipPermission({
+                  user_id: newUserId,
+                  scholarship_id: permission.scholarship_id,
+                  comment: permission.comment || ''
+                });
+              } catch (permError) {
+                console.error('Failed to create scholarship permission:', permError);
+              }
+            }
+          }
+        }
+        
+        // Clean up temporary permissions
+        setScholarshipPermissions(prev => prev.filter(p => p.user_id !== -1));
+        
         setShowUserForm(false);
         resetUserForm();
-        fetchUsers();
-        fetchUserStats();
+        await fetchUsers();
+        await fetchUserStats();
+        await fetchScholarshipPermissions(); // 重新載入權限列表
       } else {
         alert('建立使用者權限失敗: ' + (response.message || '未知錯誤'));
       }
@@ -481,13 +558,77 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
     setUserFormLoading(true);
     
     try {
+      // First update the user
       const response = await apiClient.users.update(editingUser.id, userForm);
       
       if (response.success) {
+        // Handle scholarship permissions for college/admin/super_admin roles
+        if (['college', 'admin', 'super_admin'].includes(userForm.role)) {
+          
+          
+
+          
+          // Get the permissions that should be saved (from the UI state - only those that are actually selected)
+          // Note: scholarshipPermissions state is updated by onPermissionChange when user changes selection
+          const permissionsToSave = scholarshipPermissions.filter(p => p.user_id === Number(editingUser.id));
+          
+          // Force refresh permissions from backend to get the latest state
+          const refreshResponse = await apiClient.admin.getScholarshipPermissions();
+          if (refreshResponse.success && refreshResponse.data) {
+            const freshPermissions = refreshResponse.data;
+            const freshUserPermissions = freshPermissions.filter(p => p.user_id === Number(editingUser.id));
+            
+            // Use fresh permissions for comparison
+            const permissionsToRemove = freshUserPermissions.filter(currentPerm => 
+              !permissionsToSave.some(savePerm => savePerm.scholarship_id === currentPerm.scholarship_id)
+            );
+            
+            // Step 1: Delete permissions that are no longer selected
+            for (const currentPerm of permissionsToRemove) {
+              try {
+                await apiClient.admin.deleteScholarshipPermission(currentPerm.id);
+              } catch (permError) {
+                console.error('Failed to delete scholarship permission:', permError);
+                alert(`權限刪除失敗: ${permError instanceof Error ? permError.message : '未知錯誤'}`);
+              }
+            }
+            
+            // Step 2: Create new permissions for newly selected scholarships
+            const permissionsToCreate = permissionsToSave.filter(savePerm => 
+              !freshUserPermissions.some(currentPerm => currentPerm.scholarship_id === savePerm.scholarship_id)
+            );
+            
+            for (const permission of permissionsToCreate) {
+              try {
+                await apiClient.admin.createScholarshipPermission({
+                  user_id: Number(editingUser.id),
+                  scholarship_id: permission.scholarship_id,
+                  comment: permission.comment || ''
+                });
+              } catch (permError) {
+                console.error('Failed to create scholarship permission:', permError);
+                alert(`權限創建失敗: ${permError instanceof Error ? permError.message : '未知錯誤'}`);
+              }
+            }
+          }
+        } else {
+          // For non-college/admin roles, remove all scholarship permissions
+          const currentUserPermissions = scholarshipPermissions.filter(p => p.user_id === Number(editingUser.id) && p.id > 0);
+          for (const permission of currentUserPermissions) {
+            try {
+              await apiClient.admin.deleteScholarshipPermission(permission.id);
+            } catch (permError) {
+              console.error('Failed to delete scholarship permission:', permError);
+            }
+          }
+        }
+        
+
         setEditingUser(null);
         setShowUserForm(false);
         resetUserForm();
-        fetchUsers();
+        await fetchUsers();
+        await fetchScholarshipPermissions(); // 重新載入權限列表
       } else {
         alert('更新使用者權限失敗: ' + (response.message || '未知錯誤'));
       }
@@ -524,12 +665,18 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
       password: '', // 編輯時不需要密碼
       student_no: user.student_no || ''
     });
+    
+    // 載入該用戶的現有獎學金權限
+    const userPermissions = scholarshipPermissions.filter(p => p.user_id === Number(user.id));
+    
     setShowUserForm(true);
   };
 
   const resetUserForm = () => {
     setShowUserForm(false);
     setEditingUser(null);
+    // Clean up temporary permissions
+    setScholarshipPermissions(prev => prev.filter(p => p.user_id !== -1));
     setUserForm({
       nycu_id: '',
       email: '',
@@ -669,13 +816,19 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
     
     try {
       const response = await apiClient.admin.getScholarshipPermissions();
+      
       if (response.success && response.data) {
         setScholarshipPermissions(response.data);
       } else {
         setPermissionsError(response.message || '獲取獎學金權限失敗');
       }
     } catch (error) {
-      setPermissionsError(error instanceof Error ? error.message : '網絡錯誤');
+      console.error('Error fetching permissions:', error);
+      if (error instanceof Error) {
+        setPermissionsError(error.message);
+      } else {
+        setPermissionsError('網絡錯誤');
+      }
     } finally {
       setLoadingPermissions(false);
     }
@@ -1198,12 +1351,9 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
                     </TableHeader>
                     <TableBody>
                       {users.map((user) => {
-                        const isActive = user.status === '在職' || user.status === '在學';
+                        const userPermissions = scholarshipPermissions.filter(p => p.user_id === Number(user.id));
                         return (
-                          <TableRow
-                            key={user.id}
-                            className={`align-middle h-20 ${!isActive ? 'bg-gray-100 opacity-60 pointer-events-none' : ''}`}
-                          >
+                          <TableRow key={user.id}>
                             <TableCell className="px-5 py-4 align-middle">
                               <div className="space-y-1">
                                 <div className="font-medium">{user.name}</div>
@@ -1247,38 +1397,24 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
                                 {loadingPermissions ? (
                                   <div className="text-xs text-gray-400">載入中...</div>
                                 ) : user.role === 'super_admin' ? (
-                                  // super_admin 自動擁有所有獎學金權限
-                                  availableScholarships.map((scholarship) => (
-                                    <Badge 
-                                      key={scholarship.id} 
-                                      variant="default" 
-                                      className="text-xs px-3 py-1 rounded-full mb-1"
-                                    >
-                                      {scholarship.name}
+                                  <>
+                                    {availableScholarships.map((scholarship) => (
+                                      <Badge key={scholarship.id} variant="default" className="text-xs px-3 py-1 rounded-full mb-1">
+                                        {scholarship.name}
+                                      </Badge>
+                                    ))}
+                                    <div className="text-xs text-green-600 font-medium w-full">擁有所有獎學金權限</div>
+                                  </>
+                                ) : user.role === 'professor' ? (
+                                  <div className="text-xs text-amber-600 font-medium">教授無需管理權限</div>
+                                ) : userPermissions.length === 0 ? (
+                                  <div className="text-xs text-gray-400">無獎學金權限</div>
+                                ) : (
+                                  userPermissions.map((permission) => (
+                                    <Badge key={permission.id} variant="secondary" className="text-xs px-3 py-1 rounded-full mb-1">
+                                      {permission.scholarship_name}
                                     </Badge>
                                   ))
-                                ) : user.role === 'professor' ? (
-                                  // 教授角色顯示說明
-                                  <div className="text-xs text-amber-600 font-medium">教授無需管理權限</div>
-                                ) : (
-                                  // 其他管理角色顯示資料庫中的權限
-                                  scholarshipPermissions
-                                    .filter(p => p.user_id === user.id)
-                                    .map(permission => (
-                                      <Badge 
-                                        key={permission.id} 
-                                        variant="secondary" 
-                                        className="text-xs px-3 py-1 rounded-full mb-1"
-                                      >
-                                        {permission.scholarship_name}
-                                      </Badge>
-                                    ))
-                                )}
-                                {!loadingPermissions && user.role !== 'super_admin' && user.role !== 'professor' && scholarshipPermissions.filter(p => p.user_id === user.id).length === 0 && (
-                                  <div className="text-xs text-gray-400">無獎學金權限</div>
-                                )}
-                                {user.role === 'super_admin' && (
-                                  <div className="text-xs text-green-600 font-medium w-full">擁有所有獎學金權限</div>
                                 )}
                               </div>
                             </TableCell>
@@ -1382,26 +1518,9 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
             onUserFormChange={handleUserFormChange}
             onSubmit={handleUserSubmit}
             isLoading={userFormLoading}
-            scholarshipPermissions={scholarshipPermissions.filter(p => p.user_id === editingUser?.id)}
+            scholarshipPermissions={scholarshipPermissions}
             availableScholarships={availableScholarships}
-            onPermissionChange={(permissions) => {
-              // 更新該用戶的獎學金權限
-              const userId = editingUser?.id
-              if (userId) {
-                // 移除該用戶的舊權限
-                const otherUserPermissions = scholarshipPermissions.filter(p => p.user_id !== userId)
-                // 添加新的權限（包含獎學金名稱）
-                const newPermissions = permissions.map(permission => {
-                  const scholarship = availableScholarships.find(s => s.id === permission.scholarship_id)
-                  return {
-                    ...permission,
-                    scholarship_name: scholarship?.name || '未知獎學金',
-                    scholarship_name_en: scholarship?.name_en
-                  }
-                })
-                setScholarshipPermissions([...otherUserPermissions, ...newPermissions])
-              }
-            }}
+            onPermissionChange={handlePermissionChange}
           />
         </TabsContent>
 
@@ -2015,36 +2134,7 @@ export function AdminInterface({ user }: AdminInterfaceProps) {
         </TabsContent>
       </Tabs>
 
-      {/* 使用者權限編輯 Modal */}
-      <UserEditModal
-        isOpen={showUserForm}
-        onClose={() => setShowUserForm(false)}
-        editingUser={editingUser}
-        userForm={userForm}
-        onUserFormChange={handleUserFormChange}
-        onSubmit={handleUserSubmit}
-        isLoading={userFormLoading}
-        scholarshipPermissions={scholarshipPermissions.filter(p => p.user_id === editingUser?.id)}
-        availableScholarships={availableScholarships}
-        onPermissionChange={(permissions) => {
-          // 更新該用戶的獎學金權限
-          const userId = editingUser?.id
-          if (userId) {
-            // 移除該用戶的舊權限
-            const otherUserPermissions = scholarshipPermissions.filter(p => p.user_id !== userId)
-            // 添加新的權限（包含獎學金名稱）
-            const newPermissions = permissions.map(permission => {
-              const scholarship = availableScholarships.find(s => s.id === permission.scholarship_id)
-              return {
-                ...permission,
-                scholarship_name: scholarship?.name || '未知獎學金',
-                scholarship_name_en: scholarship?.name_en
-              }
-            })
-            setScholarshipPermissions([...otherUserPermissions, ...newPermissions])
-          }
-        }}
-      />
+
 
 
     </div>

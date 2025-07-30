@@ -32,12 +32,12 @@ import type { ApplicationField, ApplicationDocument, ScholarshipFormConfig, Appl
 
 type ScholarshipType = "undergraduate_freshman" | "direct_phd" | "phd"
 
-interface ScholarshipManagementPanelProps {
+interface AdminScholarshipManagementInterfaceProps {
   type: ScholarshipType
   className?: string
 }
 
-export function ScholarshipManagementPanel({ type, className }: ScholarshipManagementPanelProps) {
+export function AdminScholarshipManagementInterface({ type, className }: AdminScholarshipManagementInterfaceProps) {
   // State for form configuration
   const [formConfig, setFormConfig] = useState<ScholarshipFormConfig | null>(null)
   const [applicationFields, setApplicationFields] = useState<ApplicationField[]>([])

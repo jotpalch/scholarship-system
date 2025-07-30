@@ -14,13 +14,14 @@ from app.schemas.common import MessageResponse, PaginatedResponse, SystemSetting
 from app.schemas.application import ApplicationListResponse
 from app.schemas.scholarship import ScholarshipSubTypeConfigCreate, ScholarshipSubTypeConfigUpdate, ScholarshipSubTypeConfigResponse
 from app.schemas.notification import NotificationResponse, NotificationCreate, NotificationUpdate
-from app.core.security import require_admin
-from app.models.user import User
+from app.core.security import require_admin, get_current_user
+from app.models.user import User, UserRole
 from app.models.application import Application, ApplicationStatus
 from app.models.student import Student
 from app.models.notification import Notification
 from app.services.system_setting_service import SystemSettingService, EmailTemplateService
 from app.models.scholarship import ScholarshipType, ScholarshipStatus, ScholarshipSubTypeConfig, ScholarshipSubType
+from app.models.user import AdminScholarship
 
 router = APIRouter()
 
@@ -140,21 +141,38 @@ async def get_dashboard_stats(
 ):
     """Get dashboard statistics for admin"""
     
+    # Get user's scholarship permissions
+    allowed_scholarship_ids = []
+    if current_user.role == UserRole.SUPER_ADMIN:
+        # Super admin can see all applications
+        pass
+    elif current_user.role in [UserRole.ADMIN, UserRole.COLLEGE]:
+        # Get user's scholarship permissions
+        permission_stmt = select(AdminScholarship.scholarship_id).where(
+            AdminScholarship.admin_id == current_user.id
+        )
+        permission_result = await db.execute(permission_stmt)
+        allowed_scholarship_ids = [row[0] for row in permission_result.fetchall()]
+    
     # Total users
     stmt = select(func.count(User.id))
     result = await db.execute(stmt)
     total_users = result.scalar()
     
-    # Total applications
+    # Total applications (filtered by permissions)
     stmt = select(func.count(Application.id))
+    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
+        stmt = stmt.where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
     result = await db.execute(stmt)
     total_applications = result.scalar()
     
-    # Applications by status
+    # Applications by status (filtered by permissions)
     stmt = select(
         Application.status,
         func.count(Application.id)
     ).group_by(Application.status)
+    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
+        stmt = stmt.where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
     result = await db.execute(stmt)
     status_counts = {row[0]: row[1] for row in result.fetchall()}
     
@@ -162,17 +180,19 @@ async def get_dashboard_stats(
     pending_review = status_counts.get(ApplicationStatus.SUBMITTED.value, 0) + \
                     status_counts.get(ApplicationStatus.UNDER_REVIEW.value, 0)
     
-    # Approved this month
+    # Approved this month (filtered by permissions)
     from datetime import datetime, timedelta
     this_month = datetime.now().replace(day=1)
     stmt = select(func.count(Application.id)).where(
         Application.status == ApplicationStatus.APPROVED.value,
         Application.approved_at >= this_month
     )
+    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
+        stmt = stmt.where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
     result = await db.execute(stmt)
     approved_this_month = result.scalar() or 0
     
-    # Calculate average processing time
+    # Calculate average processing time (filtered by permissions)
     from sqlalchemy import case
     stmt = select(
         func.avg(
@@ -188,6 +208,8 @@ async def get_dashboard_stats(
         Application.submitted_at.isnot(None),
         Application.status.in_([ApplicationStatus.APPROVED.value, ApplicationStatus.REJECTED.value])
     )
+    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
+        stmt = stmt.where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
     result = await db.execute(stmt)
     avg_days = result.scalar()
     avg_processing_time = f"{avg_days:.1f}天" if avg_days else "N/A"
@@ -324,6 +346,27 @@ async def get_recent_applications(
 ):
     """Get recent applications for admin dashboard"""
     
+    # Get user's scholarship permissions
+    allowed_scholarship_ids = []
+    if current_user.role == UserRole.SUPER_ADMIN:
+        # Super admin can see all applications
+        pass
+    elif current_user.role in [UserRole.ADMIN, UserRole.COLLEGE]:
+        # Get user's scholarship permissions
+        permission_stmt = select(AdminScholarship.scholarship_id).where(
+            AdminScholarship.admin_id == current_user.id
+        )
+        permission_result = await db.execute(permission_stmt)
+        allowed_scholarship_ids = [row[0] for row in permission_result.fetchall()]
+        
+        # If no permissions assigned, return empty list
+        if not allowed_scholarship_ids:
+            return ApiResponse(
+                success=True,
+                message="No scholarship permissions assigned",
+                data=[]
+            )
+    
     # Build query with joins
     stmt = select(Application, User, ScholarshipType).join(
         User, Application.user_id == User.id
@@ -331,7 +374,13 @@ async def get_recent_applications(
         ScholarshipType, Application.scholarship_type_id == ScholarshipType.id
     ).where(
         Application.status != ApplicationStatus.DRAFT.value
-    ).order_by(desc(Application.created_at)).limit(limit)
+    )
+    
+    # Apply scholarship permission filtering
+    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
+        stmt = stmt.where(Application.scholarship_type_id.in_(allowed_scholarship_ids))
+    
+    stmt = stmt.order_by(desc(Application.created_at)).limit(limit)
     
     result = await db.execute(stmt)
     application_tuples = result.fetchall()
@@ -757,8 +806,23 @@ async def get_scholarship_statistics(
 ):
     """Get scholarship-specific statistics for admin dashboard"""
     
-    # Get all scholarship types
+    # Get user's scholarship permissions
+    allowed_scholarship_ids = []
+    if current_user.role == UserRole.SUPER_ADMIN:
+        # Super admin can see all scholarships
+        pass
+    elif current_user.role in [UserRole.ADMIN, UserRole.COLLEGE]:
+        # Get user's scholarship permissions
+        permission_stmt = select(AdminScholarship.scholarship_id).where(
+            AdminScholarship.admin_id == current_user.id
+        )
+        permission_result = await db.execute(permission_stmt)
+        allowed_scholarship_ids = [row[0] for row in permission_result.fetchall()]
+    
+    # Get all scholarship types (filtered by permissions)
     stmt = select(ScholarshipType).where(ScholarshipType.status == ScholarshipStatus.ACTIVE.value)
+    if current_user.role in [UserRole.ADMIN, UserRole.COLLEGE] and allowed_scholarship_ids:
+        stmt = stmt.where(ScholarshipType.id.in_(allowed_scholarship_ids))
     result = await db.execute(stmt)
     scholarships = result.scalars().all()
     
@@ -1271,6 +1335,260 @@ async def delete_sub_type_config(
 
 
 # === 獎學金權限管理相關 API === #
+
+@router.get("/scholarship-permissions", response_model=ApiResponse[List[Dict[str, Any]]])
+async def get_scholarship_permissions(
+    user_id: Optional[int] = Query(None, description="Filter by user ID"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get scholarship permissions (admin only)"""
+    
+    print(f"DEBUG: get_scholarship_permissions called by user {current_user.id} ({current_user.role})")
+    
+    # Build query
+    stmt = select(AdminScholarship).options(
+        selectinload(AdminScholarship.admin),
+        selectinload(AdminScholarship.scholarship)
+    )
+    
+    if user_id:
+        stmt = stmt.where(AdminScholarship.admin_id == user_id)
+        print(f"DEBUG: Filtering by user_id: {user_id}")
+    
+    result = await db.execute(stmt)
+    permissions = result.scalars().all()
+    
+    print(f"DEBUG: Found {len(permissions)} permissions in database")
+    for perm in permissions:
+        print(f"DEBUG: Permission - ID: {perm.id}, Admin: {perm.admin_id}, Scholarship: {perm.scholarship_id}")
+    
+    # Convert to response format
+    permission_list = []
+    for permission in permissions:
+        permission_list.append({
+            "id": permission.id,
+            "user_id": permission.admin_id,
+            "scholarship_id": permission.scholarship_id,
+            "scholarship_name": permission.scholarship.name,
+            "scholarship_name_en": permission.scholarship.name_en,
+            "comment": "",  # AdminScholarship doesn't have comment field
+            "created_at": permission.assigned_at.isoformat(),
+            "updated_at": permission.assigned_at.isoformat()
+        })
+    
+    print(f"DEBUG: Returning {len(permission_list)} permissions")
+    
+    return ApiResponse(
+        success=True,
+        message=f"Retrieved {len(permission_list)} scholarship permissions",
+        data=permission_list
+    )
+
+
+@router.get("/scholarship-permissions/current-user", response_model=ApiResponse[List[Dict[str, Any]]])
+async def get_current_user_scholarship_permissions(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get current user's scholarship permissions"""
+    
+    # Only admin and college roles can have scholarship permissions
+    if current_user.role not in [UserRole.ADMIN, UserRole.COLLEGE, UserRole.SUPER_ADMIN]:
+        return ApiResponse(
+            success=True,
+            message="User role does not require scholarship permissions",
+            data=[]
+        )
+    
+    # Super admin has access to all scholarships (no specific permissions needed)
+    if current_user.role == UserRole.SUPER_ADMIN:
+        return ApiResponse(
+            success=True,
+            message="Super admin has access to all scholarships",
+            data=[]
+        )
+    
+    # Get permissions for admin/college users
+    stmt = select(AdminScholarship).options(
+        selectinload(AdminScholarship.scholarship)
+    ).where(AdminScholarship.admin_id == current_user.id)
+    
+    result = await db.execute(stmt)
+    permissions = result.scalars().all()
+    
+    # Convert to response format
+    permission_list = []
+    for permission in permissions:
+        permission_list.append({
+            "id": permission.id,
+            "user_id": permission.admin_id,
+            "scholarship_id": permission.scholarship_id,
+            "scholarship_name": permission.scholarship.name,
+            "scholarship_name_en": permission.scholarship.name_en,
+            "comment": "",
+            "created_at": permission.assigned_at.isoformat(),
+            "updated_at": permission.assigned_at.isoformat()
+        })
+    
+    return ApiResponse(
+        success=True,
+        message=f"Retrieved {len(permission_list)} scholarship permissions for current user",
+        data=permission_list
+    )
+
+
+@router.post("/scholarship-permissions", response_model=ApiResponse[Dict[str, Any]])
+async def create_scholarship_permission(
+    permission_data: Dict[str, Any],
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create new scholarship permission (admin only)"""
+    
+    print(f"DEBUG: Received permission_data: {permission_data}")
+    
+    user_id = permission_data.get("user_id")
+    scholarship_id = permission_data.get("scholarship_id")
+    comment = permission_data.get("comment", "")
+    
+    print(f"DEBUG: user_id={user_id}, scholarship_id={scholarship_id}, comment={comment}")
+    
+    if not user_id or not scholarship_id:
+        raise HTTPException(status_code=400, detail="user_id and scholarship_id are required")
+    
+    # Check if user exists
+    user_stmt = select(User).where(User.id == user_id)
+    user_result = await db.execute(user_stmt)
+    user = user_result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check if scholarship exists
+    scholarship_stmt = select(ScholarshipType).where(ScholarshipType.id == scholarship_id)
+    scholarship_result = await db.execute(scholarship_stmt)
+    scholarship = scholarship_result.scalar_one_or_none()
+    
+    if not scholarship:
+        raise HTTPException(status_code=404, detail="Scholarship not found")
+    
+    # Check if permission already exists
+    existing_stmt = select(AdminScholarship).where(
+        AdminScholarship.admin_id == user_id,
+        AdminScholarship.scholarship_id == scholarship_id
+    )
+    existing_result = await db.execute(existing_stmt)
+    existing = existing_result.scalar_one_or_none()
+    
+    if existing:
+        raise HTTPException(status_code=409, detail="Permission already exists")
+    
+    # Create new permission
+    print(f"DEBUG: Creating AdminScholarship with admin_id={user_id}, scholarship_id={scholarship_id}")
+    
+    new_permission = AdminScholarship(
+        admin_id=user_id,
+        scholarship_id=scholarship_id
+    )
+    
+    db.add(new_permission)
+    await db.commit()
+    await db.refresh(new_permission)
+    
+    print(f"DEBUG: Successfully created permission with id={new_permission.id}")
+    
+    return ApiResponse(
+        success=True,
+        message="Scholarship permission created successfully",
+        data={
+            "id": new_permission.id,
+            "user_id": new_permission.admin_id,
+            "scholarship_id": new_permission.scholarship_id,
+            "scholarship_name": scholarship.name,
+            "scholarship_name_en": scholarship.name_en,
+            "comment": comment,
+            "created_at": new_permission.assigned_at.isoformat(),
+            "updated_at": new_permission.assigned_at.isoformat()
+        }
+    )
+
+
+@router.put("/scholarship-permissions/{permission_id}", response_model=ApiResponse[Dict[str, Any]])
+async def update_scholarship_permission(
+    permission_id: int,
+    permission_data: Dict[str, Any],
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update scholarship permission (admin only)"""
+    
+    # Check if permission exists
+    stmt = select(AdminScholarship).options(
+        selectinload(AdminScholarship.scholarship)
+    ).where(AdminScholarship.id == permission_id)
+    result = await db.execute(stmt)
+    permission = result.scalar_one_or_none()
+    
+    if not permission:
+        raise HTTPException(status_code=404, detail="Permission not found")
+    
+    # Update fields (only comment is updatable in this model)
+    # Note: AdminScholarship model doesn't have comment field, so we'll skip updates
+    # In a real implementation, you might want to add a comment field to the model
+    
+    await db.commit()
+    await db.refresh(permission)
+    
+    return ApiResponse(
+        success=True,
+        message="Scholarship permission updated successfully",
+        data={
+            "id": permission.id,
+            "user_id": permission.admin_id,
+            "scholarship_id": permission.scholarship_id,
+            "scholarship_name": permission.scholarship.name,
+            "scholarship_name_en": permission.scholarship.name_en,
+            "comment": "",
+            "created_at": permission.assigned_at.isoformat(),
+            "updated_at": permission.assigned_at.isoformat()
+        }
+    )
+
+
+@router.delete("/scholarship-permissions/{permission_id}", response_model=ApiResponse[Dict[str, str]])
+async def delete_scholarship_permission(
+    permission_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete scholarship permission (admin only)"""
+    
+    print(f"DEBUG: Attempting to delete permission {permission_id}")
+    
+    # Check if permission exists
+    stmt = select(AdminScholarship).where(AdminScholarship.id == permission_id)
+    result = await db.execute(stmt)
+    permission = result.scalar_one_or_none()
+    
+    if not permission:
+        print(f"DEBUG: Permission {permission_id} not found")
+        raise HTTPException(status_code=404, detail="Permission not found")
+    
+    print(f"DEBUG: Found permission {permission_id} for admin {permission.admin_id}, scholarship {permission.scholarship_id}")
+    
+    # Delete permission
+    await db.delete(permission)
+    await db.commit()
+    
+    print(f"DEBUG: Successfully deleted permission {permission_id}")
+    
+    return ApiResponse(
+        success=True,
+        message="Scholarship permission deleted successfully",
+        data={"message": "Permission deleted successfully"}
+    )
+
 
 @router.get("/scholarships/all-for-permissions", response_model=ApiResponse[List[Dict[str, Any]]])
 async def get_all_scholarships_for_permissions(

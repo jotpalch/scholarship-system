@@ -56,8 +56,6 @@ async def get_student_info(
 ):
     """Get student information"""
     from app.services.application_service import get_student_from_user
-    from app.models.student import StudentTermRecord
-    from sqlalchemy import select, desc
     
     if current_user.role.value != "student":
         raise HTTPException(
@@ -74,35 +72,40 @@ async def get_student_info(
             detail="Student profile not found"
         )
     
-    # Get latest term record for GPA and ranking
-    stmt = select(StudentTermRecord).where(
-        StudentTermRecord.studentId == student.id
-    ).order_by(desc(StudentTermRecord.academicYear), desc(StudentTermRecord.semester))
-    
-    result = await db.execute(stmt)
-    latest_term = result.scalar_one_or_none()
-    
-    # Get contact info using explicit query
-    from app.models.student import StudentContact, StudentAcademicRecord
-    contact_stmt = select(StudentContact).where(StudentContact.studentId == student.id)
-    contact_result = await db.execute(contact_stmt)
-    contact = contact_result.scalar_one_or_none()
-    
-    # Get academic records using explicit query
-    academic_stmt = select(StudentAcademicRecord).where(
-        StudentAcademicRecord.studentId == student.id
-    ).order_by(desc(StudentAcademicRecord.createdAt))
-    academic_result = await db.execute(academic_stmt)
-    academic_records = academic_result.scalars().all()
-    
+    # Return student information with new structure
     return {
         "success": True,
         "message": "Student information retrieved successfully",
         "data": {
-            "student": student,
-            "latest_term": latest_term,
-            "contact": contact,
-            "academic_records": academic_records
+            "student": {
+                "id": student.id,
+                "std_stdno": student.std_stdno,
+                "std_stdcode": student.std_stdcode,
+                "std_pid": student.std_pid,
+                "std_cname": student.std_cname,
+                "std_ename": student.std_ename,
+                "std_degree": student.std_degree,
+                "std_studingstatus": student.std_studingstatus,
+                "std_sex": student.std_sex,
+                "std_enrollyear": student.std_enrollyear,
+                "std_enrollterm": student.std_enrollterm,
+                "std_termcount": student.std_termcount,
+                "std_nation": student.std_nation,
+                "std_schoolid": student.std_schoolid,
+                "std_identity": student.std_identity,
+                "std_depno": student.std_depno,
+                "std_depname": student.std_depname,
+                "std_aca_no": student.std_aca_no,
+                "std_aca_cname": student.std_aca_cname,
+                "std_highestschname": student.std_highestschname,
+                "com_cellphone": student.com_cellphone,
+                "com_email": student.com_email,
+                "com_commzip": student.com_commzip,
+                "com_commadd": student.com_commadd,
+                "std_enrolled_date": student.std_enrolled_date,
+                "std_bank_account": student.std_bank_account,
+                "notes": student.notes
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { apiClient, DashboardStats, Application, NotificationResponse, ScholarshipStats, SubTypeStats } from '@/lib/api'
 import { useAuth } from '@/hooks/use-auth'
+import { useScholarshipPermissions } from './use-scholarship-permissions'
 
 export function useAdminDashboard() {
   const { user, isAuthenticated } = useAuth()
@@ -283,6 +284,9 @@ export function useScholarshipSpecificApplications() {
   const [scholarshipStats, setScholarshipStats] = useState<Record<string, any>>({})
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // Get user's scholarship permissions
+  const { filterScholarshipsByPermission } = useScholarshipPermissions()
 
   const fetchScholarshipTypes = useCallback(async () => {
     if (!isAuthenticated || !user || !['admin', 'super_admin', 'college', 'professor'].includes(user.role)) {
@@ -293,16 +297,38 @@ export function useScholarshipSpecificApplications() {
       const response = await apiClient.admin.getScholarshipStats()
       if (response.success && response.data) {
         const types = Object.keys(response.data)
-        setScholarshipTypes(types)
-        setScholarshipStats(response.data)
-        return types
+        
+        // Filter scholarship types based on user permissions
+        // Super admin has access to all scholarships
+        let filteredTypes = types
+        if (user.role === 'admin' || user.role === 'college') {
+          // Create objects with both id and code for filtering
+          const scholarshipObjects = types.map(type => ({ 
+            id: response.data![type].id, // Use the actual scholarship ID
+            code: type // Keep the code for reference
+          }))
+          
+          const filteredObjects = filterScholarshipsByPermission(scholarshipObjects)
+          filteredTypes = filteredObjects.map(obj => obj.code) // Return the codes
+        }
+        
+        setScholarshipTypes(filteredTypes)
+        // Filter stats to only include permitted scholarships
+        const filteredStats: Record<string, any> = {}
+        filteredTypes.forEach(type => {
+          if (response.data![type]) {
+            filteredStats[type] = response.data![type]
+          }
+        })
+        setScholarshipStats(filteredStats)
+        return filteredTypes
       }
       return []
     } catch (err) {
       console.error('Failed to fetch scholarship types:', err)
       return []
     }
-  }, [isAuthenticated, user])
+  }, [isAuthenticated, user, filterScholarshipsByPermission])
 
   const fetchApplicationsByType = useCallback(async () => {
     // Only fetch if user is authenticated and has staff privileges (admin, super_admin, college, or professor)
@@ -316,7 +342,7 @@ export function useScholarshipSpecificApplications() {
       setError(null)
       
       console.log('Fetching scholarship types...')
-      // First get scholarship types from backend
+      // First get scholarship types from backend (already filtered by permissions)
       const types = await fetchScholarshipTypes()
       console.log('Scholarship types received:', types)
       

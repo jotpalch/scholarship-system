@@ -22,7 +22,6 @@ class Degree(Base):
 
     # 關聯
     enrollTypes = relationship("EnrollType", back_populates="degree")
-    studentAcademicRecords = relationship("StudentAcademicRecord", back_populates="degreeRef", overlaps="enrollType")
 
 
 class Identity(Base):
@@ -32,9 +31,6 @@ class Identity(Base):
     id = Column(SmallInteger, primary_key=True)
     name = Column(String(100), nullable=False)
 
-    # 關聯
-    studentAcademicRecords = relationship("StudentAcademicRecord", back_populates="identityRef")
-
 
 class StudyingStatus(Base):
     """學籍狀態表"""
@@ -43,9 +39,6 @@ class StudyingStatus(Base):
     id = Column(SmallInteger, primary_key=True)
     name = Column(String(50))
 
-    # 關聯
-    studentAcademicRecords = relationship("StudentAcademicRecord", back_populates="studyingStatusRef")
-
 
 class SchoolIdentity(Base):
     """學校身份表"""
@@ -53,9 +46,6 @@ class SchoolIdentity(Base):
 
     id = Column(SmallInteger, primary_key=True)
     name = Column(String(50))
-
-    # 關聯
-    studentAcademicRecords = relationship("StudentAcademicRecord", back_populates="schoolIdentityRef")
 
 
 class Academy(Base):
@@ -66,9 +56,6 @@ class Academy(Base):
     code = Column(String(10), unique=True)
     name = Column(String(100), nullable=False)
 
-    # 關聯
-    studentAcademicRecords = relationship("StudentAcademicRecord", back_populates="academy")
-
 
 class Department(Base):
     """系所表"""
@@ -77,9 +64,6 @@ class Department(Base):
     id = Column(Integer, primary_key=True)
     code = Column(String(10), unique=True)
     name = Column(String(100), nullable=False)
-
-    # 關聯
-    studentAcademicRecords = relationship("StudentAcademicRecord", back_populates="department")
 
 
 class EnrollType(Base):
@@ -93,7 +77,6 @@ class EnrollType(Base):
 
     # 關聯
     degree = relationship("Degree", back_populates="enrollTypes")
-    studentAcademicRecords = relationship("StudentAcademicRecord", back_populates="enrollType", overlaps="degreeRef,studentAcademicRecords")
 
     __table_args__ = (
         UniqueConstraint('degreeId', 'code', name='uq_degree_code'),
@@ -107,168 +90,83 @@ class EnrollType(Base):
 # === 主要學生資料表 ===
 
 class Student(Base):
-    """學生基本資料表"""
+    """學生基本資料表 - 更新版本"""
     __tablename__ = "students"
 
-    id = Column(Integer, primary_key=True)
-    stdNo = Column(String(20), unique=True, nullable=False, index=True)  # std_no
-    stdCode = Column(String(20))  # std_code
-    pid = Column(String(20), unique=True)  # personal ID
-    cname = Column(String(50))  # Chinese name
-    ename = Column(String(50))  # English name
-    sex = Column(String(1))  # M/F
-    birthDate = Column(Date)  # birth_date
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # 學籍資料
+    std_stdno = Column(String(20), unique=True, index=True, nullable=True)  # 學號代碼 (目前不知道用途 先保留)
+    std_stdcode = Column(String(20), unique=True, index=True, nullable=False)  # 學號 (nycu_id)
+    std_pid = Column(String(20), nullable=True)  # 身分證字號
+    std_cname = Column(String(50), nullable=False)  # 中文姓名
+    std_ename = Column(String(50), nullable=False)  # 英文姓名
+    std_degree = Column(String(1), nullable=False)  # 攻讀學位：1:博士, 2:碩士, 3:學士
+    std_studingstatus = Column(String(1), nullable=True)  # 在學狀態
+    std_sex = Column(String(1), nullable=True)  # 性別: 1:男, 2:女
+    std_enrollyear = Column(String(4), nullable=True)  # 入學學年度 (民國年)
+    std_enrollterm = Column(String(1), nullable=True)  # 入學學期 (第一或第二)
+    std_termcount = Column(Integer, nullable=True)  # 在學學期數
+
+    # 國籍與身份
+    std_nation = Column(String(20), nullable=True)    # 1: 中華民國 2: 其他
+    std_schoolid = Column(String(10), nullable=True)  # 在學身份 (數字代碼)
+    std_identity = Column(String(20), nullable=True)  # 陸生、僑生、外籍生等
+
+    # 系所與學院
+    std_depno = Column(String(20), nullable=True)  # 系所代碼
+    std_depname = Column(String(100), nullable=True)  # 系所名稱
+    std_aca_no = Column(String(20), nullable=True)  # 學院代碼
+    std_aca_cname = Column(String(100), nullable=True)  # 學院名稱
+
+    # 學歷背景
+    std_highestschname = Column(String(100), nullable=True)  # 原就讀系所／畢業學校
+    
+    # 聯絡資訊
+    com_cellphone = Column(String(20), nullable=True)
+    com_email = Column(String(100), nullable=True)
+    com_commzip = Column(String(10), nullable=True)
+    com_commadd = Column(String(200), nullable=True)
+
+    # 入學日期（可由 enrollyear + term 推算）
+    std_enrolled_date = Column(Date, nullable=True)
+
+    # 匯款資訊
+    std_bank_account = Column(String(50), nullable=True)
+
+    # 其他備註
+    notes = Column(String(255), nullable=True)
 
     # 關聯
-    academicRecords = relationship("StudentAcademicRecord", back_populates="student")
-    contacts = relationship("StudentContact", back_populates="student", uselist=False)
-    termRecords = relationship("StudentTermRecord", back_populates="student")
     applications = relationship("Application", back_populates="studentProfile")
 
     def __repr__(self):
-        return f"<Student(id={self.id}, stdNo={self.stdNo}, cname={self.cname})>"
+        return f"<Student(id={self.id}, std_stdcode={self.std_stdcode}, std_cname={self.std_cname})>"
 
     @property
     def displayName(self) -> str:
         """Get student display name"""
-        return str(self.cname or self.ename or self.stdNo or "")
-
-    async def getCurrentAcademicRecord(self) -> Optional["StudentAcademicRecord"]:
-        """Get current academic record asynchronously"""
-        if not hasattr(self, '_current_academic_record'):
-            if self.academicRecords:
-                self._current_academic_record = max(self.academicRecords, key=lambda x: x.createdAt)
-            else:
-                self._current_academic_record = None
-        return self._current_academic_record
+        return str(self.std_cname or self.std_ename or self.std_stdcode or "")
     
-    def get_student_type(self, academic_record: Optional["StudentAcademicRecord"] = None) -> "StudentType":
+    def get_student_type(self) -> "StudentType":
         """
-        Get student type based on academic record
+        Get student type based on degree
         
-        Note: This method requires academic_record to be passed explicitly
-        to avoid lazy loading issues. Use scholarship_service for proper async handling.
+        Returns:
+            StudentType: The student type based on degree
         """
-        if not academic_record:
-            #TODO 用學號判斷學生類型
-            # 先回傳學士
-            return StudentType.UNDERGRADUATE
-        
-        if academic_record.degree == 1:
+        if self.std_degree == "1":
             return StudentType.PHD
-        elif academic_record.degree == 2:
+        elif self.std_degree == "2":
             return StudentType.MASTER
         else:
             return StudentType.UNDERGRADUATE
 
 
-class StudentAcademicRecord(Base):
-    """學生學籍資料"""
-    __tablename__ = "student_academic_records"
-
-    id = Column(Integer, primary_key=True)
-    studentId = Column(Integer, ForeignKey("students.id"))
-    degree = Column(SmallInteger, ForeignKey("degrees.id"))
-    identity = Column(SmallInteger, ForeignKey("identities.id"))
-    studyingStatus = Column(SmallInteger, ForeignKey("studying_statuses.id"))
-    schoolIdentity = Column(SmallInteger, ForeignKey("school_identities.id"))
-    termCount = Column(SmallInteger)
-    depId = Column(Integer, ForeignKey("departments.id"))
-    academyId = Column(Integer, ForeignKey("academies.id"))
-    enrollTypeCode = Column(SmallInteger)
-    enrollYear = Column(SmallInteger)
-    enrollTerm = Column(SmallInteger)
-    highestSchoolName = Column(String(100))
-    nationality = Column(SmallInteger)
-
-    createdAt = Column(DateTime(timezone=True), server_default=func.now())
-    updatedAt = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-
-    # 關聯
-    student = relationship("Student", back_populates="academicRecords")
-    degreeRef = relationship("Degree", overlaps="enrollType,studentAcademicRecords")
-    identityRef = relationship("Identity")
-    studyingStatusRef = relationship("StudyingStatus")
-    schoolIdentityRef = relationship("SchoolIdentity")
-    department = relationship("Department")
-    academy = relationship("Academy")
-    enrollType = relationship(
-        "EnrollType",
-        foreign_keys=[enrollTypeCode, degree],
-        primaryjoin="and_(StudentAcademicRecord.enrollTypeCode == EnrollType.code, StudentAcademicRecord.degree == EnrollType.degreeId)",
-        overlaps="degreeRef,studentAcademicRecords"
-    )
-
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ['enrollTypeCode', 'degree'],
-            ['enroll_types.code', 'enroll_types.degreeId']
-        ),
-    )
-
-    def __repr__(self):
-        return f"<StudentAcademicRecord(id={self.id}, studentId={self.studentId})>" 
+# === 移除學期成績記錄相關模型 ===
+# 根據文件說明，學期資料不再需要存儲，將由 API 或學校學籍資料庫取得
 
 
-class StudentContact(Base):
-    """學生聯絡資料表"""
-    __tablename__ = "student_contacts"
-
-    studentId = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), primary_key=True)
-    cellphone = Column(String(20))
-    email = Column(String(100))
-    zipCode = Column(String(10))
-    address = Column(Text)
-
-    # 關聯
-    student = relationship("Student", back_populates="contacts")
-
-    def __repr__(self):
-        return f"<StudentContact(studentId={self.studentId}, email={self.email})>"
-
-
-# === 學期成績記錄 ===
-class StudentTermRecord(Base):
-    """Student term academic record"""
-    __tablename__ = "student_term_records"
-
-    id = Column(Integer, primary_key=True, index=True)
-    studentId = Column(Integer, ForeignKey("students.id"), nullable=False)
-    
-    # 學期資訊
-    academicYear = Column(String(10), nullable=False)  # trm_year
-    semester = Column(String(10), nullable=False)  # trm_term
-    studyStatus = Column(String(10), default="1")  # trm_studystatus
-    
-    # 學期成績資訊
-    averageScore = Column(String(10))  # trm_ascore
-    gpa = Column(String(10))  # trm_ascore_gpa
-    
-    # 學系排名資訊
-    classRankingPercent = Column(String(10))  # trm_placingsrate
-    deptRankingPercent = Column(String(10))  # trm_depplacingrate
-    depId = Column(Integer, ForeignKey("departments.id"))
-    academyId = Column(Integer, ForeignKey("academies.id"))
-
-    # 累積成績資訊
-    totalAverageScore = Column(String(10))  # trm_ascore_total
-    totalGpa = Column(String(10))  # trm_ascore_total_gpa
-    
-    # 修習統計
-    completedTerms = Column(Integer)  # trm_termcount
-    
-    # 時間戳記
-    createdAt = Column(DateTime(timezone=True), server_default=func.now())
-    updatedAt = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
-    # 關聯
-    student = relationship("Student")
-
-    def __repr__(self):
-        return f"<StudentTermRecord(studentId={self.studentId}, year={self.academicYear}, term={self.semester})>"
-
-
-# === Enum 類別定義 ===
 class StudentType(enum.Enum):
     """Student type enum"""
     UNDERGRADUATE = "undergraduate"  # 學士

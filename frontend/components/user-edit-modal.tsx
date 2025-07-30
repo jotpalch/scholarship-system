@@ -42,13 +42,24 @@ export function UserEditModal({
 
   // 初始化已選擇的獎學金 ID
   React.useEffect(() => {
-    if (scholarshipPermissions.length > 0) {
-      const selectedIds = scholarshipPermissions.map(p => p.scholarship_id)
+    if (scholarshipPermissions.length > 0 && editingUser?.id) {
+      // 只顯示當前編輯用戶的權限
+      const userPermissions = scholarshipPermissions.filter(p => p.user_id === Number(editingUser.id))
+      const selectedIds = userPermissions.map(p => p.scholarship_id)
       setSelectedScholarshipIds(selectedIds)
     } else {
       setSelectedScholarshipIds([])
     }
-  }, [scholarshipPermissions])
+  }, [scholarshipPermissions, editingUser?.id])
+
+  // 當角色改變時，清除獎學金權限
+  React.useEffect(() => {
+    if (!['college', 'admin', 'super_admin'].includes(userForm.role)) {
+      setSelectedScholarshipIds([])
+      // 通知父組件清除權限
+      onPermissionChange?.([])
+    }
+  }, [userForm.role]) // 移除 onPermissionChange 依賴
 
   return (
     <Modal
@@ -120,6 +131,7 @@ export function UserEditModal({
                 className="w-full px-3 py-2 border border-nycu-blue-200 rounded-md"
               >
                 <option value="">請選擇角色</option>
+                <option value="professor">教授</option>
                 <option value="college">學院</option>
                 <option value="admin">管理員</option>
                 <option value="super_admin">超級管理員</option>
@@ -182,19 +194,35 @@ export function UserEditModal({
                       value={selectedScholarshipIds.map(String)}
                       onChange={(e) => {
                         const selectedOptions = Array.from(e.target.selectedOptions, option => parseInt(option.value))
+                        
+                        // 立即更新狀態
                         setSelectedScholarshipIds(selectedOptions)
                         
-                        // 更新權限列表
-                        const newPermissions = availableScholarships
-                          .filter(scholarship => selectedOptions.includes(scholarship.id))
-                          .map(scholarship => ({
-                            id: Date.now() + Math.random(),
-                            user_id: editingUser?.id,
-                            scholarship_id: scholarship.id,
-                            scholarship_name: scholarship.name,
-                            scholarship_name_en: scholarship.name_en,
-                            comment: ''
-                          }))
+                        // 簡化的權限更新邏輯
+                        const newPermissions = []
+                        
+                        for (const scholarshipId of selectedOptions) {
+                          const scholarship = availableScholarships.find(s => s.id === scholarshipId)
+                          if (!scholarship) continue
+                          
+                          // 檢查是否已存在此權限（保留現有權限的 ID）
+                          const existingPermission = scholarshipPermissions.find(p => p.scholarship_id === scholarshipId && p.user_id === Number(editingUser?.id))
+                          
+                          if (existingPermission) {
+                            // 保留現有權限（包括 ID）
+                            newPermissions.push(existingPermission)
+                          } else {
+                            // 創建新權限（使用臨時 ID）
+                            newPermissions.push({
+                              id: Date.now() + Math.random(),
+                              user_id: editingUser?.id ? Number(editingUser.id) : -1,
+                              scholarship_id: scholarship.id,
+                              scholarship_name: scholarship.name,
+                              scholarship_name_en: scholarship.name_en,
+                              comment: ''
+                            })
+                          }
+                        }
                         
                         onPermissionChange?.(newPermissions)
                       }}
@@ -228,65 +256,73 @@ export function UserEditModal({
               </div>
 
               {/* 已選擇的獎學金顯示 */}
-              {scholarshipPermissions.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium text-gray-700">已選擇的獎學金</Label>
-                    <div className="flex items-center gap-1 px-2 py-0.5 bg-green-50 border border-green-200 rounded-full">
-                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                      <span className="text-xs text-green-700 font-medium">{scholarshipPermissions.length} 個</span>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200 shadow-sm">
-                    <div className="flex flex-wrap gap-2">
-                      {scholarshipPermissions.map((permission, index) => (
-                        <div
-                          key={permission.id}
-                          className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 shadow-sm hover:border-blue-300 hover:shadow-md transition-all duration-200 group"
-                        >
-                          <div className="w-2 h-2 bg-blue-500 rounded-full group-hover:bg-blue-600 transition-colors"></div>
-                          <span>{permission.scholarship_name}</span>
-                          <div className="w-4 h-4 bg-gray-100 rounded-full flex items-center justify-center text-xs text-gray-500 font-bold">
-                            {index + 1}
-                          </div>
+              {(() => {
+                // 只顯示當前編輯用戶的權限
+                const userPermissions = editingUser?.id 
+                  ? scholarshipPermissions.filter(p => p.user_id === Number(editingUser.id))
+                  : scholarshipPermissions.filter(p => p.user_id === -1) // 新用戶的臨時權限
+                
+                if (userPermissions.length > 0) {
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-sm font-medium text-gray-700">已選擇的獎學金</Label>
+                        <div className="flex items-center gap-1 px-2 py-0.5 bg-green-50 border border-green-200 rounded-full">
+                          <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                          <span className="text-xs text-green-700 font-medium">{userPermissions.length} 個</span>
                         </div>
-                      ))}
-                    </div>
-                    
-                    <div className="mt-4 pt-3 border-t border-gray-200">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-gray-500">
-                          總計選擇了 <span className="font-semibold text-gray-700">{scholarshipPermissions.length}</span> 個獎學金管理權限
-                        </p>
-                        <div className="flex items-center gap-1 text-xs text-gray-400">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <span>權限已設定</span>
+                      </div>
+                      
+                      <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200 shadow-sm">
+                        <div className="flex flex-wrap gap-2">
+                          {userPermissions.map((permission, index) => (
+                            <div
+                              key={permission.id}
+                              className="inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 shadow-sm hover:border-blue-300 hover:shadow-md transition-all duration-200 group"
+                            >
+                              <div className="w-2 h-2 bg-blue-500 rounded-full group-hover:bg-blue-600 transition-colors"></div>
+                              <span>{permission.scholarship_name}</span>
+                              <div className="w-4 h-4 bg-gray-100 rounded-full flex items-center justify-center text-xs text-gray-500 font-bold">
+                                {index + 1}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        <div className="mt-4 pt-3 border-t border-gray-200">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-gray-500">
+                              總計選擇了 <span className="font-semibold text-gray-700">{userPermissions.length}</span> 個獎學金管理權限
+                            </p>
+                            <div className="flex items-center gap-1 text-xs text-gray-400">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span>權限已設定</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-              )}
-
-              {/* 空狀態 */}
-              {scholarshipPermissions.length === 0 && (
-                <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-8 border border-gray-200">
-                  <div className="text-center">
-                    <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
+                  )
+                } else {
+                  return (
+                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-8 border border-gray-200">
+                      <div className="text-center">
+                        <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </div>
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">尚未選擇任何獎學金</h4>
+                        <p className="text-xs text-gray-500 max-w-sm mx-auto">
+                          請從上方下拉選單中選擇要管理的獎學金。選擇後，該用戶將擁有對應獎學金的完整管理權限。
+                        </p>
+                      </div>
                     </div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">尚未選擇任何獎學金</h4>
-                    <p className="text-xs text-gray-500 max-w-sm mx-auto">
-                      請從上方下拉選單中選擇要管理的獎學金。選擇後，該用戶將擁有對應獎學金的完整管理權限。
-                    </p>
-                  </div>
-                </div>
-              )}
+                  )
+                }
+              })()}
             </div>
           </div>
         )}

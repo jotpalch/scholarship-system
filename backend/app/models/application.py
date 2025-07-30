@@ -4,7 +4,7 @@ Application models for scholarship applications
 
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Numeric, Text, JSON, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Numeric, Text, JSON, Enum, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -82,6 +82,9 @@ class Application(Base):
     status = Column(String(50), default=ApplicationStatus.DRAFT.value)
     status_name = Column(String(100))
     
+    # 續領申請標識
+    is_renewal = Column(Boolean, default=False, nullable=False)  # 是否為續領申請
+    
     # 學期資訊 (申請當時的學期)
     academic_year = Column(Integer, nullable=False)  # 民國年，例如 113
     semester = Column(Enum(Semester), nullable=False)
@@ -127,6 +130,14 @@ class Application(Base):
     reviews = relationship("ApplicationReview", back_populates="application", cascade="all, delete-orphan")
     professor_reviews = relationship("ProfessorReview", back_populates="application", cascade="all, delete-orphan")
 
+    # 唯一約束：確保每個學生在每個學年、學期、獎學金組合下只能有一個申請
+    __table_args__ = (
+        UniqueConstraint(
+            'student_id', 'scholarship_type_id', 'academic_year', 'semester',
+            name='uq_student_scholarship_academic_term'
+        ),
+    )
+
     def __repr__(self):
         return f"<Application(id={self.id}, app_id={self.app_id}, status={self.status})>"
     
@@ -160,6 +171,35 @@ class Application(Base):
             Semester.FIRST: "第一學期",
             Semester.SECOND: "第二學期",
         }.get(self.semester, "")
+    
+    @property
+    def is_renewal_application(self) -> bool:
+        """Check if this is a renewal application"""
+        return self.is_renewal
+    
+    @property
+    def is_general_application(self) -> bool:
+        """Check if this is a general application"""
+        return not self.is_renewal
+    
+    @property
+    def application_type_label(self) -> str:
+        """Get application type label in Chinese"""
+        return "續領申請" if self.is_renewal else "一般申請"
+    
+    def get_review_stage(self) -> Optional[str]:
+        """Get current review stage based on application type and status"""
+        if self.is_renewal:
+            if self.status == ApplicationStatus.SUBMITTED.value:
+                return "renewal_professor"
+            elif self.status == ApplicationStatus.RECOMMENDED.value:
+                return "renewal_college"
+        else:
+            if self.status == ApplicationStatus.SUBMITTED.value:
+                return "general_professor"
+            elif self.status == ApplicationStatus.RECOMMENDED.value:
+                return "general_college"
+        return None
 
 
 class ApplicationFile(Base):

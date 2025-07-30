@@ -14,11 +14,12 @@ from app.models.student import (
     # 查詢表
     Degree, Identity, StudyingStatus, SchoolIdentity, Academy, Department, EnrollType,
     # 學生資料
-    Student, StudentAcademicRecord, StudentContact, StudentTermRecord,
+    Student,
 )
 
 from app.db.base_class import Base
-from app.models.scholarship import ScholarshipRule, ScholarshipType, ScholarshipStatus, ScholarshipCategory, ScholarshipSubTypeConfig, Semester, CycleType, SubTypeSelectionMode
+from app.models.scholarship import ScholarshipRule, ScholarshipType, ScholarshipStatus, ScholarshipCategory, ScholarshipSubTypeConfig
+from app.models.enums import Semester, CycleType, SubTypeSelectionMode
 from app.models.notification import Notification, NotificationType, NotificationPriority
 from app.models.application_field import ApplicationField, ApplicationDocument
 from app.core.config import settings
@@ -349,263 +350,161 @@ async def createTestStudents(session: AsyncSession, users: List[User]) -> None:
     # 修正 degree: 1=博士, 2=碩士, 3=學士
     student_data = {
         "stu_under": {
-            "pid": "A123456789",
-            "sex": "M",
-            "birthDate": date(2000, 5, 15),
-            "academic_record": {
-                "degree": 3,  # 學士
-                "identity": 1, # 一般生
-                "studyingStatus": 1, # 在學
-                "schoolIdentity": 1, # 一般生
-                "termCount": 2,
-                "depId": 1,
-                "academyId": 1,
-                "enrollTypeCode": 1, # 大學個人申請
-                "enrollYear": 112,
-                "enrollTerm": 1,
-                "highestSchoolName": "台北市立建國高級中學",
-                "nationality": 1 # 中華民國
-            },
-            "contact": {
-                "cellphone": "0912345678",
-                "email": "stu_under@nycu.edu.tw",
-                "zipCode": "30010",
-                "address": "新竹市東區大學路1001號"
-            },
-            "term_record": {
-                # 學期資訊
-                "academicYear": "112",
-                "semester": "1",
-                "studyStatus": "1",
-
-                # 學期成績資訊
-                "averageScore": "85.5",
-                "gpa": "3.5",
-
-                # 學系排名資訊
-                "classRankingPercent": "20.0",
-                "deptRankingPercent": "25.0",
-                "depId": 1,
-                "academyId": 1,
-
-                # 累積成績資訊
-                "totalAverageScore": "85.5",
-                "totalGpa": "3.5",
-
-                # 修習統計
-                "completedTerms": 2
-            },
+            "std_pid": "A123456789",
+            "std_sex": "1",  # 1:男, 2:女
+            "std_degree": "3",  # 學士
+            "std_identity": "1", # 一般生
+            "std_studingstatus": "1", # 在學
+            "std_schoolid": "1", # 一般生
+            "std_termcount": 2,
+            "std_depno": "CS",
+            "std_depname": "資訊工程學系",
+            "std_aca_no": "EE",
+            "std_aca_cname": "電機資訊學院",
+            "std_enrollterm": "1", # 大學個人申請
+            "std_enrollyear": "112",
+            "std_highestschname": "台北市立建國高級中學",
+            "std_nation": "1", # 中華民國
+            "com_cellphone": "0912345678",
+            "com_email": "stu_under@nycu.edu.tw",
+            "com_commzip": "30010",
+            "com_commadd": "新竹市東區大學路1001號",
+            "std_enrolled_date": date(2023, 9, 1),
+            "std_bank_account": "1234567890",
+            "notes": "學士班新生"
         },
         "stu_phd": {
-            "pid": "B123456789",
-            "sex": "M",
-            "birthDate": date(1995, 8, 20),
-            "academic_record": {
-                "degree": 1, # 博士
-                "identity": 1, # 一般生
-                "studyingStatus": 1, # 在學
-                "schoolIdentity": 1, # 一般生
-                "termCount": 1,
-                "depId": 1,
-                "academyId": 1,
-                "enrollTypeCode": 1, # 招生考試一般生
-                "enrollYear": 112,
-                "enrollTerm": 1,
-                "highestSchoolName": "國立交通大學",
-                "nationality": 1 # 中華民國
-            },
-            "contact": {
-                "cellphone": "0912345678",
-                "email": "stu_phd@nycu.edu.tw",
-                "zipCode": "30010",
-                "address": "新竹市東區大學路1001號"
-            },
-            "term_record": {
-                # 學期資訊
-                "academicYear": "112",
-                "semester": "1",
-                "studyStatus": "1",
-
-                # 學期成績資訊
-                "averageScore": "88.0",
-                "gpa": "3.6",
-
-                # 學系排名資訊
-                "classRankingPercent": "15.0",
-                "deptRankingPercent": "20.0",
-                "depId": 1,
-                "academyId": 1,
-
-                # 累積成績資訊
-                "totalAverageScore": "85.5",
-                "totalGpa": "3.5",
-
-                # 修習統計
-                "completedTerms": 1
-            },
+            "std_pid": "B123456789",
+            "std_sex": "1",  # 1:男, 2:女
+            "std_degree": "1", # 博士
+            "std_identity": "1", # 一般生
+            "std_studingstatus": "1", # 在學
+            "std_schoolid": "1", # 一般生
+            "std_termcount": 1,
+            "std_depno": "CS",
+            "std_depname": "資訊工程學系",
+            "std_aca_no": "EE",
+            "std_aca_cname": "電機資訊學院",
+            "std_enrollterm": "1", # 招生考試一般生
+            "std_enrollyear": "112",
+            "std_highestschname": "國立交通大學",
+            "std_nation": "1", # 中華民國
+            "com_cellphone": "0912345678",
+            "com_email": "stu_phd@nycu.edu.tw",
+            "com_commzip": "30010",
+            "com_commadd": "新竹市東區大學路1001號",
+            "std_enrolled_date": date(2023, 9, 1),
+            "std_bank_account": "1234567890",
+            "notes": "博士生"
         },
         "stu_direct": {
-            "pid": "C123456789",
-            "sex": "F",
-            "birthDate": date(1998, 3, 10),
-            "academic_record": {
-                "degree": 1, # 博士
-                "identity": 1, # 一般生
-                "studyingStatus": 1, # 在學
-                "schoolIdentity": 1, # 一般生
-                "termCount": 1,
-                "depId": 1,
-                "academyId": 1,
-                "enrollTypeCode": 9, # 碩士逕博
-                "enrollYear": 112,
-                "enrollTerm": 1,
-                "highestSchoolName": "國立陽明交通大學",
-                "nationality": 1 # 中華民國
-            },
-            "contact": {
-                "cellphone": "0912345678",
-                "email": "stu_direct@nycu.edu.tw",
-                "zipCode": "30010",
-                "address": "新竹市東區大學路1001號"
-            },
-            "term_record": {
-                "academicYear": "112",
-                "semester": "1",
-                "studyStatus": "1",
-
-                # 學期成績資訊
-                "averageScore": "88.0",
-                "gpa": "3.8",
-
-                # 學系排名資訊
-                "classRankingPercent": "10.0",
-                "deptRankingPercent": "15.0",
-                "depId": 1,
-                "academyId": 1,
-
-                # 累積成績資訊
-                "totalAverageScore": "90.0",
-                "totalGpa": "3.8",
-
-                # 修習統計
-                "completedTerms": 1
-            },
+            "std_pid": "C123456789",
+            "std_sex": "2",  # 1:男, 2:女
+            "std_degree": "1", # 博士
+            "std_identity": "1", # 一般生
+            "std_studingstatus": "1", # 在學
+            "std_schoolid": "1", # 一般生
+            "std_termcount": 1,
+            "std_depno": "CS",
+            "std_depname": "資訊工程學系",
+            "std_aca_no": "EE",
+            "std_aca_cname": "電機資訊學院",
+            "std_enrollterm": "1", # 第一學期
+            "std_enrollyear": "112",
+            "std_highestschname": "國立陽明交通大學",
+            "std_nation": "1", # 中華民國
+            "com_cellphone": "0912345678",
+            "com_email": "stu_direct@nycu.edu.tw",
+            "com_commzip": "30010",
+            "com_commadd": "新竹市東區大學路1001號",
+            "std_enrolled_date": date(2023, 9, 1),
+            "std_bank_account": "1234567890",
+            "notes": "逕讀博士生"
         },
         "stu_master": {
-            "pid": "D123456789",
-            "sex": "F",
-            "birthDate": date(1997, 12, 5),
-            "academic_record": {
-                "degree": 2, # 碩士
-                "identity": 1, # 一般生
-                "studyingStatus": 1, # 在學
-                "schoolIdentity": 1, # 一般生
-                "termCount": 1,
-                "depId": 1,
-                "academyId": 1,
-                "enrollTypeCode": 1, # 一般考試
-                "enrollYear": 112,
-                "enrollTerm": 1,
-                "highestSchoolName": "國立台灣大學",
-                "nationality": 1 # 中華民國
-            },
-            "contact": {
-                "cellphone": "0912345678",
-                "email": "stu_master@nycu.edu.tw",
-                "zipCode": "30010",
-                "address": "新竹市東區大學路1001號"
-            },
-            "term_record": {
-                "academicYear": "112",
-                "semester": "1",
-                "studyStatus": "1",
-
-                # 學期成績資訊
-                "averageScore": "87.0",
-                "gpa": "3.55",
-
-                # 學系排名資訊
-                "classRankingPercent": "18.0",
-                "deptRankingPercent": "22.0",
-                "depId": 1,
-                "academyId": 1,
-
-                # 累積成績資訊
-                "totalAverageScore": "87.0",
-                "totalGpa": "3.55",
-
-                # 修習統計
-                "completedTerms": 1
-            },
+            "std_pid": "D123456789",
+            "std_sex": "2",  # 1:男, 2:女
+            "std_degree": "2", # 碩士
+            "std_identity": "1", # 一般生
+            "std_studingstatus": "1", # 在學
+            "std_schoolid": "1", # 一般生
+            "std_termcount": 1,
+            "std_depno": "CS",
+            "std_depname": "資訊工程學系",
+            "std_aca_no": "EE",
+            "std_aca_cname": "電機資訊學院",
+            "std_enrollterm": "1", # 一般考試
+            "std_enrollyear": "112",
+            "std_highestschname": "國立台灣大學",
+            "std_nation": "1", # 中華民國
+            "com_cellphone": "0912345678",
+            "com_email": "stu_master@nycu.edu.tw",
+            "com_commzip": "30010",
+            "com_commadd": "新竹市東區大學路1001號",
+            "std_enrolled_date": date(2023, 9, 1),
+            "std_bank_account": "1234567890",
+            "notes": "碩士生"
         },
         "phd_china": {
-            "pid": "E123456789",
-            "sex": "M",
-            "birthDate": date(1996, 1, 15),
-            "academic_record": {
-                "degree": 1, # 博士
-                "identity": 17, # 陸生
-                "studyingStatus": 1, # 在學
-                "schoolIdentity": 1, # 一般生
-                "termCount": 1,
-                "depId": 1,
-                "academyId": 1,
-                "enrollTypeCode": 17, # 陸生
-                "enrollYear": 112,
-                "enrollTerm": 1,
-                "highestSchoolName": "國立清華大學",
-                "nationality": 2 # 非中華民國國籍
-            },
-            "contact": {
-                "cellphone": "0912345678",
-                "email": "phd_china@nycu.edu.tw",
-                "zipCode": "30010",
-                "address": "新竹市東區大學路1001號"
-            },
-            "term_record": {
-                "academicYear": "112",
-                "semester": "1",
-                "studyStatus": "1",
-
-                # 學期成績資訊
-                "averageScore": "88.0",
-                "gpa": "3.6",
-
-                # 學系排名資訊
-                "classRankingPercent": "15.0",
-                "deptRankingPercent": "20.0",
-                "depId": 1,
-                "academyId": 1,
-
-                # 累積成績資訊
-                "totalAverageScore": "85.5",
-                "totalGpa": "3.5",
-
-                # 修習統計
-                "completedTerms": 1
-            },
+            "std_pid": "E123456789",
+            "std_sex": "1",  # 1:男, 2:女
+            "std_degree": "1", # 博士
+            "std_identity": "17", # 陸生
+            "std_studingstatus": "1", # 在學
+            "std_schoolid": "1", # 一般生
+            "std_termcount": 1,
+            "std_depno": "CS",
+            "std_depname": "資訊工程學系",
+            "std_aca_no": "EE",
+            "std_aca_cname": "電機資訊學院",
+            "std_enrollterm": "1", # 第一學期
+            "std_enrollyear": "112",
+            "std_highestschname": "國立清華大學",
+            "std_nation": "2", # 非中華民國國籍
+            "com_cellphone": "0912345678",
+            "com_email": "phd_china@nycu.edu.tw",
+            "com_commzip": "30010",
+            "com_commadd": "新竹市東區大學路1001號",
+            "std_enrolled_date": date(2023, 9, 1),
+            "std_bank_account": "1234567890",
+            "notes": "陸生博士生"
         }
     }
 
     for user in student_users:
         student_info = student_data[user.nycu_id]
 
-        result = await session.execute(select(Student).where(Student.pid == student_info["pid"]))
+        result = await session.execute(select(Student).where(Student.std_pid == student_info["std_pid"]))
         existing = result.scalar_one_or_none()
         
         if not existing:
             student = Student(
-                pid=student_info["pid"],
-                sex=student_info["sex"],
-                birthDate=student_info["birthDate"],
-                stdNo=user.nycu_id,
-                stdCode=user.nycu_id,
-                cname=user.name,
-                ename=user.name,
+                std_stdcode=user.nycu_id,
+                std_cname=user.name,
+                std_ename=user.name,
+                std_degree=student_info.get("std_degree", "3"),  # Default to undergraduate
+                std_sex=student_info.get("std_sex", "1"),
+                std_pid=student_info.get("std_pid"),
+                std_studingstatus=student_info.get("std_studingstatus", "1"),
+                std_enrollyear=student_info.get("std_enrollyear"),
+                std_enrollterm=student_info.get("std_enrollterm"),
+                std_termcount=student_info.get("std_termcount"),
+                std_nation=student_info.get("std_nation", "1"),
+                std_schoolid=student_info.get("std_schoolid", "1"),
+                std_identity=student_info.get("std_identity"),
+                std_depno=student_info.get("std_depno"),
+                std_depname=student_info.get("std_depname"),
+                std_aca_no=student_info.get("std_aca_no"),
+                std_aca_cname=student_info.get("std_aca_cname"),
+                std_highestschname=student_info.get("std_highestschname"),
+                com_cellphone=student_info.get("com_cellphone"),
+                com_email=student_info.get("com_email"),
+                com_commzip=student_info.get("com_commzip"),
+                com_commadd=student_info.get("com_commadd"),
+                std_enrolled_date=student_info.get("std_enrolled_date"),
+                std_bank_account=student_info.get("std_bank_account"),
+                notes=student_info.get("notes")
             )
-            student.academicRecords.append(StudentAcademicRecord(**student_info["academic_record"]))
-            student.contacts = StudentContact(**student_info["contact"])
-            student.termRecords = [StudentTermRecord(**student_info["term_record"])]
             session.add(student)
         
         await session.commit()
@@ -626,15 +525,25 @@ async def createTestScholarships(session: AsyncSession) -> None:
     # 獲取對應的學生資料
     student_ids = []
     for user in student_users:
-        result = await session.execute(select(Student).where(Student.stdNo == user.nycu_id))
+        result = await session.execute(select(Student).where(Student.std_stdcode == user.nycu_id))
         student = result.scalar_one_or_none()
         if student:
             student_ids.append(student.id)
     
     # 開發模式下設定申請期間（當前時間前後各30天）
     now = datetime.now(timezone.utc)
-    start_date = now - timedelta(days=30)
-    end_date = now + timedelta(days=30)
+    
+    # 續領期間設定（優先處理，完整流程）
+    renewal_start = now - timedelta(days=60)  # 續領申請開始
+    renewal_end = now - timedelta(days=40)    # 續領申請結束
+    renewal_professor_start = now - timedelta(days=39)  # 續領教授審查開始
+    renewal_professor_end = now - timedelta(days=30)    # 續領教授審查結束
+    renewal_college_start = now - timedelta(days=29)    # 續領學院審查開始
+    renewal_college_end = now - timedelta(days=20)      # 續領學院審查結束
+    
+    # 一般申請期間設定（續領流程完全結束後）
+    start_date = now - timedelta(days=15)     # 一般申請開始
+    end_date = now + timedelta(days=15)       # 一般申請結束
     
     # ==== 基本獎學金 ====
     scholarships_data = [
@@ -652,11 +561,21 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "currency": "TWD",
             "whitelist_enabled": not settings.debug,
             "whitelist_student_ids": student_ids if not settings.debug else [],
+            # 續領申請期間（優先處理，完整流程）
+            "renewal_application_start_date": renewal_start,
+            "renewal_application_end_date": renewal_end,
+            # 續領審查期間
+            "renewal_professor_review_start": renewal_professor_start,
+            "renewal_professor_review_end": renewal_professor_end,
+            "renewal_college_review_start": renewal_college_start,
+            "renewal_college_review_end": renewal_college_end,
+            # 一般申請期間（續領流程完全結束後）
             "application_start_date": start_date,
             "application_end_date": end_date,
-            "professor_review_start": start_date + timedelta(days=7),
+            # 一般申請審查期間
+            "professor_review_start": end_date + timedelta(days=1),
             "professor_review_end": end_date + timedelta(days=14),
-            "college_review_start": start_date + timedelta(days=14),
+            "college_review_start": end_date + timedelta(days=15),
             "college_review_end": end_date + timedelta(days=21),
             "sub_type_selection_mode": SubTypeSelectionMode.SINGLE,
             "status": ScholarshipStatus.ACTIVE.value,
@@ -680,11 +599,21 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "currency": "TWD",
             "whitelist_enabled": False,
             "whitelist_student_ids": [],
+            # 續領申請期間（優先處理，完整流程）
+            "renewal_application_start_date": renewal_start,
+            "renewal_application_end_date": renewal_end,
+            # 續領審查期間
+            "renewal_professor_review_start": renewal_professor_start,
+            "renewal_professor_review_end": renewal_professor_end,
+            "renewal_college_review_start": renewal_college_start,
+            "renewal_college_review_end": renewal_college_end,
+            # 一般申請期間（續領流程完全結束後）
             "application_start_date": start_date,
             "application_end_date": end_date,
-            "professor_review_start": start_date + timedelta(days=7),
+            # 一般申請審查期間
+            "professor_review_start": end_date + timedelta(days=1),
             "professor_review_end": end_date + timedelta(days=14),
-            "college_review_start": start_date + timedelta(days=14),
+            "college_review_start": end_date + timedelta(days=15),
             "college_review_end": end_date + timedelta(days=21),
             "sub_type_selection_mode": SubTypeSelectionMode.MULTIPLE,
             "status": ScholarshipStatus.ACTIVE.value,
@@ -707,11 +636,21 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "currency": "TWD",
             "whitelist_enabled": not settings.debug,
             "whitelist_student_ids": student_ids if not settings.debug else [],
+            # 續領申請期間（優先處理，完整流程）
+            "renewal_application_start_date": renewal_start,
+            "renewal_application_end_date": renewal_end,
+            # 續領審查期間
+            "renewal_professor_review_start": renewal_professor_start,
+            "renewal_professor_review_end": renewal_professor_end,
+            "renewal_college_review_start": renewal_college_start,
+            "renewal_college_review_end": renewal_college_end,
+            # 一般申請期間（續領流程完全結束後）
             "application_start_date": start_date,
             "application_end_date": end_date,
-            "professor_review_start": start_date + timedelta(days=7),
+            # 一般申請審查期間
+            "professor_review_start": end_date + timedelta(days=1),
             "professor_review_end": end_date + timedelta(days=14),
-            "college_review_start": start_date + timedelta(days=14),
+            "college_review_start": end_date + timedelta(days=15),
             "college_review_end": end_date + timedelta(days=21),
             "sub_type_selection_mode": SubTypeSelectionMode.SINGLE,
             "status": ScholarshipStatus.ACTIVE.value,
@@ -747,7 +686,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "rule_type": "degree",
             "tag": "博士生",
             "description": "博士生獎學金需要博士生身分",
-            "condition_field": "academicRecords.degree",
+            "condition_field": "std_degree",
             "operator": "==",
             "expected_value": "1",
             "message": "博士生獎學金需要博士生身分",
@@ -764,7 +703,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "rule_type": "studyingStatus",
             "tag": "在學生",
             "description": "博士生獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
-            "condition_field": "academicRecords.studyingStatus",
+            "condition_field": "std_studingstatus",
             "operator": "in",
             "expected_value": "1,2,3",
             "message": "博士生獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
@@ -781,7 +720,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "rule_type": "schoolIdentity",
             "tag": "非在職生",
             "description": "博士生獎學金需要非在職生身分 需要為一般生",
-            "condition_field": "academicRecords.schoolIdentity",
+            "condition_field": "std_schoolid",
             "operator": "==",
             "expected_value": "1",
             "message": "博士生獎學金需要非在職生身分 需要為一般生",
@@ -798,7 +737,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "rule_type": "Identity",
             "tag": "非陸生",
             "description": "博士生獎學金需要非陸港澳生身分",
-            "condition_field": "academicRecords.identity",
+            "condition_field": "std_identity",
             "operator": "!=",
             "expected_value": "17",
             "message": "博士生獎學金需要非陸港澳生身分",
@@ -816,7 +755,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "tag": "中華民國國籍",
             "description": "博士生獎學金需要中華民國國籍",
             "rule_type": "nationality",
-            "condition_field": "academicRecords.nationality",
+            "condition_field": "std_nation",
             "operator": "==",
             "expected_value": "1",
             "message": "博士生獎學金需要中華民國國籍",
@@ -833,7 +772,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "tag": "三年級以下",
             "description": "博士生獎學金需要一至三年級",
             "rule_type": "termCount",
-            "condition_field": "academicRecords.termCount",
+            "condition_field": "std_termcount",
             "operator": "in",
             "expected_value": "1,2,3,4,5,6",
             "message": "博士生獎學金需要一至三年級",
@@ -851,7 +790,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "tag": "中華民國國籍",
             "description": "博士生獎學金需要中華民國國籍",
             "rule_type": "nationality",
-            "condition_field": "academicRecords.nationality",
+            "condition_field": "std_nation",
             "operator": "==",
             "expected_value": "1",
             "message": "博士生獎學金需要中華民國國籍",
@@ -868,7 +807,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "tag": "三年級以下",
             "description": "博士生獎學金需要一至三年級",
             "rule_type": "termCount",
-            "condition_field": "academicRecords.termCount",
+            "condition_field": "std_termcount",
             "operator": "in",
             "expected_value": "1,2,3,4,5,6",
             "message": "博士生獎學金需要一至三年級",
@@ -886,7 +825,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "tag": "博士生",
             "description": "逕讀博士獎學金需要博士生身分",
             "rule_type": "degree",
-            "condition_field": "academicRecords.degree",
+            "condition_field": "std_degree",
             "operator": "==",
             "expected_value": "1",
             "message": "逕讀博士獎學金需要博士生身分",
@@ -902,7 +841,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "rule_name": "逕讀博士獎學金 在學生身分 1: 在學 2: 應畢 3: 延畢",
             "rule_type": "studyingStatus",
             "tag": "在學生",
-            "condition_field": "academicRecords.studyingStatus",
+            "condition_field": "std_studingstatus",
             "operator": "in",
             "expected_value": "1,2,3",
             "message": "逕讀博士獎學金需要在學生身分 1: 在學 2: 應畢 3: 延畢",
@@ -918,7 +857,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "rule_name": "逕讀博士獎學金 非在職生身分 需要為一般生",
             "rule_type": "schoolIdentity",
             "tag": "非在職生",
-            "condition_field": "academicRecords.schoolIdentity",
+            "condition_field": "std_schoolid",
             "operator": "==",
             "expected_value": "1",
             "message": "逕讀博士獎學金需要非在職生身分 需要為一般生",
@@ -935,7 +874,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "rule_type": "Identity",
             "tag": "非陸生",
             "description": "逕讀博士獎學金需要非陸港澳生身分",
-            "condition_field": "academicRecords.identity",
+            "condition_field": "std_identity",
             "operator": "!=",
             "expected_value": "17",
             "message": "逕讀博士獎學金需要非陸港澳生身分",
@@ -952,7 +891,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "rule_type": "enrollType",
             "tag": "逕博生",
             "description": "逕讀博士獎學金需要逕博生身分",
-            "condition_field": "academicRecords.enrollTypeCode",
+            "condition_field": "std_enrollterm",
             "operator": "in",
             "expected_value": "8,9,10,11",
             "message": "逕讀博士獎學金需要逕博生身分",
@@ -969,7 +908,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "rule_type": "termCount",
             "tag": "第一學年",
             "description": "逕讀博士獎學金需要第一學年",
-            "condition_field": "academicRecords.termCount",
+            "condition_field": "std_termcount",
             "operator": "in",
             "expected_value": "1,2",
             "message": "逕讀博士獎學金需要第一學年",
@@ -987,7 +926,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "tag": "學士生",
             "description": "學士新生獎學金需要學士生身分",
             "rule_type": "degree",
-            "condition_field": "academicRecords.degree",
+            "condition_field": "std_degree",
             "operator": "==",
             "expected_value": "3",
             "message": "學士新生獎學金需要學士生身分",
@@ -1005,7 +944,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "tag": "一般生",
             "description": "一般生身份學生，其入學管道可能為2/5/6/7，請承辦人確認。若為2/5/6/7請特別留意（標紅字）。",
             "rule_type": "enrollTypeWarning",
-            "condition_field": "academicRecords.enrollTypeCode",
+            "condition_field": "std_enrollterm",
             "operator": "in",
             "expected_value": "2,5,6,7",
             "message": "此學生為一般生，但入學管道為2/5/6/7，請承辦人確認（標紅字）。",
@@ -1022,7 +961,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "tag": "一般生",
             "description": "一般生身份學生，其入學管道可能為2/5/6/7，請承辦人確認。若為2/5/6/7請特別留意（標紅字）。",
             "rule_type": "enrollTypeWarning",
-            "condition_field": "academicRecords.enrollTypeCode",
+            "condition_field": "std_enrollterm",
             "operator": "in",
             "expected_value": "2,5,6,7",
             "message": "此學生為一般生，但入學管道為2/5/6/7，請承辦人確認（標紅字）。",
@@ -1040,7 +979,7 @@ async def createTestScholarships(session: AsyncSession) -> None:
             "tag": "中華民國國籍",
             "description": "中華民國國籍生的身份可能為僑生、外籍生，請承辦人自行確認（3/4標紅字）。",
             "rule_type": "identityWarning",
-            "condition_field": "academicRecords.identity",
+            "condition_field": "std_identity",
             "operator": "in",
             "expected_value": "3,4",
             "message": "此中華民國國籍生身份為僑生或外籍生，請承辦人確認（標紅字）。",
