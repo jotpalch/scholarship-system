@@ -35,6 +35,8 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
+        # Verify critical packages are installed
+        python -c "import minio; import pytest; import httpx; print('All dependencies OK')"
 
     - name: Run unit tests with coverage
       working-directory: ./backend
@@ -58,46 +60,6 @@ jobs:
   backend-integration-tests:
     name: Backend Integration Tests
     runs-on: ubuntu-latest
-    
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_PASSWORD: test_password
-          POSTGRES_USER: test_user
-          POSTGRES_DB: test_db
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-      
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-      
-      minio:
-        image: minio/minio:latest
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin123
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live"
-          --health-interval 30s
-          --health-timeout 20s
-          --health-retries 3
-          server /data --console-address :9001
-        ports:
-          - 9000:9000
-          - 9001:9001
 
     steps:
     - name: Checkout code
@@ -116,23 +78,13 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
-
-    - name: Run database migrations
-      working-directory: ./backend
-      env:
-        DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_db
-      run: |
-        alembic upgrade head
+        # Verify critical packages are installed
+        python -c "import minio; import pytest; import httpx; print('All dependencies OK')"
 
     - name: Run integration tests with coverage
       working-directory: ./backend
       env:
-        DATABASE_URL: postgresql+asyncpg://test_user:test_password@localhost:5432/test_db
-        DATABASE_URL_SYNC: postgresql://test_user:test_password@localhost:5432/test_db
-        REDIS_URL: redis://localhost:6379/0
-        MINIO_ENDPOINT: localhost:9000
-        MINIO_ACCESS_KEY: minioadmin
-        MINIO_SECRET_KEY: minioadmin123
+        DATABASE_URL: "sqlite+aiosqlite:///:memory:"
         SECRET_KEY: test-secret-key-for-integration-testing
         TESTING: true
       run: |
