@@ -87,4 +87,13 @@ const localStorageMock = {
   length: 0,
   key: jest.fn(),
 }
-global.localStorage = localStorageMock as any 
+global.localStorage = localStorageMock as any
+
+// Mock fetch for API calls
+global.fetch = jest.fn(() =>
+  Promise.resolve({
+    ok: true,
+    status: 200,
+    json: () => Promise.resolve({}),
+  })
+) as jest.Mock 
