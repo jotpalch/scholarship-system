@@ -71,9 +71,9 @@ setup_environment() {
     print_header "Setting Up Test Environment"
     
     # Backend setup
-    if [ -d "backend" ]; then
+    if [ -d "apps/backend" ]; then
         print_info "Setting up backend test environment..."
-        cd backend
+        cd apps/backend
         
         # Create virtual environment if it doesn't exist
         if [ ! -d "venv" ]; then
@@ -93,9 +93,9 @@ setup_environment() {
     fi
     
     # Frontend setup
-    if [ -d "frontend" ]; then
+    if [ -d "apps/frontend" ]; then
         print_info "Setting up frontend test environment..."
-        cd frontend
+        cd apps/frontend
         
         # Install dependencies
         npm ci
@@ -109,7 +109,7 @@ setup_environment() {
 run_backend_tests() {
     print_header "Running Backend Tests"
     
-    cd backend
+    cd apps/backend
     source venv/bin/activate
     
     # Run different test types
@@ -144,7 +144,7 @@ run_backend_tests() {
 run_frontend_tests() {
     print_header "Running Frontend Tests"
     
-    cd frontend
+    cd apps/frontend
     
     # Run different test types
     print_info "Running unit tests..."
@@ -179,7 +179,7 @@ run_e2e_tests() {
     sleep 30
     
     # Run E2E tests
-    cd frontend
+    cd apps/frontend
     print_info "Running Playwright tests..."
     npx playwright test --reporter=html || true
     cd ..
@@ -195,7 +195,7 @@ run_e2e_tests() {
 run_performance_tests() {
     print_header "Running Performance Tests"
     
-    cd backend
+    cd apps/backend
     source venv/bin/activate
     
     print_info "Running performance tests..."
@@ -213,20 +213,20 @@ generate_report() {
     mkdir -p test-reports
     
     # Copy backend coverage
-    if [ -d "backend/htmlcov" ]; then
-        cp -r backend/htmlcov test-reports/backend-coverage
+    if [ -d "apps/backend/htmlcov" ]; then
+        cp -r apps/backend/htmlcov test-reports/backend-coverage
         print_success "Backend coverage report copied"
     fi
     
     # Copy frontend coverage
-    if [ -d "frontend/coverage" ]; then
-        cp -r frontend/coverage test-reports/frontend-coverage
+    if [ -d "apps/frontend/coverage" ]; then
+        cp -r apps/frontend/coverage test-reports/frontend-coverage
         print_success "Frontend coverage report copied"
     fi
     
     # Copy E2E reports
-    if [ -d "frontend/playwright-report" ]; then
-        cp -r frontend/playwright-report test-reports/e2e-report
+    if [ -d "apps/frontend/playwright-report" ]; then
+        cp -r apps/frontend/playwright-report test-reports/e2e-report
         print_success "E2E test report copied"
     fi
     
@@ -326,8 +326,8 @@ main() {
             check_dependencies
             setup_environment
             print_info "Running quick smoke tests..."
-            cd backend && source venv/bin/activate && pytest -m smoke -v --tb=short && cd ..
-            cd frontend && npm run lint && cd ..
+            cd apps/backend && source venv/bin/activate && pytest -m smoke -v --tb=short && cd ../..
+            cd apps/frontend && npm run lint && cd ../..
             ;;
         "clean")
             cleanup
@@ -352,8 +352,8 @@ main() {
     # Show summary
     echo -e "\n${CYAN}Summary:${NC}"
     echo "- Test reports available in: test-reports/"
-    echo "- Backend coverage: backend/htmlcov/index.html"
-    echo "- Frontend coverage: frontend/coverage/lcov-report/index.html"
+    echo "- Backend coverage: apps/backend/htmlcov/index.html"
+    echo "- Frontend coverage: apps/frontend/coverage/lcov-report/index.html"
     echo ""
     
     # Exit with appropriate code

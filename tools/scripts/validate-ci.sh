@@ -33,7 +33,7 @@ print_info() {
 }
 
 # Check if we're in the right directory
-if [ ! -f "test-docker.sh" ]; then
+if [ ! -f "tools/scripts/test-docker.sh" ]; then
     echo -e "${RED}❌ Please run this script from the project root directory${NC}"
     exit 1
 fi
@@ -44,11 +44,11 @@ print_info "Checking project structure..."
 required_files=(
     ".github/workflows/ci.yml"
     ".github/workflows/dependency-update.yml"
-    "frontend/package.json"
-    "frontend/jest.config.js"
-    "backend/requirements.txt"
-    "docker-compose.yml"
-    "test-docker.sh"
+    "apps/frontend/package.json"
+    "apps/frontend/jest.config.js"
+    "apps/backend/requirements.txt"
+    "tools/docker/docker-compose.yml"
+    "tools/scripts/test-docker.sh"
 )
 
 for file in "${required_files[@]}"; do
@@ -62,7 +62,7 @@ done
 print_info "Validating frontend setup..."
 
 # Frontend validation
-cd frontend
+cd apps/frontend
 
 # Check if package.json has required scripts
 required_scripts=("test" "lint" "build" "test:e2e")
@@ -98,7 +98,7 @@ cd ..
 print_info "Validating backend setup..."
 
 # Backend validation
-cd backend
+cd apps/backend
 
 # Check if requirements.txt exists and has content
 if [ -s "requirements.txt" ]; then
@@ -162,8 +162,10 @@ if command -v docker > /dev/null 2>&1; then
     
     # Validate docker-compose.yml
     print_info "Validating docker-compose.yml..."
+    cd tools/docker
     docker-compose config > /dev/null 2>&1 || docker compose config > /dev/null 2>&1
     print_status $? "docker-compose.yml validation"
+    cd ../..
     
 else
     print_warning "Docker not available, skipping Docker validation"
@@ -183,13 +185,13 @@ done
 print_info "Checking test coverage setup..."
 
 # Check if coverage tools are configured
-if grep -q "coverage" frontend/package.json; then
+if grep -q "coverage" apps/frontend/package.json; then
     print_status 0 "Frontend coverage configured"
 else
     print_warning "Frontend coverage not configured"
 fi
 
-if grep -q "pytest-cov" backend/requirements.txt; then
+if grep -q "pytest-cov" apps/backend/requirements.txt; then
     print_status 0 "Backend coverage configured"
 else
     print_warning "Backend coverage not configured"
@@ -198,7 +200,7 @@ fi
 print_info "Validating environment variables..."
 
 # Check if example environment files exist
-env_files=(".env.example" "frontend/.env.example" "backend/.env.example")
+env_files=(".env.example" "apps/frontend/.env.example" "apps/backend/.env.example")
 for env_file in "${env_files[@]}"; do
     if [ -f "$env_file" ]; then
         print_status 0 "Found $env_file"
