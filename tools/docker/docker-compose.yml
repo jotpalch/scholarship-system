@@ -14,7 +14,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+      - ../../apps/backend/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
     networks:
       - scholarship_network
     healthcheck:
@@ -63,7 +63,7 @@ services:
   # FastAPI Backend
   backend:
     build: 
-      context: ./backend
+      context: ../../apps/backend
       dockerfile: Dockerfile
     container_name: scholarship_backend
     ports:
@@ -89,8 +89,8 @@ services:
       EMAIL_FROM: noreply@scholarshipapp.com
       EMAIL_FROM_NAME: Scholarship System
     volumes:
-      - ./backend/uploads:/app/uploads
-      - ./backend:/app
+      - ../../apps/backend/uploads:/app/uploads
+      - ../../apps/backend:/app
     depends_on:
       postgres:
         condition: service_healthy
@@ -111,7 +111,7 @@ services:
   # Next.js Frontend
   frontend:
     build:
-      context: ./frontend
+      context: ../../apps/frontend
       dockerfile: Dockerfile
     container_name: scholarship_frontend
     ports:

@@ -53,6 +53,9 @@ echo "🌐 Frontend will be accessible at: http://$HOST_IP:3000"
 echo "🔧 Backend will be accessible at: http://$HOST_IP:8000"
 echo ""
 
+# Navigate to docker directory
+cd "$(dirname "$0")/../docker"
+
 # Check if services are already running
 if docker ps | grep -q "scholarship_"; then
     echo "⚠️  Existing scholarship services detected. Stopping them first..."

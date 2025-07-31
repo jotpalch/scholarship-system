@@ -1,31 +1,68 @@
-# Scholarship Management System
+# 🎓 Scholarship Management System
 
-A comprehensive scholarship application and approval management system built with FastAPI, PostgreSQL, Next.js 15, and TypeScript.
+A comprehensive, production-ready scholarship application and approval management system built with modern technologies and professional architecture.
 
-## 🚀 Features
+## 🏗️ Professional Architecture
 
-- **Multi-role Support**: Students, Faculty, Admin, Super Admin roles
-- **Application Workflow**: Complete scholarship application lifecycle
-- **Document Management**: File upload with OCR processing and virus scanning
-- **Multi-language Support**: English/Chinese switching for student interfaces
-- **GPA Validation**: Automatic validation based on scholarship requirements
-- **Email Notifications**: Status updates and workflow notifications
-- **Responsive Design**: Modern UI with Tailwind CSS and shadcn/ui
+```
+scholarship-system/
+├── apps/                      # Applications
+│   ├── backend/              # FastAPI backend service
+│   ├── frontend/             # Next.js frontend application
+│   └── mock-student-api/     # Development mock services
+├── tools/                    # Development & deployment tools
+│   ├── scripts/              # Automation scripts
+│   ├── docker/              # Docker configurations
+│   └── infra/               # Infrastructure as code
+├── docs/                    # Comprehensive documentation
+└── config/                  # Shared configuration files
+```
 
-## 🛠️ Quick Start
+## ✨ Enterprise Features
 
-Get started in 5 minutes with Docker:
+- **🏢 Multi-role Support**: Students, Faculty, Admin, Super Admin with fine-grained permissions
+- **📋 Complete Application Lifecycle**: Draft → Submit → Review → Approval workflow
+- **📁 Enterprise Document Management**: File upload with OCR, virus scanning, and secure storage
+- **🌐 Multi-language Support**: English/Chinese with dynamic switching
+- **🔐 Security-First Design**: JWT authentication, role-based access, input validation
+- **📧 Smart Notifications**: Email alerts for status changes and deadlines
+- **💻 Modern UI/UX**: Responsive design with Tailwind CSS and shadcn/ui components
+
+## 🚀 Quick Start
+
+Get up and running in under 5 minutes:
 
 ```bash
-# Start all services
-./test-docker.sh start
+# Clone and navigate
+git clone <repository-url>
+cd scholarship-system
+
+# Start all services (auto-detects your IP)
+make dev
+# or
+tools/scripts/start-with-ip.sh
 
 # Access the application
 # Frontend: http://localhost:3000
-# API Docs: http://localhost:8000/docs
+# Backend API: http://localhost:8000/docs
+# MinIO Console: http://localhost:9001
 ```
 
-👉 **[Complete Quick Start Guide](docs/getting-started/quick-start.md)**
+## 📖 Professional Commands
+
+Use our comprehensive Makefile for all operations:
+
+```bash
+make help          # Show all available commands
+make install       # Install all dependencies
+make dev           # Start development environment
+make test          # Run comprehensive test suite
+make build         # Build production artifacts
+make docker-up     # Start with Docker
+make lint          # Code quality checks
+make format        # Auto-format code
+make clean         # Clean all build artifacts
+```
 
 ## 📚 Documentation
 

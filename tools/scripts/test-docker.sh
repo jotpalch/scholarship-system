@@ -3,6 +3,9 @@
 # Simple test Docker script for CI/CD
 set -e
 
+# Navigate to docker directory
+cd "$(dirname "$0")/../docker"
+
 case "$1" in
     "start")
         echo "Starting test services..."
