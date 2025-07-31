@@ -28,10 +28,10 @@ jobs:
       with:
         python-version: ${{ env.PYTHON_VERSION }}
         cache: 'pip'
-        cache-dependency-path: backend/requirements*.txt
+        cache-dependency-path: apps/backend/requirements*.txt
 
     - name: Install dependencies
-      working-directory: ./backend
+      working-directory: ./apps/backend
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
@@ -40,7 +40,7 @@ jobs:
         python -c "import minio; import pytest; import httpx; print('All dependencies OK')"
 
     - name: Run unit tests with coverage
-      working-directory: ./backend
+      working-directory: ./apps/backend
       env:
         DATABASE_URL: "sqlite+aiosqlite:///:memory:"
         SECRET_KEY: test-secret-key-for-unit-testing
@@ -54,8 +54,8 @@ jobs:
       with:
         name: backend-unit-coverage
         path: |
-          backend/coverage.xml
-          backend/htmlcov/
+          apps/backend/coverage.xml
+          apps/backend/htmlcov/
         retention-days: 7
 
   backend-integration-tests:
@@ -71,10 +71,10 @@ jobs:
       with:
         python-version: ${{ env.PYTHON_VERSION }}
         cache: 'pip'
-        cache-dependency-path: backend/requirements*.txt
+        cache-dependency-path: apps/backend/requirements*.txt
 
     - name: Install dependencies
-      working-directory: ./backend
+      working-directory: ./apps/backend
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
@@ -83,7 +83,7 @@ jobs:
         python -c "import minio; import pytest; import httpx; print('All dependencies OK')"
 
     - name: Run integration tests with coverage
-      working-directory: ./backend
+      working-directory: ./apps/backend
       env:
         DATABASE_URL: "sqlite+aiosqlite:///:memory:"
         SECRET_KEY: test-secret-key-for-integration-testing
@@ -97,8 +97,8 @@ jobs:
       with:
         name: backend-integration-coverage
         path: |
-          backend/coverage.xml
-          backend/htmlcov/
+          apps/backend/coverage.xml
+          apps/backend/htmlcov/
         retention-days: 7
 
   backend-api-tests:
@@ -213,14 +213,14 @@ jobs:
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
+        cache-dependency-path: apps/frontend/package-lock.json
 
     - name: Install dependencies
-      working-directory: ./frontend
+      working-directory: ./apps/frontend
       run: npm ci
 
     - name: Run unit tests with coverage
-      working-directory: ./frontend
+      working-directory: ./apps/frontend
       env:
         CI: true
       run: |
@@ -232,7 +232,7 @@ jobs:
       with:
         name: frontend-unit-coverage
         path: |
-          frontend/coverage/
+          apps/frontend/coverage/
         retention-days: 7
 
   frontend-component-tests:
@@ -248,14 +248,14 @@ jobs:
       with:
         node-version: ${{ env.NODE_VERSION }}
         cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
+        cache-dependency-path: apps/frontend/package-lock.json
 
     - name: Install dependencies
-      working-directory: ./frontend
+      working-directory: ./apps/frontend
       run: npm ci
 
     - name: Run component tests
-      working-directory: ./frontend
+      working-directory: ./apps/frontend
       env:
         CI: true
       run: |
@@ -289,7 +289,7 @@ jobs:
         pip install safety bandit semgrep
 
     - name: Run Python security tests
-      working-directory: ./backend
+      working-directory: ./apps/backend
       run: |
         # Check for known vulnerabilities
         safety check --json > safety-report.json || true
@@ -301,7 +301,7 @@ jobs:
         semgrep --config=auto --json -o semgrep-report.json app/ || true
 
     - name: Run npm audit
-      working-directory: ./frontend
+      working-directory: ./apps/frontend
       run: |
         npm audit --json > npm-audit-report.json || true
 
@@ -310,10 +310,10 @@ jobs:
       with:
         name: security-test-reports
         path: |
-          backend/safety-report.json
-          backend/bandit-report.json
-          backend/semgrep-report.json
-          frontend/npm-audit-report.json
+          apps/backend/safety-report.json
+          apps/backend/bandit-report.json
+          apps/backend/semgrep-report.json
+          apps/frontend/npm-audit-report.json
         retention-days: 30
 
   performance-tests:

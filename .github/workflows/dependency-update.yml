@@ -18,7 +18,7 @@ jobs:
     
     strategy:
       matrix:
-        directory: [frontend, backend]
+        directory: [apps/frontend, apps/backend]
       fail-fast: false
     
     steps:
@@ -29,24 +29,24 @@ jobs:
         fetch-depth: 0
 
     - name: Setup Node.js (for frontend)
-      if: matrix.directory == 'frontend'
+if: matrix.directory == 'apps/frontend'
       uses: actions/setup-node@v4
       with:
         node-version: '22'
         cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
+        cache-dependency-path: apps/frontend/package-lock.json
 
     - name: Setup Python (for backend)
-      if: matrix.directory == 'backend'
+if: matrix.directory == 'apps/backend'
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
         cache: 'pip'
-        cache-dependency-path: backend/requirements*.txt
+        cache-dependency-path: apps/backend/requirements*.txt
 
     - name: Update frontend dependencies
-      if: matrix.directory == 'frontend'
-      working-directory: ./frontend
+if: matrix.directory == 'apps/frontend'
+      working-directory: ./apps/frontend
       run: |
         # Update dependencies
         npm update --save
@@ -62,8 +62,8 @@ jobs:
         npm install --package-lock-only
         
     - name: Update backend dependencies
-      if: matrix.directory == 'backend'
-      working-directory: ./backend
+if: matrix.directory == 'apps/backend'
+      working-directory: ./apps/backend
       run: |
         # Create virtual environment
         python -m venv venv
@@ -143,28 +143,28 @@ jobs:
       with:
         node-version: '22'
         cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
+        cache-dependency-path: apps/frontend/package-lock.json
 
     - name: Setup Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
         cache: 'pip'
-        cache-dependency-path: backend/requirements*.txt
+        cache-dependency-path: apps/backend/requirements*.txt
 
     - name: Install frontend dependencies
-      working-directory: ./frontend
+      working-directory: ./apps/frontend
       run: npm ci
 
     - name: Install backend dependencies
-      working-directory: ./backend
+      working-directory: ./apps/backend
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install safety bandit
 
     - name: Run npm audit
-      working-directory: ./frontend
+      working-directory: ./apps/frontend
       run: |
         npm audit --json > npm-audit.json || true
         
@@ -177,7 +177,7 @@ jobs:
         fi
         
     - name: Run Python safety check
-      working-directory: ./backend
+      working-directory: ./apps/backend
       run: |
         safety check --json > safety-audit.json || true
         
@@ -198,15 +198,15 @@ jobs:
         CRITICAL_VULNS=0
         
         # Check npm audit
-        if [ -f frontend/npm-audit.json ]; then
-          CRITICAL_NPM=$(cat frontend/npm-audit.json | jq '.metadata.vulnerabilities.critical // 0' || echo 0)
+if [ -f apps/frontend/npm-audit.json ]; then
+          CRITICAL_NPM=$(cat apps/frontend/npm-audit.json | jq '.metadata.vulnerabilities.critical // 0' || echo 0)
           HIGH_NPM=$(cat frontend/npm-audit.json | jq '.metadata.vulnerabilities.high // 0' || echo 0)
           CRITICAL_VULNS=$((CRITICAL_VULNS + CRITICAL_NPM + HIGH_NPM))
         fi
         
         # Check Python safety
-        if [ -f backend/safety-audit.json ]; then
-          CRITICAL_PY=$(cat backend/safety-audit.json | jq '[.[] | select(.severity == "high" or .severity == "critical")] | length' || echo 0)
+if [ -f apps/backend/safety-audit.json ]; then
+          CRITICAL_PY=$(cat apps/backend/safety-audit.json | jq '[.[] | select(.severity == "high" or .severity == "critical")] | length' || echo 0)
           CRITICAL_VULNS=$((CRITICAL_VULNS + CRITICAL_PY))
         fi
         
@@ -223,9 +223,9 @@ jobs:
       with:
         name: security-audit-results-${{ github.run_number }}
         path: |
-          frontend/npm-audit.json
-          backend/safety-audit.json
-          backend/bandit-audit.json
+          apps/frontend/npm-audit.json
+          apps/backend/safety-audit.json
+          apps/backend/bandit-audit.json
         retention-days: 30
 
     - name: Create security issue

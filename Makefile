@@ -45,7 +45,7 @@ dev:
 build:
 	@echo "🔨 Building applications..."
 	@echo "  Building backend..."
-	@cd apps/backend && python -m pytest app/tests --tb=short
+	@cd apps/backend && python -m pip install -e .
 	@echo "  Building frontend..."
 	@cd apps/frontend && npm run build
 	@echo "✅ Build completed!"

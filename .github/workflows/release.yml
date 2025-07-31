@@ -50,7 +50,7 @@ jobs:
           VERSION="${{ github.event.inputs.version }}"
         else
           # Get current version from package.json
-          CURRENT_VERSION=$(node -p "require('./frontend/package.json').version")
+          CURRENT_VERSION=$(node -p "require('./apps/frontend/package.json').version")
           
           # Calculate next version based on release type
           case "${{ github.event.inputs.release_type }}" in
@@ -113,12 +113,12 @@ jobs:
         VERSION=${{ steps.version.outputs.version }}
         
         # Update frontend package.json
-        cd frontend
+        cd apps/frontend
         npm version $VERSION --no-git-tag-version
         cd ..
         
         # Update backend version
-        echo "__version__ = '$VERSION'" > backend/app/__version__.py
+        echo "__version__ = '$VERSION'" > apps/backend/app/__version__.py
         
         # Update docker-compose versions
         sed -i "s/image: .*/image: ghcr.io\/${{ github.repository }}\/backend:$VERSION/g" docker-compose.yml
@@ -179,13 +179,13 @@ jobs:
         # Build backend
         docker build -t ghcr.io/${{ github.repository }}/backend:$VERSION \
                      -t ghcr.io/${{ github.repository }}/backend:latest \
-                     ./backend
+                     ./apps/backend
         
         # Build frontend
         docker build -t ghcr.io/${{ github.repository }}/frontend:$VERSION \
                      -t ghcr.io/${{ github.repository }}/frontend:latest \
                      --build-arg NEXT_PUBLIC_API_URL=${{ secrets.PRODUCTION_API_URL }} \
-                     ./frontend
+                     ./apps/frontend
         
         # Push images
         docker push ghcr.io/${{ github.repository }}/backend:$VERSION
