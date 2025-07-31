@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import apiClient, { UserListResponse, UserStats } from '@/lib/api'
+cimport { apiClient, UserListResponse, UserStats } from '@/lib/api'
 
 export default function TestUsersPage() {
   const [users, setUsers] = useState<UserListResponse[]>([])
