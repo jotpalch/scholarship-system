@@ -16,16 +16,15 @@ def test_schema_integration():
     print("Testing schema integration...")
     
     try:
-        # Test importing extended models
-        from app.models.scholarship_extended import (
-            ScholarshipSubTypeConfig, Application, ApplicationFile,
-            ApplicationReview, ProfessorReview, ProfessorReviewItem,
+        # Test importing existing enhanced models
+        from app.models.application import (
+            Application, ApplicationFile, ApplicationReview, ProfessorReview,
             ApplicationStatus, ReviewStatus, ScholarshipMainType, ScholarshipSubType
         )
-        print("✓ Extended models imported successfully")
+        print("✓ Enhanced application models imported successfully")
         
         # Test enum values
-        assert ApplicationStatus.DRAFT.value == "DRAFT"
+        assert ApplicationStatus.DRAFT.value == "draft"
         assert ScholarshipMainType.PHD.value == "PHD"
         assert ScholarshipSubType.NSTC.value == "NSTC"
         print("✓ Enum values are correct")
@@ -98,8 +97,8 @@ def test_service_integration():
         print("✓ Application service methods are available")
         
         quota_methods = [
-            'get_quota_status',
-            'allocate_remaining_quota'
+            'get_quota_status_by_type',
+            'process_applications_by_priority'
         ]
         
         for method in quota_methods:
@@ -147,11 +146,11 @@ def test_workflow_logic():
         mock_db = MockDB()
         service = ScholarshipApplicationService(mock_db)
         
-        # Test application number generation
-        app_number = service._generate_application_number(1, 1, "2024", "1")
-        expected_pattern = "ST001-SC001-20241-0001"
-        assert app_number == expected_pattern
-        print(f"✓ Application number generation: {app_number}")
+        # Test application ID generation
+        app_id = service._generate_application_id("2024")
+        expected_pattern = "APP-2024-000001"
+        assert app_id == expected_pattern
+        print(f"✓ Application ID generation: {app_id}")
         
         # Test priority calculation
         renewal_priority = service._calculate_initial_priority(True, 123)
@@ -173,7 +172,7 @@ def test_database_compatibility():
     
     try:
         # Test that migration file is properly structured
-        migration_path = "backend/alembic/versions/001_add_scholarship_system_tables.py"
+        migration_path = "backend/alembic/versions/002_enhance_applications_for_issue_10.py"
         
         if os.path.exists(migration_path):
             with open(migration_path, 'r') as f:
@@ -182,7 +181,7 @@ def test_database_compatibility():
             # Check for key components
             assert 'def upgrade()' in content
             assert 'def downgrade()' in content
-            assert 'scholarship_sub_type_configs' in content
+            assert 'main_scholarship_type' in content
             assert 'applications' in content
             print("✓ Migration file structure is correct")
         else:

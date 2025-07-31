@@ -68,7 +68,7 @@ class ScholarshipType(Base):
     
     # 關聯
     rules = relationship("ScholarshipRule", back_populates="scholarship_type", cascade="all, delete-orphan")
-    applications = relationship("Application", back_populates="scholarship_type")
+    applications = relationship("Application", foreign_keys="[Application.scholarship_type_id]")
 
     def __repr__(self):
         return f"<ScholarshipType(id={self.id}, code={self.code}, name={self.name})>"

@@ -10,16 +10,11 @@ from app.core.exceptions import ValidationError
 from app.core.config import settings, DEV_SCHOLARSHIP_SETTINGS
 from typing import List, Union, Optional, Dict, Any, Tuple
 
-# Import extended models for comprehensive scholarship system
-try:
-    from app.models.scholarship_extended import (
-        ScholarshipSubTypeConfig, Application, ApplicationFile,
-        ApplicationReview, ProfessorReview, ProfessorReviewItem,
-        ApplicationStatus, ReviewStatus, ScholarshipMainType, ScholarshipSubType
-    )
-except ImportError:
-    # Fallback if extended models not available
-    pass
+# Import comprehensive scholarship system models
+from app.models.application import (
+    Application, ApplicationFile, ApplicationReview, ProfessorReview,
+    ApplicationStatus, ReviewStatus, ScholarshipMainType, ScholarshipSubType
+)
 
 logger = logging.getLogger(__name__)
 
@@ -165,16 +160,17 @@ class ScholarshipApplicationService:
     
     def create_application(
         self,
+        user_id: int,
         student_id: int,
         scholarship_type_id: int,
-        sub_type_config_id: int,
+        scholarship_type_code: str,
         semester: str,
         academic_year: str,
         application_data: Dict[str, Any],
         is_renewal: bool = False,
         previous_application_id: Optional[int] = None
-    ) -> Tuple['Application', str]:
-        """Create a new scholarship application"""
+    ) -> Tuple[Application, str]:
+        """Create a new scholarship application using existing schema"""
         
         # Validate eligibility
         scholarship_type = self.db.query(ScholarshipType).filter(
@@ -194,35 +190,41 @@ class ScholarshipApplicationService:
                 Application.student_id == student_id,
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.semester == semester,
-                Application.status.notin_([ApplicationStatus.WITHDRAWN, ApplicationStatus.REJECTED])
+                Application.status.notin_([ApplicationStatus.WITHDRAWN.value, ApplicationStatus.REJECTED.value])
             )
         ).first()
         
         if existing_app:
             raise ValueError("Student already has an active application for this scholarship in this semester")
         
-        # Generate application number
-        app_number = self._generate_application_number(
-            scholarship_type_id, sub_type_config_id, academic_year, semester
-        )
+        # Generate application number using existing format
+        app_number = self._generate_application_id(academic_year)
         
         # Calculate priority score
         priority_score = self._calculate_initial_priority(is_renewal, student_id)
         
-        # Create application
+        # Extract main and sub types from scholarship code
+        main_type = self._extract_main_type(scholarship_type_code)
+        sub_type = self._extract_sub_type(scholarship_type_code)
+        
+        # Create application using existing schema
         application = Application(
-            scholarship_type_id=scholarship_type_id,
-            sub_type_config_id=sub_type_config_id,
+            app_id=app_number,
+            user_id=user_id,
             student_id=student_id,
-            application_number=app_number,
+            scholarship_type_id=scholarship_type_id,
+            scholarship_type=scholarship_type_code,
+            scholarship_name=scholarship_type.name,
+            main_scholarship_type=main_type,
+            sub_scholarship_type=sub_type,
             semester=semester,
             academic_year=academic_year,
             is_renewal=is_renewal,
             previous_application_id=previous_application_id,
-            status=ApplicationStatus.DRAFT,
+            status=ApplicationStatus.DRAFT.value,
             priority_score=priority_score,
-            application_data=application_data,
-            requested_amount=application_data.get('requested_amount')
+            amount=application_data.get('requested_amount'),
+            form_data=application_data
         )
         
         self.db.add(application)
@@ -240,7 +242,7 @@ class ScholarshipApplicationService:
         if not application:
             return False, "Application not found"
         
-        if application.status != ApplicationStatus.DRAFT:
+        if application.status != ApplicationStatus.DRAFT.value:
             return False, "Application is not in draft status"
         
         # Validate required documents
@@ -249,7 +251,7 @@ class ScholarshipApplicationService:
             return False, validation_result[1]
         
         # Update application status
-        application.status = ApplicationStatus.SUBMITTED
+        application.status = ApplicationStatus.SUBMITTED.value
         application.submitted_at = datetime.now(timezone.utc)
         
         # Set review deadline (30 days from submission)
@@ -326,27 +328,38 @@ class ScholarshipApplicationService:
             "auto_approved": approved_count
         }
     
-    def _generate_application_number(
-        self,
-        scholarship_type_id: int,
-        sub_type_config_id: int,
-        academic_year: str,
-        semester: str
-    ) -> str:
-        """Generate unique application number"""
+    def _generate_application_id(self, academic_year: str) -> str:
+        """Generate unique application ID using existing format"""
         
-        # Get count of applications for this combination
+        # Get count of applications for this year
         count = self.db.query(Application).filter(
-            and_(
-                Application.scholarship_type_id == scholarship_type_id,
-                Application.sub_type_config_id == sub_type_config_id,
-                Application.academic_year == academic_year,
-                Application.semester == semester
-            )
+            Application.academic_year == academic_year
         ).count()
         
-        # Format: ST{scholarship_type_id}-SC{sub_config_id}-{year}{semester}-{count+1:04d}
-        return f"ST{scholarship_type_id:03d}-SC{sub_type_config_id:03d}-{academic_year}{semester}-{count+1:04d}"
+        # Format: APP-{year}-{count+1:06d}
+        return f"APP-{academic_year}-{count+1:06d}"
+    
+    def _extract_main_type(self, scholarship_code: str) -> str:
+        """Extract main scholarship type from code"""
+        code_upper = scholarship_code.upper()
+        if "UNDERGRADUATE_FRESHMAN" in code_upper:
+            return ScholarshipMainType.UNDERGRADUATE_FRESHMAN.value
+        elif "DIRECT_PHD" in code_upper:
+            return ScholarshipMainType.DIRECT_PHD.value
+        elif "PHD" in code_upper:
+            return ScholarshipMainType.PHD.value
+        return ScholarshipMainType.PHD.value  # Default
+    
+    def _extract_sub_type(self, scholarship_code: str) -> str:
+        """Extract sub scholarship type from code"""
+        code_upper = scholarship_code.upper()
+        if "NSTC" in code_upper:
+            return ScholarshipSubType.NSTC.value
+        elif "MOE_1W" in code_upper:
+            return ScholarshipSubType.MOE_1W.value
+        elif "MOE_2W" in code_upper:
+            return ScholarshipSubType.MOE_2W.value
+        return ScholarshipSubType.GENERAL.value  # Default
     
     def _calculate_initial_priority(self, is_renewal: bool, student_id: int) -> int:
         """Calculate initial priority score for application"""
@@ -443,101 +456,117 @@ class ScholarshipApplicationService:
 
 
 class ScholarshipQuotaService:
-    """Service for managing scholarship quotas"""
+    """Service for managing scholarship quotas - simplified for existing schema"""
     
     def __init__(self, db: Session):
         self.db = db
     
-    def get_quota_status(
+    def get_quota_status_by_type(
         self,
-        sub_type_config_id: int,
+        main_scholarship_type: str,
+        sub_scholarship_type: str,
         semester: str
     ) -> Dict[str, Any]:
-        """Get quota status for a scholarship sub-type"""
+        """Get quota status for a scholarship type combination"""
         
-        sub_config = self.db.query(ScholarshipSubTypeConfig).filter(
-            ScholarshipSubTypeConfig.id == sub_type_config_id
-        ).first()
+        # Count approved applications by type
+        approved_count = self.db.query(Application).filter(
+            and_(
+                Application.main_scholarship_type == main_scholarship_type,
+                Application.sub_scholarship_type == sub_scholarship_type,
+                Application.semester == semester,
+                Application.status == ApplicationStatus.APPROVED.value
+            )
+        ).count()
         
-        if not sub_config:
-            return {}
+        # Get pending applications
+        pending_count = self.db.query(Application).filter(
+            and_(
+                Application.main_scholarship_type == main_scholarship_type,
+                Application.sub_scholarship_type == sub_scholarship_type,
+                Application.semester == semester,
+                Application.status.in_([
+                    ApplicationStatus.SUBMITTED.value,
+                    ApplicationStatus.UNDER_REVIEW.value
+                ])
+            )
+        ).count()
         
-        # Calculate usage by college
-        college_usage = {}
-        total_approved = 0
+        # For now, use default quotas (these would come from configuration)
+        default_quotas = {
+            (ScholarshipMainType.PHD.value, ScholarshipSubType.NSTC.value): 50,
+            (ScholarshipMainType.PHD.value, ScholarshipSubType.GENERAL.value): 30,
+            (ScholarshipMainType.DIRECT_PHD.value, ScholarshipSubType.NSTC.value): 40,
+            (ScholarshipMainType.UNDERGRADUATE_FRESHMAN.value, ScholarshipSubType.GENERAL.value): 100,
+        }
         
-        if sub_config.quota_per_college:
-            for college, quota in sub_config.quota_per_college.items():
-                approved_count = self.db.query(Application).filter(
-                    and_(
-                        Application.sub_type_config_id == sub_type_config_id,
-                        Application.semester == semester,
-                        Application.status == ApplicationStatus.APPROVED,
-                        # Would need proper join to student/college data
-                        # Application.student.college == college
-                    )
-                ).count()
-                
-                college_usage[college] = {
-                    "quota": quota,
-                    "used": approved_count,
-                    "available": quota - approved_count,
-                    "usage_percent": (approved_count / quota * 100) if quota > 0 else 0
-                }
-                total_approved += approved_count
+        total_quota = default_quotas.get((main_scholarship_type, sub_scholarship_type), 20)
         
         return {
-            "sub_type_config_id": sub_type_config_id,
+            "main_type": main_scholarship_type,
+            "sub_type": sub_scholarship_type,
             "semester": semester,
-            "total_quota": sub_config.total_quota,
-            "total_used": total_approved,
-            "total_available": (sub_config.total_quota or 0) - total_approved,
-            "college_breakdown": college_usage
+            "total_quota": total_quota,
+            "total_used": approved_count,
+            "total_available": total_quota - approved_count,
+            "pending": pending_count,
+            "usage_percent": (approved_count / total_quota * 100) if total_quota > 0 else 0
         }
     
-    def allocate_remaining_quota(
+    def process_applications_by_priority(
         self,
-        sub_type_config_id: int,
+        main_scholarship_type: str,
+        sub_scholarship_type: str,
         semester: str
     ) -> Dict[str, int]:
-        """Allocate remaining quota to pending applications"""
+        """Process applications by priority within quota limits"""
         
-        quota_status = self.get_quota_status(sub_type_config_id, semester)
+        quota_status = self.get_quota_status_by_type(main_scholarship_type, sub_scholarship_type, semester)
         
-        if quota_status.get("total_available", 0) <= 0:
-            return {"allocated": 0, "message": "No remaining quota"}
+        if quota_status["total_available"] <= 0:
+            return {"processed": 0, "approved": 0, "message": "No remaining quota"}
         
-        # Get pending applications ordered by priority
-        pending_apps = self.db.query(Application).filter(
+        # Get applications ordered by priority (renewal first, then by submission time)
+        applications = self.db.query(Application).filter(
             and_(
-                Application.sub_type_config_id == sub_type_config_id,
+                Application.main_scholarship_type == main_scholarship_type,
+                Application.sub_scholarship_type == sub_scholarship_type,
                 Application.semester == semester,
-                Application.status == ApplicationStatus.UNDER_REVIEW
+                Application.status.in_([
+                    ApplicationStatus.SUBMITTED.value,
+                    ApplicationStatus.UNDER_REVIEW.value
+                ])
             )
         ).order_by(
+            desc(Application.is_renewal),  # Renewals first
             desc(Application.priority_score),
             asc(Application.submitted_at)
         ).all()
         
-        allocated_count = 0
+        processed_count = 0
+        approved_count = 0
         remaining_quota = quota_status["total_available"]
         
-        for app in pending_apps:
-            if remaining_quota <= 0:
-                break
+        for app in applications:
+            processed_count += 1
             
-            # Check college-specific quota if applicable
-            # In real implementation, would check student's college
-            # For now, approve based on total quota
-            
-            app.status = ApplicationStatus.APPROVED
-            app.decision_date = datetime.now(timezone.utc)
-            allocated_count += 1
-            remaining_quota -= 1
+            if remaining_quota > 0:
+                # Approve within quota
+                app.status = ApplicationStatus.APPROVED.value
+                app.decision_date = datetime.now(timezone.utc)
+                approved_count += 1
+                remaining_quota -= 1
+            else:
+                # Reject due to quota limit
+                app.status = ApplicationStatus.REJECTED.value
+                app.rejection_reason = "Quota limit reached"
+                app.decision_date = datetime.now(timezone.utc)
         
         self.db.commit()
         
         return {
-            "allocated": allocated_count,
+            "processed": processed_count,
+            "approved": approved_count,
+            "rejected": processed_count - approved_count,
             "remaining_quota": remaining_quota
         } 
