@@ -27,10 +27,6 @@ class ScholarshipCategory(enum.Enum):
     PHD = "phd"  # 國科會/教育部博士生獎學金
     DIRECT_PHD = "direct_phd"  # 逕讀博士獎學金
 
-
-
-
-
 class ScholarshipSubType(enum.Enum):
     """Scholarship sub-type enum for combined scholarships"""
 
