@@ -10,7 +10,6 @@ from sqlalchemy.sql import func
 import enum
 
 from app.db.base_class import Base
-from app.models.scholarship import SubTypeSelectionMode
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -31,6 +30,23 @@ class ApplicationStatus(enum.Enum):
     RENEWAL_PENDING = "renewal_pending"
     RENEWAL_REVIEWED = "renewal_reviewed"
     MANUAL_EXCLUDED = "manual_excluded"
+    PROFESSOR_REVIEW = "professor_review"
+    WITHDRAWN = "withdrawn"
+
+
+class ScholarshipMainType(enum.Enum):
+    """Main scholarship types for issue #10"""
+    UNDERGRADUATE_FRESHMAN = "UNDERGRADUATE_FRESHMAN"
+    PHD = "PHD"
+    DIRECT_PHD = "DIRECT_PHD"
+
+
+class ScholarshipSubType(enum.Enum):
+    """Sub scholarship types for issue #10"""
+    GENERAL = "GENERAL"
+    NSTC = "NSTC"
+    MOE_1W = "MOE_1W"
+    MOE_2W = "MOE_2W"
 
 
 class ReviewStatus(enum.Enum):
