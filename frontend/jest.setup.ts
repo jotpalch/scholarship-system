@@ -161,6 +161,11 @@ global.fetch = jest.fn(() =>
   Promise.resolve({
     ok: true,
     status: 200,
+    statusText: 'OK',
+    headers: {
+      get: jest.fn(() => 'application/json'),
+      entries: jest.fn(() => [['content-type', 'application/json']]),
+    },
     json: () => Promise.resolve({}),
   })
 ) as jest.Mock 

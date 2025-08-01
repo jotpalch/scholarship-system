@@ -14,6 +14,18 @@ Object.defineProperty(window, 'localStorage', {
   value: mockLocalStorage
 })
 
+// Helper to create proper mock fetch responses
+const createMockResponse = (data: any, options: { ok?: boolean, status?: number, statusText?: string } = {}) => ({
+  ok: options.ok ?? true,
+  status: options.status ?? 200,
+  statusText: options.statusText ?? 'OK',
+  headers: {
+    get: jest.fn((name) => name === 'content-type' ? 'application/json' : null),
+    entries: jest.fn(() => [['content-type', 'application/json']]),
+  },
+  json: () => Promise.resolve(data)
+})
+
 describe('API Client', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -31,10 +43,7 @@ describe('API Client', () => {
         }
       }
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse)
-      })
+      mockFetch.mockResolvedValueOnce(createMockResponse(mockResponse))
 
       const result = await apiClient.auth.login('testuser', 'password')
 
@@ -42,7 +51,10 @@ describe('API Client', () => {
         'http://localhost:8000/api/v1/auth/login',
         expect.objectContaining({
           method: 'POST',
-          body: expect.any(FormData)
+          body: JSON.stringify({ username: 'testuser', password: 'password' }),
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json'
+          })
         })
       )
 
@@ -55,11 +67,7 @@ describe('API Client', () => {
         message: 'Invalid credentials'
       }
 
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        json: () => Promise.resolve(mockErrorResponse)
-      })
+      mockFetch.mockResolvedValueOnce(createMockResponse(mockErrorResponse, { ok: false, status: 401, statusText: 'Unauthorized' }))
 
       await expect(
         apiClient.auth.login('invalid', 'credentials')
@@ -87,10 +95,7 @@ describe('API Client', () => {
       // Set token
       apiClient.setToken('test-token')
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse)
-      })
+      mockFetch.mockResolvedValueOnce(createMockResponse(mockResponse))
 
       const result = await apiClient.auth.getCurrentUser()
 
@@ -132,15 +137,12 @@ describe('API Client', () => {
         data: mockApplications
       }
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse)
-      })
+      mockFetch.mockResolvedValueOnce(createMockResponse(mockResponse))
 
       const result = await apiClient.applications.getMyApplications()
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8000/api/v1/applications',
+        'http://localhost:8000/api/v1/applications/',
         expect.objectContaining({
           headers: expect.objectContaining({
             'Authorization': 'Bearer test-token'
@@ -174,15 +176,12 @@ describe('API Client', () => {
         data: mockCreatedApplication
       }
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse)
-      })
+      mockFetch.mockResolvedValueOnce(createMockResponse(mockResponse))
 
       const result = await apiClient.applications.createApplication(applicationData)
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8000/api/v1/applications',
+        'http://localhost:8000/api/v1/applications/',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(applicationData),
@@ -210,10 +209,7 @@ describe('API Client', () => {
         data: mockSubmittedApplication
       }
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse)
-      })
+      mockFetch.mockResolvedValueOnce(createMockResponse(mockResponse))
 
       const result = await apiClient.applications.submitApplication(applicationId)
 
@@ -253,14 +249,10 @@ describe('API Client', () => {
     })
 
     it('should handle HTTP errors', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        json: () => Promise.resolve({
-          success: false,
-          message: 'Internal server error'
-        })
-      })
+      mockFetch.mockResolvedValueOnce(createMockResponse({
+        success: false,
+        message: 'Internal server error'
+      }, { ok: false, status: 500, statusText: 'Internal Server Error' }))
 
       await expect(
         apiClient.auth.getCurrentUser()
