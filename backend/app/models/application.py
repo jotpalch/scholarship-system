@@ -4,12 +4,13 @@ Application models for scholarship applications
 
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Numeric, Text, JSON
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Numeric, Text, JSON, Enum, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
 
 from app.db.base_class import Base
+from app.models.scholarship import SubTypeSelectionMode
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -69,7 +70,19 @@ class FileType(enum.Enum):
     RESEARCH_PROPOSAL = "research_proposal"  # 研究計畫
     RECOMMENDATION_LETTER = "recommendation_letter"  # 推薦信
     CERTIFICATE = "certificate"  # 證書
+    INSURANCE_RECORD = "insurance_record"  # 投保紀錄
+    AGREEMENT = "agreement"  # 切結書
+    BANK_ACCOUNT_COVER = "bank_account_cover"  # 銀行帳號封面
     OTHER = "other"  # 其他
+
+
+class Semester(enum.Enum):
+    """Semester enum"""
+    FIRST = "first"
+    SECOND = "second"
+
+
+
 
 
 class Application(Base):
@@ -88,11 +101,13 @@ class Application(Base):
     scholarship_type = Column(String(50), nullable=False)  # Backward compatibility
     scholarship_name = Column(String(200))
     amount = Column(Numeric(10, 2))
+    scholarship_subtype_list = Column(JSON, nullable=False, default=[])
+    sub_type_selection_mode = Column(Enum(SubTypeSelectionMode), nullable=False)
     
     # New fields for comprehensive scholarship system (Issue #10)
     main_scholarship_type = Column(String(50))  # UNDERGRADUATE_FRESHMAN, PHD, DIRECT_PHD
     sub_scholarship_type = Column(String(50), default="GENERAL")  # GENERAL, NSTC, MOE_1W, MOE_2W
-    is_renewal = Column(Boolean, default=False)
+    is_renewal = Column(Boolean, default=False, nullable=False)  # 是否為續領申請
     previous_application_id = Column(Integer, ForeignKey("applications.id"))
     priority_score = Column(Integer, default=0)
     review_deadline = Column(DateTime(timezone=True))
@@ -103,25 +118,12 @@ class Application(Base):
     status_name = Column(String(100))
     
     # 學期資訊 (申請當時的學期)
-    academic_year = Column(String(10))  # trm_year
-    semester = Column(String(10))  # trm_term
+    academic_year = Column(Integer, nullable=False)  # 民國年，例如 113
+    semester = Column(Enum(Semester), nullable=False)
     
-    # 成績資訊 (申請當時)
-    gpa = Column(Numeric(4, 2))  # trm_ascore_gpa
-    class_ranking_percent = Column(Numeric(5, 2))  # trm_placingsrate
-    dept_ranking_percent = Column(Numeric(5, 2))  # trm_depplacingrate
-    completed_terms = Column(Integer)  # trm_termcount
-    
-    # 聯絡資訊 (申請時填寫)
-    contact_phone = Column(String(20))
-    contact_email = Column(String(255))
-    contact_address = Column(Text)
-    bank_account = Column(String(20))
-    
-    # 申請內容
-    research_proposal = Column(Text)  # 研究計畫
-    budget_plan = Column(Text)  # 經費規劃
-    milestone_plan = Column(Text)  # 里程碑規劃
+    # 申請資料 (申請當時)
+    student_data = Column(JSON)  # Student 資料
+    submitted_form_data = Column(JSON)  # Field, Document 資料
     
     # 同意條款
     agree_terms = Column(Boolean, default=False)
@@ -144,7 +146,6 @@ class Application(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # 其他資訊
-    form_data = Column(JSON)  # 儲存完整表單資料
     meta_data = Column(JSON)  # 額外的元資料
     
     # 關聯
@@ -156,11 +157,20 @@ class Application(Base):
     
     # Enhanced relationships for issue #10
     scholarship_type_ref = relationship("ScholarshipType", foreign_keys=[scholarship_type_id], overlaps="applications")
+    scholarship = relationship("ScholarshipType", foreign_keys=[scholarship_type_id])
     previous_application = relationship("Application", remote_side=[id])
     
     files = relationship("ApplicationFile", back_populates="application", cascade="all, delete-orphan")
     reviews = relationship("ApplicationReview", back_populates="application", cascade="all, delete-orphan")
     professor_reviews = relationship("ProfessorReview", back_populates="application", cascade="all, delete-orphan")
+
+    # 唯一約束：確保每個學生在每個學年、學期、獎學金組合下只能有一個申請
+    __table_args__ = (
+        UniqueConstraint(
+            'student_id', 'scholarship_type_id', 'academic_year', 'semester',
+            name='uq_student_scholarship_academic_term'
+        ),
+    )
 
     def __repr__(self):
         return f"<Application(id={self.id}, app_id={self.app_id}, status={self.status})>"
@@ -224,6 +234,47 @@ class Application(Base):
             except ValueError:
                 return ScholarshipSubType.GENERAL
         return ScholarshipSubType.GENERAL
+    
+    @property
+    def academic_term_label(self) -> str:
+        """Get academic term label in Chinese"""
+        return f"{self.academic_year}學年度 {self.get_semester_label()}"
+    
+    def get_semester_label(self) -> str:
+        """Get semester label in Chinese"""
+        return {
+            Semester.FIRST: "第一學期",
+            Semester.SECOND: "第二學期",
+        }.get(self.semester, "")
+    
+    @property
+    def is_renewal_application(self) -> bool:
+        """Check if this is a renewal application"""
+        return self.is_renewal
+    
+    @property
+    def is_general_application(self) -> bool:
+        """Check if this is a general application"""
+        return not self.is_renewal
+    
+    @property
+    def application_type_label(self) -> str:
+        """Get application type label in Chinese"""
+        return "續領申請" if self.is_renewal else "一般申請"
+    
+    def get_review_stage(self) -> Optional[str]:
+        """Get current review stage based on application type and status"""
+        if self.is_renewal:
+            if self.status == ApplicationStatus.SUBMITTED.value:
+                return "renewal_professor"
+            elif self.status == ApplicationStatus.RECOMMENDED.value:
+                return "renewal_college"
+        else:
+            if self.status == ApplicationStatus.SUBMITTED.value:
+                return "general_professor"
+            elif self.status == ApplicationStatus.RECOMMENDED.value:
+                return "general_college"
+        return None
 
 
 class ApplicationFile(Base):
@@ -236,7 +287,6 @@ class ApplicationFile(Base):
     # 檔案資訊
     filename = Column(String(255), nullable=False)
     original_filename = Column(String(255))
-    file_path = Column(String(500))  # For backward compatibility
     object_name = Column(String(500))  # MinIO object name
     file_size = Column(Integer)
     mime_type = Column(String(100))
@@ -262,6 +312,26 @@ class ApplicationFile(Base):
 
     def __repr__(self):
         return f"<ApplicationFile(id={self.id}, filename={self.filename}, application_id={self.application_id})>"
+    
+    @property
+    def file_path(self) -> Optional[str]:
+        """Dynamic property for file preview URL"""
+        return getattr(self, '_file_path', None)
+    
+    @file_path.setter
+    def file_path(self, value: Optional[str]):
+        """Set file preview URL"""
+        self._file_path = value
+    
+    @property
+    def download_url(self) -> Optional[str]:
+        """Dynamic property for file download URL"""
+        return getattr(self, '_download_url', None)
+    
+    @download_url.setter
+    def download_url(self, value: Optional[str]):
+        """Set file download URL"""
+        self._download_url = value
 
 
 class ApplicationReview(Base):
@@ -299,18 +369,47 @@ class ApplicationReview(Base):
 
 
 class ProfessorReview(Base):
+    """Professor review model for scholarship applications"""
     __tablename__ = "professor_reviews"
+    
     id = Column(Integer, primary_key=True, index=True)
     application_id = Column(Integer, ForeignKey("applications.id"), nullable=False)
     professor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    selected_awards = Column(JSON)
-    recommendation = Column(Text)
+    
+    # 整體推薦意見
+    recommendation = Column(Text)  # 對整體申請的意見（可留可不留）
     review_status = Column(String(20), default="pending")
     reviewed_at = Column(DateTime(timezone=True))
+    
+    # 時間戳記
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-
+    
+    # 關聯
     application = relationship("Application", back_populates="professor_reviews")
     professor = relationship("User")
+    items = relationship("ProfessorReviewItem", back_populates="review", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<ProfessorReview(id={self.id}, application_id={self.application_id}, professor_id={self.professor_id})>" 
+        return f"<ProfessorReview(id={self.id}, application_id={self.application_id}, professor_id={self.professor_id})>"
+
+
+class ProfessorReviewItem(Base):
+    """Professor review item for individual scholarship sub-types"""
+    __tablename__ = "professor_review_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    review_id = Column(Integer, ForeignKey("professor_reviews.id"), nullable=False)
+    sub_type_code = Column(String(50), nullable=False)  # e.g., "moe_1w"
+    
+    # 推薦結果
+    is_recommended = Column(Boolean, nullable=False, default=False)
+    comments = Column(Text)  # 教授針對該子項目的意見
+    
+    # 時間戳記
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # 關聯
+    review = relationship("ProfessorReview", back_populates="items")
+
+    def __repr__(self):
+        return f"<ProfessorReviewItem(id={self.id}, review_id={self.review_id}, sub_type_code={self.sub_type_code})>" 

@@ -1,3 +1,7 @@
+"""
+Comprehensive scholarship service for scholarship management
+"""
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, desc, asc
