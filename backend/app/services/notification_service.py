@@ -8,7 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models.notification import Notification, NotificationRead, NotificationType, NotificationPriority
+from app.models.notification_template import NotificationTemplate, NotificationTemplateType
 from app.models.user import User
+from app.services.notification_template_service import NotificationTemplateService
+from app.services.notification_template_variable_service import NotificationTemplateVariableService
 
 
 class NotificationService:
@@ -16,6 +19,8 @@ class NotificationService:
     
     def __init__(self, db: AsyncSession):
         self.db = db
+        self.template_service = NotificationTemplateService(db)
+        self.variable_service = NotificationTemplateVariableService(db)
     
     async def createUserNotification(
         self,
@@ -604,4 +609,322 @@ class NotificationService:
             system_updated = len(read_records)
         
         await self.db.commit()
-        return personal_updated + system_updated 
+        return personal_updated + system_updated
+    
+    # === Template-based notification methods === #
+    
+    async def createNotificationFromTemplate(
+        self,
+        user_id: int,
+        template_type: str,
+        scholarship_type_id: Optional[int] = None,
+        context_data: Optional[Dict[str, Any]] = None,
+        language: str = "zh",
+        expires_at: Optional[datetime] = None,
+        send_email: bool = False,
+        related_resource_type: Optional[str] = None,
+        related_resource_id: Optional[int] = None,
+        action_url: Optional[str] = None
+    ) -> Optional[Notification]:
+        """
+        Create a notification using a template
+        
+        Args:
+            user_id: Target user ID
+            template_type: Type of template to use
+            scholarship_type_id: Scholarship type ID (for template selection)
+            context_data: Data to populate template variables
+            language: Language for template selection
+            expires_at: When notification expires
+            send_email: Whether to send email notification
+            related_resource_type: Type of related resource
+            related_resource_id: ID of related resource
+            action_url: Action URL for notification
+            
+        Returns:
+            Created notification or None if template not found
+        """
+        # Get the appropriate template
+        template = await self.template_service.get_default_template(
+            scholarship_type_id, 
+            template_type
+        )
+        
+        if not template:
+            # Fallback to basic notification if no template found
+            return await self.createUserNotification(
+                user_id=user_id,
+                title=f"Notification: {template_type}",
+                message="A notification has been generated for you.",
+                notification_type=NotificationType.INFO.value,
+                expires_at=expires_at,
+                related_resource_type=related_resource_type,
+                related_resource_id=related_resource_id,
+                action_url=action_url
+            )
+        
+        # Render the template
+        context = context_data or {}
+        subject, body, missing_vars, invalid_vars = await self.variable_service.render_template(
+            template, context, language
+        )
+        
+        # Determine notification type based on template type
+        notification_type = self._get_notification_type_for_template(template_type)
+        priority = self._get_priority_for_template(template_type)
+        
+        # Create the notification
+        return await self.createUserNotification(
+            user_id=user_id,
+            title=subject,
+            message=body,
+            title_en=subject if language == "en" else None,
+            message_en=body if language == "en" else None,
+            notification_type=notification_type,
+            priority=priority,
+            related_resource_type=related_resource_type,
+            related_resource_id=related_resource_id,
+            action_url=action_url,
+            expires_at=expires_at,
+            send_email=send_email,
+            metadata={
+                "template_id": template.id,
+                "template_type": template_type,
+                "missing_variables": missing_vars,
+                "invalid_variables": invalid_vars,
+                "context_data": context_data
+            }
+        )
+
+    async def notifyApplicationStatusChangeWithTemplate(
+        self,
+        user_id: int,
+        application_id: int,
+        new_status: str,
+        scholarship_type_id: int,
+        language: str = "zh"
+    ) -> Optional[Notification]:
+        """
+        Notify application status change using template
+        """
+        # Build context data for the application
+        context = await self.variable_service.build_context_for_application(
+            application_id,
+            NotificationTemplateType.APPLICATION.value,
+            {"application_status": new_status}
+        )
+        
+        return await self.createNotificationFromTemplate(
+            user_id=user_id,
+            template_type=NotificationTemplateType.APPLICATION.value,
+            scholarship_type_id=scholarship_type_id,
+            context_data=context,
+            language=language,
+            related_resource_type="application",
+            related_resource_id=application_id,
+            action_url=f"/applications/{application_id}",
+            send_email=True
+        )
+
+    async def notifyWhitelistWithTemplate(
+        self,
+        user_id: int,
+        scholarship_type_id: int,
+        student_name: str,
+        student_id: str,
+        language: str = "zh"
+    ) -> Optional[Notification]:
+        """
+        Notify whitelist eligibility using template
+        """
+        # Build context data
+        context = await self.variable_service.build_context_for_scholarship(
+            scholarship_type_id,
+            NotificationTemplateType.WHITELIST.value,
+            {
+                "student_name": student_name,
+                "student_id": student_id
+            }
+        )
+        
+        return await self.createNotificationFromTemplate(
+            user_id=user_id,
+            template_type=NotificationTemplateType.WHITELIST.value,
+            scholarship_type_id=scholarship_type_id,
+            context_data=context,
+            language=language,
+            related_resource_type="scholarship",
+            related_resource_id=scholarship_type_id,
+            send_email=True
+        )
+
+    async def notifyRecommendationNeededWithTemplate(
+        self,
+        professor_user_id: int,
+        application_id: int,
+        scholarship_type_id: int,
+        student_name: str,
+        student_id: str,
+        professor_name: str,
+        language: str = "zh"
+    ) -> Optional[Notification]:
+        """
+        Notify professor that recommendation is needed using template
+        """
+        # Build context data
+        context = await self.variable_service.build_context_for_application(
+            application_id,
+            NotificationTemplateType.RECOMMENDATION.value,
+            {
+                "professor_name": professor_name,
+                "student_name": student_name,
+                "student_id": student_id
+            }
+        )
+        
+        return await self.createNotificationFromTemplate(
+            user_id=professor_user_id,
+            template_type=NotificationTemplateType.RECOMMENDATION.value,
+            scholarship_type_id=scholarship_type_id,
+            context_data=context,
+            language=language,
+            related_resource_type="application",
+            related_resource_id=application_id,
+            action_url=f"/applications/{application_id}/recommend",
+            send_email=True
+        )
+
+    async def notifyReviewNeededWithTemplate(
+        self,
+        reviewer_user_id: int,
+        application_id: int,
+        scholarship_type_id: int,
+        reviewer_name: str,
+        review_stage: str = "Initial Review",
+        language: str = "zh"
+    ) -> Optional[Notification]:
+        """
+        Notify reviewer that review is needed using template
+        """
+        # Build context data
+        context = await self.variable_service.build_context_for_application(
+            application_id,
+            NotificationTemplateType.REVIEW.value,
+            {
+                "reviewer_name": reviewer_name,
+                "review_stage": review_stage
+            }
+        )
+        
+        return await self.createNotificationFromTemplate(
+            user_id=reviewer_user_id,
+            template_type=NotificationTemplateType.REVIEW.value,
+            scholarship_type_id=scholarship_type_id,
+            context_data=context,
+            language=language,
+            related_resource_type="application",
+            related_resource_id=application_id,
+            action_url=f"/applications/{application_id}/review",
+            send_email=True
+        )
+
+    async def notifyDocumentRequiredWithTemplate(
+        self,
+        user_id: int,
+        application_id: int,
+        scholarship_type_id: int,
+        required_documents: List[str],
+        deadline: Optional[datetime] = None,
+        language: str = "zh"
+    ) -> Optional[Notification]:
+        """
+        Notify document requirement using template
+        """
+        # Build context data
+        context = await self.variable_service.build_context_for_application(
+            application_id,
+            NotificationTemplateType.SUPPLEMENTARY_DOCUMENT.value,
+            {
+                "required_documents": "、".join(required_documents),
+                "document_deadline": deadline.strftime('%Y/%m/%d') if deadline else ""
+            }
+        )
+        
+        return await self.createNotificationFromTemplate(
+            user_id=user_id,
+            template_type=NotificationTemplateType.SUPPLEMENTARY_DOCUMENT.value,
+            scholarship_type_id=scholarship_type_id,
+            context_data=context,
+            language=language,
+            expires_at=deadline,
+            related_resource_type="application",
+            related_resource_id=application_id,
+            action_url=f"/applications/{application_id}/documents",
+            send_email=True
+        )
+
+    async def notifyResultWithTemplate(
+        self,
+        user_id: int,
+        application_id: int,
+        scholarship_type_id: int,
+        result: str,
+        award_amount: Optional[float] = None,
+        language: str = "zh"
+    ) -> Optional[Notification]:
+        """
+        Notify application result using template
+        """
+        # Build context data
+        context = await self.variable_service.build_context_for_application(
+            application_id,
+            NotificationTemplateType.RESULT.value,
+            {
+                "result": result,
+                "award_amount": f"NT${award_amount:,.0f}" if award_amount else "N/A"
+            }
+        )
+        
+        notification_type = NotificationType.SUCCESS.value if result == "核准" else NotificationType.INFO.value
+        
+        return await self.createNotificationFromTemplate(
+            user_id=user_id,
+            template_type=NotificationTemplateType.RESULT.value,
+            scholarship_type_id=scholarship_type_id,
+            context_data=context,
+            language=language,
+            related_resource_type="application",
+            related_resource_id=application_id,
+            action_url=f"/applications/{application_id}",
+            send_email=True
+        )
+
+    # Private helper methods for template-based notifications
+    
+    def _get_notification_type_for_template(self, template_type: str) -> str:
+        """Get appropriate notification type for template type"""
+        template_notification_map = {
+            NotificationTemplateType.WHITELIST.value: NotificationType.INFO.value,
+            NotificationTemplateType.APPLICATION.value: NotificationType.INFO.value,
+            NotificationTemplateType.RECOMMENDATION.value: NotificationType.WARNING.value,
+            NotificationTemplateType.REVIEW.value: NotificationType.WARNING.value,
+            NotificationTemplateType.SUPPLEMENTARY_DOCUMENT.value: NotificationType.WARNING.value,
+            NotificationTemplateType.RESULT.value: NotificationType.INFO.value,
+            NotificationTemplateType.ROSTER_CREATION.value: NotificationType.SUCCESS.value,
+        }
+        
+        return template_notification_map.get(template_type, NotificationType.INFO.value)
+
+    def _get_priority_for_template(self, template_type: str) -> str:
+        """Get appropriate priority for template type"""
+        template_priority_map = {
+            NotificationTemplateType.WHITELIST.value: NotificationPriority.HIGH.value,
+            NotificationTemplateType.APPLICATION.value: NotificationPriority.NORMAL.value,
+            NotificationTemplateType.RECOMMENDATION.value: NotificationPriority.HIGH.value,
+            NotificationTemplateType.REVIEW.value: NotificationPriority.HIGH.value,
+            NotificationTemplateType.SUPPLEMENTARY_DOCUMENT.value: NotificationPriority.HIGH.value,
+            NotificationTemplateType.RESULT.value: NotificationPriority.HIGH.value,
+            NotificationTemplateType.ROSTER_CREATION.value: NotificationPriority.NORMAL.value,
+        }
+        
+        return template_priority_map.get(template_type, NotificationPriority.NORMAL.value) 

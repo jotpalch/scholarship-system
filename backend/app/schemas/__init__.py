@@ -6,6 +6,12 @@ from .application import (
 )
 from .scholarship import ScholarshipTypeResponse, ScholarshipRuleResponse
 from .notification import NotificationResponse
+from .notification_template import (
+    NotificationTemplateCreate, NotificationTemplateUpdate, NotificationTemplateResponse,
+    NotificationTemplateWithScholarship, NotificationTemplateSearch, NotificationTemplateListResponse,
+    NotificationTemplatePreview, NotificationTemplatePreviewResponse, NotificationTemplateBulkOperation,
+    NotificationTemplateVariableResponse, NotificationTemplateHistoryResponse
+)
 from .common import MessageResponse, PaginationParams, PaginatedResponse
 from .settings import (
     SystemSettingCreate, SystemSettingUpdate, SystemSettingResponse,
@@ -20,6 +26,10 @@ __all__ = [
     "ApplicationFileResponse", "ApplicationReviewCreate", "ApplicationReviewResponse",
     "ScholarshipTypeResponse", "ScholarshipRuleResponse",
     "NotificationResponse",
+    "NotificationTemplateCreate", "NotificationTemplateUpdate", "NotificationTemplateResponse",
+    "NotificationTemplateWithScholarship", "NotificationTemplateSearch", "NotificationTemplateListResponse",
+    "NotificationTemplatePreview", "NotificationTemplatePreviewResponse", "NotificationTemplateBulkOperation",
+    "NotificationTemplateVariableResponse", "NotificationTemplateHistoryResponse",
     "MessageResponse", "PaginationParams", "PaginatedResponse",
     "SystemSettingCreate", "SystemSettingUpdate", "SystemSettingResponse",
     "EmailTemplateCreate", "EmailTemplateUpdate", "EmailTemplateResponse",
