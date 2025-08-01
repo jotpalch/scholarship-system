@@ -142,6 +142,9 @@ Object.defineProperty(window, 'matchMedia', {
 // Mock window.scrollTo
 global.scrollTo = jest.fn()
 
+// Mock Element.scrollIntoView for Radix UI components
+Element.prototype.scrollIntoView = jest.fn()
+
 // Mock localStorage
 const localStorageMock = {
   getItem: jest.fn(),
