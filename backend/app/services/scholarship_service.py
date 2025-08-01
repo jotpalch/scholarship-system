@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 import logging
 from decimal import Decimal
 from app.models.scholarship import ScholarshipType, ScholarshipStatus
-from app.models.student import Student, StudentTermRecord
+from app.models.student import Student
 from app.core.exceptions import ValidationError
 from app.core.config import settings, DEV_SCHOLARSHIP_SETTINGS
 from typing import List, Union, Optional, Dict, Any, Tuple
@@ -67,45 +67,20 @@ class ScholarshipService:
         
         logger.info(f"Found {len(scholarships)} active scholarships")
         
-        # Get student's academic record to determine type
-        from app.models.student import StudentAcademicRecord, StudentType
-        stmt = select(StudentAcademicRecord).where(
-            StudentAcademicRecord.studentId == student.id
-        ).order_by(StudentAcademicRecord.createdAt.desc())
-        result = await self.db.execute(stmt)
-        academic_record = result.scalar_one_or_none()
+        # Get student type from the student model
+        from app.models.student import StudentType
+        student_type = student.get_student_type()
         
-        # Determine student type based on academic record
-        if academic_record:
-            if academic_record.degree == 1:  # 學士
-                student_type = StudentType.UNDERGRADUATE
-            elif academic_record.degree == 2:  # 碩士
-                student_type = StudentType.GRADUATE
-            elif academic_record.degree == 3:  # 博士
-                if student.stdNo and student.stdNo.startswith('D'):
-                    student_type = StudentType.DIRECT_PHD
-                else:
-                    student_type = StudentType.PHD
-            else:
-                student_type = StudentType.UNDERGRADUATE
-        else:
-            student_type = StudentType.UNDERGRADUATE
+        # Use student's term count (if available) or default to reasonable value
+        completed_terms = student.std_termcount or 1
         
-        # Get student's latest term record
-        stmt = select(StudentTermRecord).where(
-            StudentTermRecord.studentId == student.id
-        ).order_by(StudentTermRecord.academicYear.desc(), StudentTermRecord.semester.desc())
-        result = await self.db.execute(stmt)
-        latest_term = result.scalar_one_or_none()
+        # For now, we'll need to get GPA from external API or use default
+        # This would be replaced with actual API call in production
+        student_gpa = Decimal("3.0")  # Default GPA - should be fetched from student API
         
-        if not latest_term:
-            logger.warning(f"No term records found for student {student.stdNo}")
-            return []
-            
-        completed_terms = latest_term.completedTerms
-        logger.info(f"Student {student.stdNo} has {completed_terms} completed terms")
+        logger.info(f"Student {student.std_stdcode} has {completed_terms} completed terms")
         logger.info(f"Student type: {student_type.value}")
-        logger.info(f"Student GPA: {latest_term.gpa}")
+        logger.info(f"Student GPA: {student_gpa}")
         
         eligible_scholarships = []
         for scholarship in scholarships:
@@ -113,37 +88,57 @@ class ScholarshipService:
                 logger.info(f"\nChecking eligibility for scholarship: {scholarship.name}")
                 logger.info(f"Application period: {scholarship.application_start_date} to {scholarship.application_end_date}")
                 logger.info(f"Current time: {datetime.now(timezone.utc)}")
-                logger.info(f"Eligible student types: {scholarship.eligible_student_types}")
-                logger.info(f"Min GPA required: {scholarship.min_gpa}")
-                logger.info(f"Max completed terms: {scholarship.max_completed_terms}")
+                logger.info(f"Scholarship category: {scholarship.category}")
                 
                 # Check if scholarship is in application period
-                if not self._should_bypass_application_period() and not scholarship.is_application_period:
+                current_time = datetime.now(timezone.utc)
+                in_application_period = True
+                if scholarship.application_start_date and scholarship.application_end_date:
+                    in_application_period = scholarship.application_start_date <= current_time <= scholarship.application_end_date
+                
+                if not self._should_bypass_application_period() and not in_application_period:
                     logger.info(f"Skipping {scholarship.name}: Not in application period")
                     continue
                 elif self._should_bypass_application_period():
                     logger.info(f"DEV MODE: Bypassing application period check for {scholarship.name}")
                     
-                # Check student type eligibility
-                if scholarship.eligible_student_types and student_type.value not in scholarship.eligible_student_types:
-                    logger.info(f"Skipping {scholarship.name}: Student type {student_type.value} not in eligible types {scholarship.eligible_student_types}")
+                # Check student type eligibility based on category
+                # Map scholarship categories to student types that can apply
+                eligible_for_category = True  # Default to eligible
+                
+                if scholarship.category == 'undergraduate_freshman':
+                    # Only undergraduate students can apply for undergraduate scholarships
+                    if student_type.value.lower() not in ['undergraduate', 'undergraduate_freshman']:
+                        eligible_for_category = False
+                elif scholarship.category == 'phd':
+                    # PhD and graduate students can apply for PhD scholarships
+                    if student_type.value.lower() not in ['phd', 'graduate', 'master']:
+                        eligible_for_category = False
+                elif scholarship.category == 'direct_phd':
+                    # Only direct PhD students can apply
+                    if student_type.value.lower() not in ['direct_phd', 'phd']:
+                        eligible_for_category = False
+                
+                if not eligible_for_category and not self._should_bypass_application_period():
+                    logger.info(f"Skipping {scholarship.name}: Student type {student_type.value} not eligible for category {scholarship.category}")
                     continue
                 
                 # Check whitelist eligibility - PRIMARY REQUIREMENT
-                # Changed: Only whitelisted students can apply (regardless of GPA)
                 if not self._should_bypass_whitelist():
-                    if not scholarship.is_student_in_whitelist(student.id):
-                        logger.info(f"Skipping {scholarship.name}: Student {student.stdNo} not in whitelist")
-                        continue
+                    if scholarship.whitelist_enabled:
+                        # If whitelist is enabled, student must be in the whitelist
+                        if not scholarship.whitelist_student_ids or student.id not in scholarship.whitelist_student_ids:
+                            logger.info(f"Skipping {scholarship.name}: Student {student.std_stdcode} not in whitelist (whitelist enabled but student not found)")
+                            continue
+                        else:
+                            logger.info(f"Student {student.std_stdcode} found in whitelist for {scholarship.name}")
                     else:
-                        logger.info(f"Student {student.stdNo} found in whitelist for {scholarship.name}")
+                        logger.info(f"Scholarship {scholarship.name}: Whitelist not enabled, allowing all students")
                 elif self._should_bypass_whitelist():
                     logger.info(f"DEV MODE: Bypassing whitelist check for {scholarship.name}")
                 
-                # Optional: Check term count requirement (keeping this as additional validation)
-                if scholarship.max_completed_terms and completed_terms > scholarship.max_completed_terms:
-                    logger.info(f"Skipping {scholarship.name}: Completed terms {completed_terms} exceeds max {scholarship.max_completed_terms}")
-                    continue
+                # For now, we'll skip complex term count requirements since we don't have external API integration yet
+                logger.info(f"Student has {completed_terms} completed terms")
                 
                 # If all checks pass, add to eligible scholarships
                 logger.info(f"Scholarship {scholarship.name} is eligible!")
