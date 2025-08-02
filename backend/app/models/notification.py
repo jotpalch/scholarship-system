@@ -132,4 +132,107 @@ class NotificationRead(Base):
     )
     
     def __repr__(self):
-        return f"<NotificationRead(notification_id={self.notification_id}, user_id={self.user_id}, read_at={self.read_at})>" 
+        return f"<NotificationRead(notification_id={self.notification_id}, user_id={self.user_id}, read_at={self.read_at})>"
+
+
+class NotificationPreference(Base):
+    """User notification preferences model"""
+    __tablename__ = "notification_preferences"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    
+    # Email preferences
+    email_enabled = Column(Boolean, default=True)
+    email_application_updates = Column(Boolean, default=True)
+    email_system_announcements = Column(Boolean, default=True)
+    email_deadline_reminders = Column(Boolean, default=True)
+    email_document_requests = Column(Boolean, default=True)
+    
+    # In-app preferences
+    push_enabled = Column(Boolean, default=True)
+    push_application_updates = Column(Boolean, default=True)
+    push_system_announcements = Column(Boolean, default=True)
+    push_deadline_reminders = Column(Boolean, default=True)
+    push_document_requests = Column(Boolean, default=True)
+    
+    # Frequency settings
+    digest_frequency = Column(String(20), default="daily")  # immediate, daily, weekly, disabled
+    quiet_hours_start = Column(String(5))  # Format: "22:00"
+    quiet_hours_end = Column(String(5))    # Format: "08:00"
+    
+    # Notification types to receive
+    notification_types = Column(JSON, default=lambda: ["info", "warning", "error", "success", "reminder"])
+    priority_threshold = Column(String(20), default="normal")  # only show notifications of this priority or higher
+    
+    # Auto-read settings
+    auto_mark_read_after_days = Column(Integer, default=7)
+    
+    # Time settings
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    user = relationship("User")
+    
+    def __repr__(self):
+        return f"<NotificationPreference(user_id={self.user_id}, email_enabled={self.email_enabled}, push_enabled={self.push_enabled})>"
+    
+    def should_send_email(self, notification_type: str) -> bool:
+        """Check if email should be sent for a notification type"""
+        if not self.email_enabled:
+            return False
+        
+        type_mapping = {
+            "application": self.email_application_updates,
+            "system": self.email_system_announcements,
+            "reminder": self.email_deadline_reminders,
+            "document": self.email_document_requests
+        }
+        
+        return type_mapping.get(notification_type, True)
+    
+    def should_send_push(self, notification_type: str) -> bool:
+        """Check if push notification should be sent for a notification type"""
+        if not self.push_enabled:
+            return False
+        
+        type_mapping = {
+            "application": self.push_application_updates,
+            "system": self.push_system_announcements,
+            "reminder": self.push_deadline_reminders,
+            "document": self.push_document_requests
+        }
+        
+        return type_mapping.get(notification_type, True)
+    
+    def should_show_notification(self, notification_type: str, priority: str) -> bool:
+        """Check if notification should be shown based on preferences"""
+        # Check if notification type is enabled
+        if notification_type not in self.notification_types:
+            return False
+        
+        # Check priority threshold
+        priority_levels = {"low": 1, "normal": 2, "high": 3, "urgent": 4}
+        min_priority = priority_levels.get(self.priority_threshold, 2)
+        current_priority = priority_levels.get(priority, 2)
+        
+        return current_priority >= min_priority
+    
+    def is_quiet_hours(self) -> bool:
+        """Check if current time is within quiet hours"""
+        if not self.quiet_hours_start or not self.quiet_hours_end:
+            return False
+        
+        from datetime import datetime, time
+        
+        now = datetime.now().time()
+        start_time = datetime.strptime(self.quiet_hours_start, "%H:%M").time()
+        end_time = datetime.strptime(self.quiet_hours_end, "%H:%M").time()
+        
+        if start_time <= end_time:
+            # Same day quiet hours (e.g., 14:00 - 18:00)
+            return start_time <= now <= end_time
+        else:
+            # Overnight quiet hours (e.g., 22:00 - 08:00)
+            return now >= start_time or now <= end_time 

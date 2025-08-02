@@ -28,7 +28,7 @@ from app.models.student import (
 )
 from app.models.scholarship import ScholarshipType, ScholarshipRule
 from app.models.application import Application, ApplicationStatus, ApplicationReview
-from app.models.notification import Notification, NotificationType
+from app.models.notification import Notification, NotificationType, NotificationRead, NotificationPreference
 from app.models.audit_log import AuditLog, AuditAction
 from app.models.system_setting import SystemSetting
 
@@ -64,6 +64,8 @@ __all__ = [
     # Other models
     "Notification",
     "NotificationType",
+    "NotificationRead",
+    "NotificationPreference",
     "AuditLog",
     "AuditAction",
     "SystemSetting"

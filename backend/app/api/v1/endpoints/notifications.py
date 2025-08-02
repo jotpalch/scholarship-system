@@ -11,10 +11,12 @@ from datetime import datetime
 
 from app.core.deps import get_current_user, get_db
 from app.models.user import User
-from app.models.notification import Notification, NotificationType, NotificationPriority
-from app.schemas.notification import NotificationResponse, NotificationCreate, NotificationUpdate
+from app.models.notification import Notification, NotificationType, NotificationPriority, NotificationPreference
+from app.schemas.notification import NotificationResponse, NotificationCreate, NotificationUpdate, NotificationPreferenceResponse, NotificationPreferenceCreate, NotificationPreferenceUpdate
 from app.schemas.response import ApiResponse
 from app.services.notification_service import NotificationService
+from app.services.websocket_manager import websocket_manager
+from app.services.cache_service import cache_service
 
 router = APIRouter()
 
@@ -33,7 +35,7 @@ async def getUserNotifications(
     包含個人通知和系統公告，按用戶分別記錄已讀狀態
     """
     try:
-        service = NotificationService(db)
+        service = NotificationService(db, websocket_manager, cache_service)
         notifications_data = await service.getUserNotifications(
             user_id=current_user.id,
             skip=skip,
@@ -62,7 +64,7 @@ async def getUnreadNotificationCount(
     按用戶分別計算未讀狀態
     """
     try:
-        service = NotificationService(db)
+        service = NotificationService(db, websocket_manager, cache_service)
         count = await service.getUnreadNotificationCount(current_user.id)
         
         return ApiResponse(
@@ -86,7 +88,7 @@ async def markNotificationAsRead(
     支援個人通知和系統公告的分別已讀狀態
     """
     try:
-        service = NotificationService(db)
+        service = NotificationService(db, websocket_manager, cache_service)
         success = await service.markNotificationAsRead(notification_id, current_user.id)
         
         if not success:
@@ -115,7 +117,7 @@ async def markAllNotificationsAsRead(
     支援個人通知和系統公告的分別已讀狀態
     """
     try:
-        service = NotificationService(db)
+        service = NotificationService(db, websocket_manager, cache_service)
         updated_count = await service.markAllNotificationsAsRead(current_user.id)
         
         return ApiResponse(
@@ -245,7 +247,7 @@ async def createSystemAnnouncement(
         raise HTTPException(status_code=403, detail="需要管理員權限")
     
     try:
-        notification_service = NotificationService(db)
+        notification_service = NotificationService(db, websocket_manager, cache_service)
         
         notification = await notification_service.createSystemAnnouncement(
             title=notification_data.title,
@@ -303,7 +305,7 @@ async def createTestNotifications(
         raise HTTPException(status_code=403, detail="需要管理員權限")
     
     try:
-        notification_service = NotificationService(db)
+        notification_service = NotificationService(db, websocket_manager, cache_service)
         created_notifications = []
         
         # 創建系統公告
@@ -513,7 +515,7 @@ async def createAnnouncement(
         raise HTTPException(status_code=403, detail="需要管理員權限")
     
     try:
-        notification_service = NotificationService(db)
+        notification_service = NotificationService(db, websocket_manager, cache_service)
         
         notification = await notification_service.createSystemAnnouncement(
             title=notification_data.title,
@@ -692,4 +694,171 @@ async def deleteAnnouncement(
         raise
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=f"刪除系統公告失敗: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"刪除系統公告失敗: {str(e)}")
+
+
+# === User Notification Preferences Endpoints === #
+
+@router.get("/preferences", response_model=ApiResponse[NotificationPreferenceResponse])
+async def getUserNotificationPreferences(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    獲取用戶通知偏好設定
+    """
+    try:
+        stmt = select(NotificationPreference).where(NotificationPreference.user_id == current_user.id)
+        result = await db.execute(stmt)
+        preferences = result.scalar_one_or_none()
+        
+        if not preferences:
+            # Create default preferences for user
+            preferences = NotificationPreference(user_id=current_user.id)
+            db.add(preferences)
+            await db.commit()
+            await db.refresh(preferences)
+        
+        return ApiResponse(
+            success=True,
+            message="通知偏好設定獲取成功",
+            data=preferences
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"獲取通知偏好設定失敗: {str(e)}")
+
+
+@router.put("/preferences", response_model=ApiResponse[NotificationPreferenceResponse])
+async def updateUserNotificationPreferences(
+    preferences_data: NotificationPreferenceUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    更新用戶通知偏好設定
+    """
+    try:
+        stmt = select(NotificationPreference).where(NotificationPreference.user_id == current_user.id)
+        result = await db.execute(stmt)
+        preferences = result.scalar_one_or_none()
+        
+        if not preferences:
+            # Create new preferences if none exist
+            preferences = NotificationPreference(user_id=current_user.id)
+            db.add(preferences)
+        
+        # Update preferences with provided data
+        update_data = preferences_data.dict(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(preferences, field, value)
+        
+        preferences.updated_at = datetime.utcnow()
+        
+        await db.commit()
+        await db.refresh(preferences)
+        
+        return ApiResponse(
+            success=True,
+            message="通知偏好設定更新成功",
+            data=preferences
+        )
+        
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"更新通知偏好設定失敗: {str(e)}")
+
+
+@router.post("/preferences", response_model=ApiResponse[NotificationPreferenceResponse])
+async def createUserNotificationPreferences(
+    preferences_data: NotificationPreferenceCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    創建用戶通知偏好設定
+    """
+    try:
+        # Check if preferences already exist
+        stmt = select(NotificationPreference).where(NotificationPreference.user_id == current_user.id)
+        result = await db.execute(stmt)
+        existing_preferences = result.scalar_one_or_none()
+        
+        if existing_preferences:
+            raise HTTPException(status_code=409, detail="用戶通知偏好設定已存在")
+        
+        # Create new preferences
+        preferences = NotificationPreference(
+            user_id=current_user.id,
+            **preferences_data.dict()
+        )
+        
+        db.add(preferences)
+        await db.commit()
+        await db.refresh(preferences)
+        
+        return ApiResponse(
+            success=True,
+            message="通知偏好設定創建成功",
+            data=preferences
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"創建通知偏好設定失敗: {str(e)}")
+
+
+@router.delete("/preferences", response_model=ApiResponse[dict])
+async def resetUserNotificationPreferences(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    重置用戶通知偏好設定為預設值
+    """
+    try:
+        stmt = select(NotificationPreference).where(NotificationPreference.user_id == current_user.id)
+        result = await db.execute(stmt)
+        preferences = result.scalar_one_or_none()
+        
+        if not preferences:
+            raise HTTPException(status_code=404, detail="通知偏好設定不存在")
+        
+        # Reset to default values
+        preferences.email_enabled = True
+        preferences.email_application_updates = True
+        preferences.email_system_announcements = True
+        preferences.email_deadline_reminders = True
+        preferences.email_document_requests = True
+        
+        preferences.push_enabled = True
+        preferences.push_application_updates = True
+        preferences.push_system_announcements = True
+        preferences.push_deadline_reminders = True
+        preferences.push_document_requests = True
+        
+        preferences.digest_frequency = "daily"
+        preferences.quiet_hours_start = None
+        preferences.quiet_hours_end = None
+        
+        preferences.notification_types = ["info", "warning", "error", "success", "reminder"]
+        preferences.priority_threshold = "normal"
+        
+        preferences.auto_mark_read_after_days = 7
+        preferences.updated_at = datetime.utcnow()
+        
+        await db.commit()
+        
+        return ApiResponse(
+            success=True,
+            message="通知偏好設定已重置為預設值",
+            data={"message": "偏好設定已重置"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"重置通知偏好設定失敗: {str(e)}") 

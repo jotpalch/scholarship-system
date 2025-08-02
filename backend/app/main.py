@@ -17,6 +17,7 @@ from app.core.exceptions import ScholarshipException, scholarship_exception_hand
 
 # Import routers
 from app.api.v1.api import api_router
+from app.services.cache_service import cache_service
 
 # Configure logging
 logging.basicConfig(
@@ -66,6 +67,21 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
 )
+
+
+# Application startup and shutdown events
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    # Initialize cache service
+    await cache_service.connect()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup services on shutdown"""
+    # Disconnect cache service
+    await cache_service.disconnect()
 
 
 # Request tracing middleware
@@ -134,11 +150,14 @@ async def general_exception_handler(request: Request, exc: Exception):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
+    cache_health = await cache_service.health_check()
+    
     return {
         "success": True,
         "message": "Service is healthy",
         "app_name": settings.app_name,
-        "version": settings.app_version
+        "version": settings.app_version,
+        "cache": cache_health
     }
 
 

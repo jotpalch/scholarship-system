@@ -17,26 +17,26 @@ from sqlalchemy.pool import StaticPool
 from app.core.config import settings
 from app.core.security import get_password_hash
 from app.db.base import Base
-from app.db.session import get_db
+from app.db.deps import get_db
 from app.main import app
 from app.models.user import User, UserRole
-from app.models.scholarship import Scholarship
+from app.models.scholarship import ScholarshipType
 from app.models.application import Application, ApplicationStatus
 
 # Override settings for testing
-settings.TESTING = True
-settings.DATABASE_URL = "sqlite+aiosqlite:///:memory:"
-settings.DATABASE_URL_SYNC = "sqlite:///:memory:"
+import os
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
+os.environ["DATABASE_URL_SYNC"] = "sqlite:///:memory:"
 
 # Create test engines
 test_engine = create_async_engine(
-    settings.DATABASE_URL,
+    "sqlite+aiosqlite:///:memory:",
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
 
 test_engine_sync = create_engine(
-    settings.DATABASE_URL_SYNC,
+    "sqlite:///:memory:",
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
@@ -149,18 +149,16 @@ async def test_professor(db: AsyncSession) -> User:
 
 
 @pytest_asyncio.fixture
-async def test_scholarship(db: AsyncSession) -> Scholarship:
+async def test_scholarship(db: AsyncSession) -> ScholarshipType:
     """Create a test scholarship."""
-    scholarship = Scholarship(
+    scholarship = ScholarshipType(
+        code="TEST_SCHOLARSHIP",
         name="Test Academic Excellence Scholarship",
         description="Test scholarship for academic excellence",
-        type="academic_excellence",
         amount=5000.00,
         currency="USD",
-        gpa_requirement=3.8,
-        deadline="2025-12-31T23:59:59",
-        max_recipients=10,
-        is_active=True,
+        min_gpa=3.8,
+        status="active",
     )
     db.add(scholarship)
     await db.commit()
@@ -170,12 +168,12 @@ async def test_scholarship(db: AsyncSession) -> Scholarship:
 
 @pytest_asyncio.fixture
 async def test_application(
-    db: AsyncSession, test_user: User, test_scholarship: Scholarship
+    db: AsyncSession, test_user: User, test_scholarship: ScholarshipType
 ) -> Application:
     """Create a test application."""
     application = Application(
         student_id=test_user.id,
-        scholarship_id=test_scholarship.id,
+        scholarship_type_id=test_scholarship.id,
         status=ApplicationStatus.DRAFT,
         gpa=3.9,
         personal_statement="This is my test personal statement.",

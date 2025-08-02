@@ -166,6 +166,48 @@ export interface NotificationResponse {
   metadata?: Record<string, any>
 }
 
+export interface NotificationPreferences {
+  id: number
+  user_id: number
+  email_enabled: boolean
+  email_application_updates: boolean
+  email_system_announcements: boolean
+  email_deadline_reminders: boolean
+  email_document_requests: boolean
+  push_enabled: boolean
+  push_application_updates: boolean
+  push_system_announcements: boolean
+  push_deadline_reminders: boolean
+  push_document_requests: boolean
+  digest_frequency: string
+  quiet_hours_start?: string
+  quiet_hours_end?: string
+  notification_types: string[]
+  priority_threshold: string
+  auto_mark_read_after_days: number
+  created_at: string
+  updated_at: string
+}
+
+export interface NotificationPreferencesUpdate {
+  email_enabled?: boolean
+  email_application_updates?: boolean
+  email_system_announcements?: boolean
+  email_deadline_reminders?: boolean
+  email_document_requests?: boolean
+  push_enabled?: boolean
+  push_application_updates?: boolean
+  push_system_announcements?: boolean
+  push_deadline_reminders?: boolean
+  push_document_requests?: boolean
+  digest_frequency?: string
+  quiet_hours_start?: string
+  quiet_hours_end?: string
+  notification_types?: string[]
+  priority_threshold?: string
+  auto_mark_read_after_days?: number
+}
+
 export interface ScholarshipType {
   id: number
   code: string
@@ -716,6 +758,24 @@ class ApiClient {
     createTestNotifications: async (): Promise<ApiResponse<{ created_count: number; notification_ids: number[] }>> => {
       return this.request('/notifications/admin/create-test-notifications', {
         method: 'POST',
+      })
+    },
+
+    // Notification preferences endpoints
+    getPreferences: async (): Promise<ApiResponse<NotificationPreferences>> => {
+      return this.request('/notifications/preferences')
+    },
+
+    updatePreferences: async (preferences: NotificationPreferencesUpdate): Promise<ApiResponse<NotificationPreferences>> => {
+      return this.request('/notifications/preferences', {
+        method: 'PUT',
+        body: JSON.stringify(preferences),
+      })
+    },
+
+    resetPreferences: async (): Promise<ApiResponse<{ message: string }>> => {
+      return this.request('/notifications/preferences', {
+        method: 'DELETE',
       })
     },
   }

@@ -5,17 +5,22 @@ Notification service for creating and managing user notifications
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete, func
+import logging
 
 from app.models.notification import Notification, NotificationRead, NotificationType, NotificationPriority
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationService:
     """Service for managing notifications"""
     
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, websocket_manager=None, cache_service=None):
         self.db = db
+        self.websocket_manager = websocket_manager
+        self.cache_service = cache_service
     
     async def createUserNotification(
         self,
@@ -71,6 +76,32 @@ class NotificationService:
         await self.db.commit()
         await self.db.refresh(notification)
         
+        # Send real-time notification via WebSocket
+        if self.websocket_manager:
+            try:
+                notification_data = {
+                    "id": notification.id,
+                    "title": notification.title,
+                    "title_en": notification.title_en,
+                    "message": notification.message,
+                    "message_en": notification.message_en,
+                    "notification_type": notification.notification_type,
+                    "priority": notification.priority,
+                    "action_url": notification.action_url,
+                    "created_at": notification.created_at.isoformat()
+                }
+                await self.websocket_manager.send_notification(user_id, notification_data)
+                
+                # Update unread count
+                unread_count = await self.getUnreadNotificationCount(user_id)
+                await self.websocket_manager.send_unread_count_update(user_id, unread_count)
+            except Exception as e:
+                logger.error(f"Failed to send WebSocket notification: {e}")
+        
+        # Invalidate user cache
+        if self.cache_service:
+            await self.cache_service.invalidate_user_cache(user_id)
+        
         return notification
     
     async def createSystemAnnouncement(
@@ -119,6 +150,28 @@ class NotificationService:
         self.db.add(notification)
         await self.db.commit()
         await self.db.refresh(notification)
+        
+        # Send system announcement to all connected users via WebSocket
+        if self.websocket_manager:
+            try:
+                announcement_data = {
+                    "id": notification.id,
+                    "title": notification.title,
+                    "title_en": notification.title_en,
+                    "message": notification.message,
+                    "message_en": notification.message_en,
+                    "notification_type": notification.notification_type,
+                    "priority": notification.priority,
+                    "action_url": notification.action_url,
+                    "created_at": notification.created_at.isoformat()
+                }
+                await self.websocket_manager.send_system_announcement(announcement_data)
+            except Exception as e:
+                logger.error(f"Failed to send WebSocket system announcement: {e}")
+        
+        # Invalidate all user caches for system announcements
+        if self.cache_service:
+            await self.cache_service.invalidate_all_user_caches()
         
         return notification
     
@@ -351,6 +404,15 @@ class NotificationService:
         Returns:
             List[Dict]: 包含通知資料和已讀狀態的字典列表
         """
+        
+        # Try to get from cache first
+        if self.cache_service:
+            cached_notifications = await self.cache_service.get_user_notifications(
+                user_id, skip, limit, unread_only, notification_type
+            )
+            if cached_notifications is not None:
+                logger.debug(f"Retrieved notifications from cache for user {user_id}")
+                return cached_notifications
         from sqlalchemy import and_, or_, desc, func, case
         from sqlalchemy.orm import joinedload, selectinload
         
@@ -397,13 +459,14 @@ class NotificationService:
                 )
             )
         
-        # 添加排序和分頁
+        # 添加排序和分頁 - 使用索引優化的排序
         query = base_query.order_by(
             desc(case((Notification.priority == 'urgent', 4), 
                      (Notification.priority == 'high', 3),
                      (Notification.priority == 'normal', 2),
                      else_=1)),
-            desc(Notification.created_at)
+            desc(Notification.created_at),
+            desc(Notification.id)  # Add ID for consistent ordering
         ).offset(skip).limit(limit)
         
         result = await self.db.execute(query)
@@ -453,6 +516,12 @@ class NotificationService:
                 "metadata": notification.meta_data
             })
         
+        # Cache the results
+        if self.cache_service:
+            await self.cache_service.set_user_notifications(
+                user_id, result_list, skip, limit, unread_only, notification_type
+            )
+        
         return result_list
     
     async def getUnreadNotificationCount(self, user_id: int) -> int:
@@ -465,6 +534,13 @@ class NotificationService:
         Returns:
             int: 未讀通知數量
         """
+        # Try to get from cache first
+        if self.cache_service:
+            cached_count = await self.cache_service.get_unread_count(user_id)
+            if cached_count is not None:
+                logger.debug(f"Retrieved unread count from cache for user {user_id}")
+                return cached_count
+        
         from sqlalchemy import and_, or_, func
         
         # 個人通知未讀數量
@@ -501,7 +577,13 @@ class NotificationService:
         personal_count = personal_result.scalar() or 0
         system_count = system_result.scalar() or 0
         
-        return personal_count + system_count
+        total_count = personal_count + system_count
+        
+        # Cache the result
+        if self.cache_service:
+            await self.cache_service.set_unread_count(user_id, total_count)
+        
+        return total_count
     
     async def markNotificationAsRead(self, notification_id: int, user_id: int) -> bool:
         """
@@ -545,6 +627,23 @@ class NotificationService:
                 )
                 self.db.add(read_record)
                 await self.db.commit()
+        
+        # Send WebSocket notification update
+        if self.websocket_manager:
+            try:
+                await self.websocket_manager.send_notification_update(
+                    user_id, notification_id, "read"
+                )
+                
+                # Update unread count
+                unread_count = await self.getUnreadNotificationCount(user_id)
+                await self.websocket_manager.send_unread_count_update(user_id, unread_count)
+            except Exception as e:
+                logger.error(f"Failed to send WebSocket notification update: {e}")
+        
+        # Invalidate user cache
+        if self.cache_service:
+            await self.cache_service.invalidate_user_cache(user_id)
         
         return True
     
@@ -604,4 +703,191 @@ class NotificationService:
             system_updated = len(read_records)
         
         await self.db.commit()
-        return personal_updated + system_updated 
+        
+        # Invalidate user cache after bulk update
+        if self.cache_service:
+            await self.cache_service.invalidate_user_cache(user_id)
+        
+        return personal_updated + system_updated
+    
+    async def bulkCreateNotifications(
+        self,
+        notifications_data: List[Dict[str, Any]],
+        batch_size: int = 100
+    ) -> List[Notification]:
+        """
+        批量創建通知，提高性能
+        
+        Args:
+            notifications_data: 通知數據列表
+            batch_size: 批次大小
+        
+        Returns:
+            List[Notification]: 創建的通知列表
+        """
+        created_notifications = []
+        
+        # Process in batches
+        for i in range(0, len(notifications_data), batch_size):
+            batch = notifications_data[i:i + batch_size]
+            batch_notifications = []
+            
+            for data in batch:
+                notification = Notification(**data)
+                batch_notifications.append(notification)
+            
+            # Add batch to session
+            self.db.add_all(batch_notifications)
+            await self.db.commit()
+            
+            # Refresh all notifications in batch
+            for notification in batch_notifications:
+                await self.db.refresh(notification)
+            
+            created_notifications.extend(batch_notifications)
+            
+            # Send WebSocket notifications for each batch
+            if self.websocket_manager:
+                await self._send_bulk_websocket_notifications(batch_notifications)
+        
+        # Invalidate relevant caches
+        if self.cache_service:
+            # Determine which users to invalidate cache for
+            user_ids = set()
+            has_system_announcements = False
+            
+            for notification in created_notifications:
+                if notification.user_id:
+                    user_ids.add(notification.user_id)
+                else:
+                    has_system_announcements = True
+            
+            # Invalidate individual user caches
+            for user_id in user_ids:
+                await self.cache_service.invalidate_user_cache(user_id)
+            
+            # If there are system announcements, invalidate all user caches
+            if has_system_announcements:
+                await self.cache_service.invalidate_all_user_caches()
+        
+        return created_notifications
+    
+    async def _send_bulk_websocket_notifications(self, notifications: List[Notification]):
+        """Send WebSocket notifications for a batch of notifications"""
+        try:
+            for notification in notifications:
+                notification_data = {
+                    "id": notification.id,
+                    "title": notification.title,
+                    "title_en": notification.title_en,
+                    "message": notification.message,
+                    "message_en": notification.message_en,
+                    "notification_type": notification.notification_type,
+                    "priority": notification.priority,
+                    "action_url": notification.action_url,
+                    "created_at": notification.created_at.isoformat()
+                }
+                
+                if notification.user_id:
+                    # Personal notification
+                    await self.websocket_manager.send_notification(notification.user_id, notification_data)
+                else:
+                    # System announcement
+                    await self.websocket_manager.send_system_announcement(notification_data)
+        
+        except Exception as e:
+            logger.error(f"Failed to send bulk WebSocket notifications: {e}")
+    
+    async def cleanupExpiredNotifications(self, batch_size: int = 1000) -> int:
+        """
+        清理過期通知
+        
+        Args:
+            batch_size: 批次大小
+        
+        Returns:
+            int: 清理的通知數量
+        """
+        from sqlalchemy import and_
+        
+        # Find expired notifications
+        expired_query = select(Notification.id).where(
+            and_(
+                Notification.expires_at.is_not(None),
+                Notification.expires_at < datetime.now()
+            )
+        ).limit(batch_size)
+        
+        result = await self.db.execute(expired_query)
+        expired_ids = [row[0] for row in result.fetchall()]
+        
+        if not expired_ids:
+            return 0
+        
+        # Delete expired notifications
+        delete_query = delete(Notification).where(Notification.id.in_(expired_ids))
+        delete_result = await self.db.execute(delete_query)
+        await self.db.commit()
+        
+        deleted_count = delete_result.rowcount
+        
+        # Invalidate all user caches after cleanup
+        if self.cache_service and deleted_count > 0:
+            await self.cache_service.invalidate_all_user_caches()
+        
+        logger.info(f"Cleaned up {deleted_count} expired notifications")
+        return deleted_count
+    
+    async def getNotificationStats(self) -> Dict[str, Any]:
+        """
+        獲取通知統計資訊
+        
+        Returns:
+            Dict: 統計資訊
+        """
+        from sqlalchemy import and_, or_
+        
+        # Total notifications
+        total_query = select(func.count(Notification.id))
+        total_result = await self.db.execute(total_query)
+        total = total_result.scalar() or 0
+        
+        # Unread notifications
+        unread_query = select(func.count(Notification.id)).where(
+            Notification.is_read == False
+        )
+        unread_result = await self.db.execute(unread_query)
+        unread = unread_result.scalar() or 0
+        
+        # System announcements
+        system_query = select(func.count(Notification.id)).where(
+            Notification.user_id.is_(None)
+        )
+        system_result = await self.db.execute(system_query)
+        system = system_result.scalar() or 0
+        
+        # By priority
+        priority_query = select(
+            Notification.priority,
+            func.count(Notification.id)
+        ).group_by(Notification.priority)
+        priority_result = await self.db.execute(priority_query)
+        priority_stats = {row[0]: row[1] for row in priority_result.fetchall()}
+        
+        # By type
+        type_query = select(
+            Notification.notification_type,
+            func.count(Notification.id)
+        ).group_by(Notification.notification_type)
+        type_result = await self.db.execute(type_query)
+        type_stats = {row[0]: row[1] for row in type_result.fetchall()}
+        
+        return {
+            "total_notifications": total,
+            "unread_notifications": unread,
+            "system_announcements": system,
+            "personal_notifications": total - system,
+            "by_priority": priority_stats,
+            "by_type": type_stats,
+            "read_percentage": round((total - unread) / total * 100, 2) if total > 0 else 0
+        } 
