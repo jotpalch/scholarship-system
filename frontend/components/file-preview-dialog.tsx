@@ -120,6 +120,7 @@ export function FilePreviewDialog({
                   <Skeleton className="w-full h-full max-w-3xl max-h-[60vh] rounded-lg" />
                 </div>
               )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={file.url}
                 alt={file.filename}

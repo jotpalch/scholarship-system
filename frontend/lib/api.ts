@@ -53,6 +53,11 @@ export interface Student {
   updated_at: string;
 }
 
+export interface StudentInfoResponse {
+  student: Record<string, any>;
+  semesters: Array<Record<string, any>>;
+}
+
 export interface ApplicationFile {
   id: number;
   filename: string;
@@ -1463,7 +1468,7 @@ class ApiClient {
       });
     },
 
-    getStudentInfo: async (): Promise<ApiResponse<Student>> => {
+    getStudentInfo: async (): Promise<ApiResponse<StudentInfoResponse>> => {
       return this.request("/users/student-info");
     },
 
