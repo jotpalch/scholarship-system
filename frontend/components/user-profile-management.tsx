@@ -773,7 +773,7 @@ export default function UserProfileManagement() {
                     <div className="space-y-2">
                       <Label>{t("profile_management.degree")}</Label>
                       <Input
-                        value={profile.student_info.student?.std_degree || ""}
+                        value={profile.student_info?.std_degree || ""}
                         disabled
                         readOnly
                       />
@@ -782,7 +782,7 @@ export default function UserProfileManagement() {
                       <Label>{t("profile_management.enrollment_status")}</Label>
                       <Input
                         value={
-                          profile.student_info.student?.std_studingstatus || ""
+                          profile.student_info?.std_studingstatus || ""
                         }
                         disabled
                         readOnly
@@ -792,7 +792,7 @@ export default function UserProfileManagement() {
                       <Label>{t("profile_management.enrollment_year")}</Label>
                       <Input
                         value={
-                          profile.student_info.student?.std_enrollyear || ""
+                          profile.student_info?.std_enrollyear || ""
                         }
                         disabled
                         readOnly
@@ -802,7 +802,7 @@ export default function UserProfileManagement() {
                       <Label>{t("profile_management.semester_count")}</Label>
                       <Input
                         value={
-                          profile.student_info.student?.std_termcount || ""
+                          profile.student_info?.std_termcount || ""
                         }
                         disabled
                         readOnly
