@@ -919,7 +919,29 @@ export default function UserProfileManagement() {
               {/* Bank Document Upload */}
               <div className="space-y-4">
                 <div className="space-y-4">
-                  <Label>{t("profile_management.bank_document")}</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>{t("profile_management.bank_document")}</Label>
+                    {/* Upload Button - only show when files are selected */}
+                    {bankDocumentFiles.length > 0 && (
+                      <Button
+                        onClick={handleBankDocumentUpload}
+                        disabled={uploadingBankDoc}
+                        size="sm"
+                      >
+                        {uploadingBankDoc ? (
+                          <>
+                            <Upload className="w-4 h-4 mr-2 animate-pulse" />
+                            {t("profile_management.uploading")}
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-4 h-4 mr-2" />
+                            {t("profile_management.upload_bank_document")}
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
 
                   {/* Display current uploaded document */}
                   {profile.profile?.bank_document_photo_url && (
@@ -959,38 +981,15 @@ export default function UserProfileManagement() {
                   )}
 
                   {/* File Upload Component */}
-                  <div className="space-y-4">
-                    <FileUpload
-                      onFilesChange={handleBankDocumentFilesChange}
-                      acceptedTypes={[".jpg", ".jpeg", ".png", ".webp", ".pdf"]}
-                      maxSize={10 * 1024 * 1024} // 10MB
-                      maxFiles={1}
-                      initialFiles={bankDocumentFiles}
-                      fileType="bank_document"
-                      locale="zh"
-                    />
-
-                    {/* Upload Button - only show when files are selected */}
-                    {bankDocumentFiles.length > 0 && (
-                      <Button
-                        onClick={handleBankDocumentUpload}
-                        disabled={uploadingBankDoc}
-                        className="w-full"
-                      >
-                        {uploadingBankDoc ? (
-                          <>
-                            <Upload className="w-4 h-4 mr-2 animate-pulse" />
-                            {t("profile_management.uploading")}
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="w-4 h-4 mr-2" />
-                            {t("profile_management.upload_bank_document")}
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </div>
+                  <FileUpload
+                    onFilesChange={handleBankDocumentFilesChange}
+                    acceptedTypes={[".jpg", ".jpeg", ".png", ".webp", ".pdf"]}
+                    maxSize={10 * 1024 * 1024} // 10MB
+                    maxFiles={1}
+                    initialFiles={bankDocumentFiles}
+                    fileType="bank_document"
+                    locale="zh"
+                  />
 
                   <div className="text-xs text-muted-foreground">
                     <p>{t("profile_management.file_formats")}</p>
