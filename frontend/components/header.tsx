@@ -12,7 +12,7 @@ interface UserType {
   name: string;
   email: string;
   role: "student" | "professor" | "college" | "admin" | "super_admin";
-  studentId?: string;
+  nycu_id?: string;
   nationality?: string;
 }
 
@@ -146,11 +146,11 @@ export function Header({
                 <span className="text-sm font-semibold text-gray-900">
                   {user.name}
                 </span>
-                {user.studentId && (
+                {user.nycu_id && (
                   <span className="text-xs text-gray-500">
                     {user.role === "student" && locale === "en"
-                      ? `Student ID: ${user.studentId}`
-                      : `學號: ${user.studentId}`}
+                      ? `Student ID: ${user.nycu_id}`
+                      : `學號: ${user.nycu_id}`}
                   </span>
                 )}
               </div>
