@@ -667,6 +667,58 @@ if f".{file_extension}" not in ALLOWED_EXTENSIONS:
 - Monitor configuration-driven feature usage
 - Alert on configuration validation failures
 
+## Debug Panel Control
+
+### Environment Variable Configuration
+The Debug Panel can be controlled via the `NEXT_PUBLIC_ENABLE_DEBUG_PANEL` environment variable in docker-compose files.
+
+#### Display Logic
+```typescript
+// components/debug-panel.tsx
+const shouldShow =
+  isTestMode ||
+  process.env.NEXT_PUBLIC_ENABLE_DEBUG_PANEL === "true" ||
+  process.env.NODE_ENV === "development";
+```
+
+#### Environment-Specific Configuration
+
+**Development Environment** (docker-compose.dev.yml):
+```yaml
+frontend:
+  environment:
+    NEXT_PUBLIC_ENABLE_DEBUG_PANEL: "true"  # Always enabled in dev
+```
+
+**Staging Environment** (docker-compose.staging.yml):
+```yaml
+frontend:
+  environment:
+    NEXT_PUBLIC_ENABLE_DEBUG_PANEL: "true"  # Enabled for testing
+```
+
+**Production Environment** (docker-compose.yml):
+```yaml
+frontend:
+  environment:
+    NEXT_PUBLIC_ENABLE_DEBUG_PANEL: "false"  # Disabled in production
+```
+
+#### Best Practices
+- ✅ Use `NEXT_PUBLIC_` prefix for Next.js environment variables
+- ✅ Set to `"true"` (string) for enabling, not boolean
+- ✅ Always explicitly set the value in docker-compose files
+- ✅ Keep disabled in production for security
+- ✅ Enable in staging/test environments for debugging
+
+#### Debug Panel Features
+- JWT Token inspection
+- Portal SSO data viewer
+- Student API data inspector
+- Environment detection
+- Real-time data refresh
+- Copy-to-clipboard functionality
+
 ---
 
 **Remember**: The goal is to create a flexible, maintainable system where new scholarship types can be added through database configuration without requiring code changes.

@@ -40,13 +40,11 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
   const { user, token } = useAuth();
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Only show in test/development mode
+  // Only show when explicitly enabled via environment variable or in test mode
   const shouldShow =
     isTestMode ||
-    process.env.NODE_ENV === "development" ||
-    (typeof window !== "undefined" &&
-      (window.location.hostname === "140.113.7.148" ||
-        window.location.hostname === "localhost"));
+    process.env.NEXT_PUBLIC_ENABLE_DEBUG_PANEL === "true" ||
+    process.env.NODE_ENV === "development";
 
   // Handle modal focus management and escape key
   useEffect(() => {

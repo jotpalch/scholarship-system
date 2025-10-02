@@ -93,6 +93,8 @@ services:
       NODE_ENV: production
       # Override for Docker internal requests if needed
       INTERNAL_API_URL: http://backend:8000
+      # Debug Panel Control
+      NEXT_PUBLIC_ENABLE_DEBUG_PANEL: "true"
     depends_on:
       - backend
     networks:
