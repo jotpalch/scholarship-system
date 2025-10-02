@@ -26,6 +26,7 @@ import { ProgressTimeline } from "@/components/progress-timeline";
 import { FileUpload } from "@/components/file-upload";
 import { DynamicApplicationForm } from "@/components/dynamic-application-form";
 import { ApplicationDetailDialog } from "@/components/application-detail-dialog";
+import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import UserProfileManagement from "@/components/user-profile-management";
 import {
   Edit,
@@ -363,6 +364,14 @@ export function EnhancedStudentPortal({
 
   // Terms agreement state
   const [agreeTerms, setAgreeTerms] = useState(false);
+
+  // Terms preview modal
+  const [showTermsPreview, setShowTermsPreview] = useState(false);
+  const [termsPreviewFile, setTermsPreviewFile] = useState<{
+    url: string;
+    filename: string;
+    type: string;
+  } | null>(null);
 
   // File upload state (for backwards compatibility)
   const [uploadedFiles, setUploadedFiles] = useState<{
@@ -879,6 +888,11 @@ export function EnhancedStudentPortal({
   };
 
   // 編輯處理函數
+  const handleCloseTermsPreview = () => {
+    setShowTermsPreview(false);
+    setTermsPreviewFile(null);
+  };
+
   const handleEditApplication = async (application: Application) => {
     // 設置編輯模式
     setEditingApplication(application);
@@ -1997,17 +2011,43 @@ export function EnhancedStudentPortal({
               </div>
 
               {/* Terms Agreement */}
-              <div className="flex items-center space-x-2 pt-4">
-                <Checkbox
-                  id="agree_terms"
-                  checked={agreeTerms}
-                  onCheckedChange={checked => setAgreeTerms(checked as boolean)}
-                />
-                <Label htmlFor="agree_terms" className="text-sm">
-                  {locale === "zh"
-                    ? `我已閱讀並同意${selectedScholarship?.name || "獎學金"}申請相關條款與規定`
-                    : `I have read and agree to the terms and conditions for ${selectedScholarship?.name || "scholarship"} application`}
-                </Label>
+              <div className="pt-4">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="agree_terms"
+                    checked={agreeTerms}
+                    onCheckedChange={checked => setAgreeTerms(checked as boolean)}
+                  />
+                  <Label htmlFor="agree_terms" className="text-sm">
+                    {locale === "zh"
+                      ? "我已閱讀並同意相關條款與規定"
+                      : "I have read and agree to the terms and conditions"
+                    }
+                  </Label>
+
+                  {/* Terms Preview Button */}
+                  {selectedScholarship?.terms_document_url && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const token = localStorage.getItem("auth_token");
+                        const previewUrl = `/api/v1/preview-terms?scholarshipType=${selectedScholarship.code}&token=${token}`;
+
+                        setTermsPreviewFile({
+                          url: previewUrl,
+                          filename: `${selectedScholarship.name || "獎學金"}_申請條款.pdf`,
+                          type: "application/pdf",
+                        });
+                        setShowTermsPreview(true);
+                      }}
+                      className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-medium whitespace-nowrap ml-1"
+                    >
+                      <Eye className="h-4 w-4" />
+                      {locale === "zh" ? "預覽申請條款" : "Preview Terms"}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Action buttons */}
@@ -2103,6 +2143,14 @@ export function EnhancedStudentPortal({
         onClose={() => setIsDetailsDialogOpen(false)}
         locale={locale}
         user={user}
+      />
+
+      {/* Terms Preview Dialog */}
+      <FilePreviewDialog
+        isOpen={showTermsPreview}
+        onClose={handleCloseTermsPreview}
+        file={termsPreviewFile}
+        locale={locale}
       />
     </div>
   );

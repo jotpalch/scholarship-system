@@ -35,11 +35,14 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle,
+  Upload,
+  Eye,
 } from "lucide-react";
 import { WhitelistManagement } from "@/components/whitelist-management";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ApplicationFieldForm } from "@/components/application-field-form";
 import { ApplicationDocumentForm } from "@/components/application-document-form";
+import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { api } from "@/lib/api";
 import type {
   ApplicationField,
@@ -78,6 +81,18 @@ export function AdminScholarshipManagementInterface({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Terms document upload
+  const [termsFile, setTermsFile] = useState<File | null>(null);
+  const [isUploadingTerms, setIsUploadingTerms] = useState(false);
+
+  // Terms preview modal
+  const [showTermsPreview, setShowTermsPreview] = useState(false);
+  const [termsPreviewFile, setTermsPreviewFile] = useState<{
+    url: string;
+    filename: string;
+    type: string;
+  } | null>(null);
 
   // Form states
   const [fieldFormOpen, setFieldFormOpen] = useState(false);
@@ -219,6 +234,64 @@ export function AdminScholarshipManagementInterface({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleTermsUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploadingTerms(true);
+      setError(null);
+      setSuccessMessage(null);
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      // Get auth token from localStorage (same as api client)
+      const token = typeof window !== "undefined"
+        ? window.localStorage?.getItem("auth_token")
+        : null;
+
+      const API_BASE =
+        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(
+        `${API_BASE}/api/v1/scholarships/${type}/upload-terms`,
+        {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setSuccessMessage("申請條款文件上傳成功");
+        setTermsFile(file);
+        // Reload config to get updated terms URL
+        await loadFormConfig();
+      } else {
+        const errorData = await response.json();
+        setError(errorData.message || "上傳申請條款文件失敗");
+      }
+    } catch (err) {
+      console.error("Failed to upload terms document:", err);
+      setError("上傳申請條款文件失敗，請稍後再試");
+    } finally {
+      setIsUploadingTerms(false);
+      // Reset file input
+      event.target.value = "";
+    }
+  };
+
+  const handleCloseTermsPreview = () => {
+    setShowTermsPreview(false);
+    setTermsPreviewFile(null);
   };
 
   // Field management handlers
@@ -417,30 +490,103 @@ export function AdminScholarshipManagementInterface({
             </p>
           </div>
         </div>
-        <Button
-          onClick={handleSaveSettings}
-          disabled={isSaving}
-          className="nycu-gradient text-white px-6"
-        >
-          {isSaving ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              儲存中...
-            </>
+        <div className="flex items-center gap-3">
+          <Input
+            id="terms-upload"
+            type="file"
+            accept=".pdf,.doc,.docx"
+            onChange={handleTermsUpload}
+            className="hidden"
+          />
+          {formConfig?.terms_document_url ? (
+            <div className="flex items-center gap-3 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex items-center gap-2 flex-1">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <span className="text-sm font-medium text-green-700">已上傳條款文件</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    const token = localStorage.getItem("auth_token");
+                    const previewUrl = `/api/v1/preview-terms?scholarshipType=${type}&token=${token}`;
+
+                    // 設定預覽文件資訊並打開 Modal
+                    setTermsPreviewFile({
+                      url: previewUrl,
+                      filename: `${formConfig?.title || "獎學金"}_申請條款.pdf`,
+                      type: "application/pdf",
+                    });
+                    setShowTermsPreview(true);
+                  }}
+                  className="h-7 text-green-700 hover:text-green-800 hover:bg-green-100"
+                >
+                  <Eye className="h-4 w-4 mr-1" />
+                  預覽
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => document.getElementById("terms-upload")?.click()}
+                  disabled={isUploadingTerms}
+                  className="h-7 text-green-700 hover:text-green-800 hover:bg-green-100"
+                >
+                  <Upload className="h-4 w-4 mr-1" />
+                  重新上傳
+                </Button>
+              </div>
+            </div>
           ) : (
-            <>
-              <Save className="h-4 w-4 mr-2" />
-              儲存所有設定
-            </>
+            <div className="flex items-center gap-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center gap-2 flex-1">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <span className="text-sm font-medium text-red-700">未上傳條款文件</span>
+              </div>
+              <Button
+                onClick={() => document.getElementById("terms-upload")?.click()}
+                disabled={isUploadingTerms}
+                size="sm"
+                variant="outline"
+                className="h-7 text-red-700 border-red-300 hover:bg-red-100"
+              >
+                {isUploadingTerms ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    上傳中...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-1" />
+                    上傳申請條款
+                  </>
+                )}
+              </Button>
+            </div>
           )}
-        </Button>
+          <Button
+            onClick={handleSaveSettings}
+            disabled={isSaving}
+            className="nycu-gradient text-white px-6"
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                儲存中...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                儲存所有設定
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Main Content */}
       <Tabs defaultValue="fields" className="space-y-6">
-        <TabsList
-          className={`grid w-full ${formConfig?.hasWhitelist ? "grid-cols-3" : "grid-cols-2"}`}
-        >
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="fields" className="flex items-center gap-2">
             <FormInput className="h-4 w-4" />
             申請欄位
@@ -449,12 +595,10 @@ export function AdminScholarshipManagementInterface({
             <FileText className="h-4 w-4" />
             文件要求
           </TabsTrigger>
-          {formConfig?.hasWhitelist && (
-            <TabsTrigger value="whitelist" className="flex items-center gap-2">
-              <UserCheck className="h-4 w-4" />
-              白名單管理
-            </TabsTrigger>
-          )}
+          <TabsTrigger value="whitelist" className="flex items-center gap-2">
+            <UserCheck className="h-4 w-4" />
+            白名單管理
+          </TabsTrigger>
         </TabsList>
 
         {/* Application Fields Tab */}
@@ -732,14 +876,28 @@ export function AdminScholarshipManagementInterface({
         </TabsContent>
 
         {/* Whitelist Tab */}
-        {formConfig?.hasWhitelist && (
-          <TabsContent value="whitelist" className="space-y-4">
+        <TabsContent value="whitelist" className="space-y-4">
+          {!formConfig?.hasWhitelist ? (
+            <Card className="border-2 border-gray-100 shadow-sm">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                  <UserCheck className="h-8 w-8 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  白名單功能未啟用
+                </h3>
+                <p className="text-sm text-gray-600 text-center max-w-md">
+                  此獎學金類型目前未啟用白名單功能。若需使用白名單功能，請聯絡系統管理員進行配置。
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
             <WhitelistManagement
               scholarshipType={type}
               title={`${formConfig.title}白名單管理`}
             />
-          </TabsContent>
-        )}
+          )}
+        </TabsContent>
       </Tabs>
 
       {/* Application Field Form */}
@@ -766,6 +924,14 @@ export function AdminScholarshipManagementInterface({
         }}
         onSave={handleDocumentSave}
         mode={editingDocument ? "edit" : "create"}
+      />
+
+      {/* Terms Preview Dialog */}
+      <FilePreviewDialog
+        isOpen={showTermsPreview}
+        onClose={handleCloseTermsPreview}
+        file={termsPreviewFile}
+        locale="zh"
       />
     </div>
   );

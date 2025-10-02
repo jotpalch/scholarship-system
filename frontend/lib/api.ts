@@ -454,6 +454,7 @@ export interface ScholarshipType {
   application_start_date?: string;
   application_end_date?: string;
   sub_type_selection_mode?: "single" | "multiple" | "hierarchical";
+  terms_document_url?: string;
   eligible_sub_types?: Array<{
     value: string | null;
     label: string;
@@ -853,6 +854,7 @@ export interface ScholarshipFormConfig {
   color?: string;
   hasWhitelist?: boolean;
   whitelist_student_ids?: Record<string, number[]>;
+  terms_document_url?: string;
 }
 
 export interface FormConfigSaveRequest {

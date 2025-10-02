@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -223,6 +223,7 @@ async def get_scholarship_eligibility(
             college_review_start=scholarship.get("college_review_start"),
             college_review_end=scholarship.get("college_review_end"),
             sub_type_selection_mode=scholarship.get("sub_type_selection_mode", "single"),
+            terms_document_url=scholarship.get("terms_document_url"),
             passed=scholarship.get("passed", []),  # Rules passed from eligibility check
             warnings=[],  # Hide warnings from student view - they don't need to see these
             errors=scholarship.get("errors", []),  # Error messages from eligibility check
@@ -398,3 +399,149 @@ async def add_student_to_whitelist(
             "whitelist_size": len(scholarship.whitelist_student_ids),
         },
     )
+
+
+@router.post("/{scholarship_type}/upload-terms", response_model=ApiResponse[dict])
+async def upload_terms_document(
+    scholarship_type: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Upload terms and conditions document for a scholarship type
+
+    Args:
+        scholarship_type: Scholarship type code (e.g., 'undergraduate_freshman', 'direct_phd', 'phd')
+        file: PDF, DOC, or DOCX file containing terms and conditions
+        current_user: Current authenticated admin user
+        db: Database session
+
+    Returns:
+        ApiResponse with uploaded file URL
+    """
+    # Validate file type
+    allowed_extensions = [".pdf", ".doc", ".docx"]
+    file_extension = None
+    for ext in allowed_extensions:
+        if file.filename and file.filename.lower().endswith(ext):
+            file_extension = ext
+            break
+
+    if not file_extension:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid file type. Allowed types: {', '.join(allowed_extensions)}"
+        )
+
+    # Find scholarship type
+    stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_type)
+    result = await db.execute(stmt)
+    scholarship = result.scalar_one_or_none()
+
+    if not scholarship:
+        raise HTTPException(status_code=404, detail=f"Scholarship type '{scholarship_type}' not found")
+
+    # Import MinIO service
+    import io
+
+    from app.services.minio_service import minio_service
+
+    # Generate unique filename
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    object_name = f"terms/{scholarship_type}_terms_{timestamp}{file_extension}"
+
+    try:
+        # Read file content
+        file_content = await file.read()
+        file_size = len(file_content)
+
+        # Upload file to MinIO using the client directly
+        file_stream = io.BytesIO(file_content)
+
+        minio_service.client.put_object(
+            bucket_name=minio_service.default_bucket,
+            object_name=object_name,
+            data=file_stream,
+            length=file_size,
+            content_type=file.content_type or "application/octet-stream",
+        )
+
+        # Store only object_name (not full URL) - will be proxied through Next.js
+        scholarship.terms_document_url = object_name
+        scholarship.updated_by = current_user.id
+
+        await db.commit()
+        await db.refresh(scholarship)
+
+        return ApiResponse(
+            success=True,
+            message="Terms document uploaded successfully",
+            data={
+                "scholarship_type": scholarship_type,
+                "terms_document_url": object_name,  # Return object_name for frontend
+                "filename": file.filename,
+            },
+        )
+
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to upload terms document: {str(e)}")
+
+
+@router.get("/{scholarship_type}/terms")
+async def get_terms_document(
+    scholarship_type: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get terms document for a scholarship type and proxy download from MinIO
+
+    Args:
+        scholarship_type: Scholarship type code
+        current_user: Current authenticated user
+        db: Database session
+
+    Returns:
+        Streaming response with file content
+    """
+    import io
+
+    from fastapi.responses import StreamingResponse
+
+    # Find scholarship type
+    stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_type)
+    result = await db.execute(stmt)
+    scholarship = result.scalar_one_or_none()
+
+    if not scholarship or not scholarship.terms_document_url:
+        raise HTTPException(status_code=404, detail="Terms document not found")
+
+    # Import MinIO service
+    from app.services.minio_service import minio_service
+
+    try:
+        # Download from MinIO
+        response = minio_service.client.get_object(
+            bucket_name=minio_service.default_bucket, object_name=scholarship.terms_document_url
+        )
+
+        # Read file content
+        file_content = response.read()
+
+        # Determine content type based on file extension
+        content_type = "application/pdf"
+        if scholarship.terms_document_url.endswith(".doc"):
+            content_type = "application/msword"
+        elif scholarship.terms_document_url.endswith(".docx"):
+            content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+        # Return file as streaming response
+        return StreamingResponse(
+            io.BytesIO(file_content),
+            media_type=content_type,
+            headers={"Content-Disposition": f"inline; filename*=UTF-8''{scholarship_type}_terms.pdf"},
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve terms document: {str(e)}")
