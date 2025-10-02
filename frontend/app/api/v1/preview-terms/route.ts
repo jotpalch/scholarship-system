@@ -17,6 +17,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Validate scholarshipType to prevent SSRF attacks
+    if (!scholarshipType.match(/^[a-zA-Z0-9_-]+$/)) {
+      return NextResponse.json(
+        { error: "Invalid scholarship type format" },
+        { status: 400 }
+      );
+    }
+
     if (!token) {
       return NextResponse.json(
         { error: "Access token is required" },
