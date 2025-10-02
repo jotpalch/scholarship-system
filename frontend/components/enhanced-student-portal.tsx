@@ -1851,11 +1851,12 @@ export function EnhancedStudentPortal({
                     </SelectTrigger>
                     <SelectContent>
                       {eligibleScholarships
-                        .filter(
-                          scholarship =>
-                            Array.isArray(scholarship.eligible_sub_types) &&
-                            scholarship.eligible_sub_types.length > 0
-                        )
+                        .filter(scholarship => {
+                          const hasCommonErrors = scholarship.errors?.some(rule => !rule.sub_type) || false;
+                          return Array.isArray(scholarship.eligible_sub_types) &&
+                            scholarship.eligible_sub_types.length > 0 &&
+                            !hasCommonErrors;  // Exclude scholarships with common errors
+                        })
                         .map(scholarship => (
                           <SelectItem
                             key={scholarship.id}
