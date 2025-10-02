@@ -437,7 +437,16 @@ export function EnhancedStudentPortal({
         // Check required fields completion
         requiredFields.forEach(field => {
           const fieldValue = dynamicFormData[field.field_name];
-          if (
+          const isFixed = field.is_fixed === true;
+          const hasPrefillValue =
+            field.prefill_value !== undefined &&
+            field.prefill_value !== null &&
+            field.prefill_value !== "";
+
+          // Fixed fields with prefill values are auto-completed
+          if (isFixed && hasPrefillValue) {
+            completedItems++;
+          } else if (
             fieldValue !== undefined &&
             fieldValue !== null &&
             fieldValue !== ""
@@ -1566,13 +1575,29 @@ export function EnhancedStudentPortal({
         className="space-y-4"
       >
         <TabsList>
-          <TabsTrigger value="applications">
-            {t("portal.my_applications")}
-          </TabsTrigger>
-          <TabsTrigger value="new-application">
-            {t("applications.new_application")}
-          </TabsTrigger>
-          <TabsTrigger value="profile">{t("nav.profile")}</TabsTrigger>
+          {applications.length === 0 ? (
+            // 沒有申請時：新增申請 > 我的申請 > 個人資料
+            <>
+              <TabsTrigger value="new-application">
+                {t("applications.new_application")}
+              </TabsTrigger>
+              <TabsTrigger value="applications">
+                {t("portal.my_applications")}
+              </TabsTrigger>
+              <TabsTrigger value="profile">{t("nav.profile")}</TabsTrigger>
+            </>
+          ) : (
+            // 有申請時：我的申請 > 新增申請 > 個人資料
+            <>
+              <TabsTrigger value="applications">
+                {t("portal.my_applications")}
+              </TabsTrigger>
+              <TabsTrigger value="new-application">
+                {t("applications.new_application")}
+              </TabsTrigger>
+              <TabsTrigger value="profile">{t("nav.profile")}</TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         <TabsContent value="applications" className="space-y-4">
