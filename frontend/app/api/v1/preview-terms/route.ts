@@ -4,7 +4,11 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const scholarshipType = searchParams.get("scholarshipType");
-    const token = searchParams.get("token");
+
+    // Get token from Authorization header or cookie (for iframe/img requests)
+    const authHeader = request.headers.get("authorization");
+    const cookieToken = request.cookies.get("access_token")?.value;
+    const token = authHeader?.replace("Bearer ", "") || cookieToken;
 
     if (!scholarshipType) {
       return NextResponse.json(
@@ -16,7 +20,7 @@ export async function GET(request: NextRequest) {
     if (!token) {
       return NextResponse.json(
         { error: "Access token is required" },
-        { status: 400 }
+        { status: 401 }
       );
     }
 

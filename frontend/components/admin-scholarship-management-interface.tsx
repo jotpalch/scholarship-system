@@ -510,7 +510,8 @@ export function AdminScholarshipManagementInterface({
                   size="sm"
                   onClick={() => {
                     const token = localStorage.getItem("auth_token");
-                    const previewUrl = `/api/v1/preview-terms?scholarshipType=${type}&token=${token}`;
+                    // Token is now sent via cookie, not URL, to prevent exposure in logs
+                    const previewUrl = `/api/v1/preview-terms?scholarshipType=${type}`;
 
                     // 設定預覽文件資訊並打開 Modal
                     setTermsPreviewFile({

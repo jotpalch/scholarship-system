@@ -2102,7 +2102,8 @@ export function EnhancedStudentPortal({
                       onClick={(e) => {
                         e.preventDefault();
                         const token = localStorage.getItem("auth_token");
-                        const previewUrl = `/api/v1/preview-terms?scholarshipType=${selectedScholarship.code}&token=${token}`;
+                        // Token is now sent via cookie, not URL, to prevent exposure in logs
+                        const previewUrl = `/api/v1/preview-terms?scholarshipType=${selectedScholarship.code}`;
 
                         setTermsPreviewFile({
                           url: previewUrl,

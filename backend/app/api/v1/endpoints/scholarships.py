@@ -420,6 +420,24 @@ async def upload_terms_document(
     Returns:
         ApiResponse with uploaded file URL
     """
+    import re
+
+    # Validate filename security
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="檔案名稱不得為空")
+
+    # Check for path traversal attempts
+    if ".." in file.filename or "/" in file.filename or "\\" in file.filename:
+        raise HTTPException(status_code=400, detail="無效的檔案名稱：包含路徑字元")
+
+    # Validate filename characters (alphanumeric, underscore, hyphen, dot only)
+    if not re.match(r"^[a-zA-Z0-9_\-\.]+$", file.filename):
+        raise HTTPException(status_code=400, detail="檔案名稱包含無效字元")
+
+    # Limit filename length
+    if len(file.filename) > 255:
+        raise HTTPException(status_code=400, detail="檔案名稱過長")
+
     # Validate file type
     allowed_extensions = [".pdf", ".doc", ".docx"]
     file_extension = None
@@ -454,6 +472,35 @@ async def upload_terms_document(
         # Read file content
         file_content = await file.read()
         file_size = len(file_content)
+
+        # Validate file size
+        from app.core.config import settings
+
+        if file_size > settings.max_file_size:
+            raise HTTPException(
+                status_code=400,
+                detail=f"檔案大小超過限制 ({settings.max_file_size / 1024 / 1024:.1f}MB)",
+            )
+
+        # Check for empty files
+        if file_size == 0:
+            raise HTTPException(status_code=400, detail="檔案不得為空")
+
+        # Validate file content type with magic bytes
+        import magic
+
+        mime = magic.Magic(mime=True)
+        actual_mime_type = mime.from_buffer(file_content[:2048])
+
+        allowed_mime_types = {
+            ".pdf": "application/pdf",
+            ".doc": "application/msword",
+            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }
+
+        expected_mime = allowed_mime_types.get(file_extension)
+        if expected_mime and actual_mime_type != expected_mime:
+            raise HTTPException(status_code=400, detail=f"檔案內容與副檔名不符：實際類型為 {actual_mime_type}")
 
         # Upload file to MinIO using the client directly
         file_stream = io.BytesIO(file_content)
