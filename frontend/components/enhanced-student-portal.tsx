@@ -94,7 +94,7 @@ export function EnhancedStudentPortal({
   const validator = useMemo(() => new FormValidator(locale), [locale]);
 
   const [activeTab, setActiveTab] = useState(
-    applications.length === 0 ? "new-application" : "applications"
+    !applications || applications.length === 0 ? "new-application" : "applications"
   );
   const [editingApplication, setEditingApplication] =
     useState<Application | null>(null);
