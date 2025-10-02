@@ -32,8 +32,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 使用內部 Docker 網路地址訪問後端
-    const backendUrl = `${process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL}/api/v1/scholarships/${scholarshipType}/terms`;
+    // Use only trusted internal backend URL with validated path
+    const baseUrl = process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL;
+
+    // Validate base URL is trusted (must be our backend)
+    if (!baseUrl || (!baseUrl.startsWith('http://backend:') && !baseUrl.startsWith('https://ss.test.nycu.edu.tw'))) {
+      return NextResponse.json(
+        { error: "Invalid backend configuration" },
+        { status: 500 }
+      );
+    }
+
+    // Construct URL with validated components only
+    const backendUrl = new URL(`/api/v1/scholarships/${scholarshipType}/terms`, baseUrl).toString();
 
     console.log("Terms preview API called:", {
       scholarshipType,
