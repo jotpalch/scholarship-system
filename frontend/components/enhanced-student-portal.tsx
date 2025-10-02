@@ -40,6 +40,7 @@ import {
   User as UserIcon,
   Loader2,
   Check,
+  ClipboardList,
 } from "lucide-react";
 import {
   Dialog,
@@ -92,7 +93,9 @@ export function EnhancedStudentPortal({
   const t = (key: string) => getTranslation(locale, key);
   const validator = useMemo(() => new FormValidator(locale), [locale]);
 
-  const [activeTab, setActiveTab] = useState("applications");
+  const [activeTab, setActiveTab] = useState(
+    applications.length === 0 ? "new-application" : "applications"
+  );
   const [editingApplication, setEditingApplication] =
     useState<Application | null>(null);
   const [selectedSubTypes, setSelectedSubTypes] = useState<
@@ -1579,23 +1582,33 @@ export function EnhancedStudentPortal({
             // 沒有申請時：新增申請 > 我的申請 > 個人資料
             <>
               <TabsTrigger value="new-application">
+                <FileText className="h-4 w-4 mr-2" />
                 {t("applications.new_application")}
               </TabsTrigger>
               <TabsTrigger value="applications">
+                <ClipboardList className="h-4 w-4 mr-2" />
                 {t("portal.my_applications")}
               </TabsTrigger>
-              <TabsTrigger value="profile">{t("nav.profile")}</TabsTrigger>
+              <TabsTrigger value="profile">
+                <UserIcon className="h-4 w-4 mr-2" />
+                {t("nav.profile")}
+              </TabsTrigger>
             </>
           ) : (
             // 有申請時：我的申請 > 新增申請 > 個人資料
             <>
               <TabsTrigger value="applications">
+                <ClipboardList className="h-4 w-4 mr-2" />
                 {t("portal.my_applications")}
               </TabsTrigger>
               <TabsTrigger value="new-application">
+                <FileText className="h-4 w-4 mr-2" />
                 {t("applications.new_application")}
               </TabsTrigger>
-              <TabsTrigger value="profile">{t("nav.profile")}</TabsTrigger>
+              <TabsTrigger value="profile">
+                <UserIcon className="h-4 w-4 mr-2" />
+                {t("nav.profile")}
+              </TabsTrigger>
             </>
           )}
         </TabsList>
