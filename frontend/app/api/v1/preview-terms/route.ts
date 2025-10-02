@@ -36,9 +36,29 @@ export async function GET(request: NextRequest) {
     const baseUrl = process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL;
 
     // Validate base URL is trusted (must be our backend)
-    if (!baseUrl || (!baseUrl.startsWith('http://backend:') && !baseUrl.startsWith('https://ss.test.nycu.edu.tw'))) {
+    if (!baseUrl) {
       return NextResponse.json(
         { error: "Invalid backend configuration" },
+        { status: 500 }
+      );
+    }
+
+    // Parse URL and validate hostname to prevent URL bypass attacks
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(baseUrl);
+    } catch (error) {
+      return NextResponse.json(
+        { error: "Invalid backend URL format" },
+        { status: 500 }
+      );
+    }
+
+    // Allowlist of trusted hostnames
+    const allowedHostnames = ['backend', 'ss.test.nycu.edu.tw'];
+    if (!allowedHostnames.includes(parsedUrl.hostname)) {
+      return NextResponse.json(
+        { error: "Untrusted backend hostname" },
         { status: 500 }
       );
     }
