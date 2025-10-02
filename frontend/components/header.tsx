@@ -146,7 +146,13 @@ export function Header({
                 <span className="text-sm font-semibold text-gray-900">
                   {user.name}
                 </span>
-                <span className="text-xs text-gray-500">{user.email}</span>
+                {user.studentId && (
+                  <span className="text-xs text-gray-500">
+                    {user.role === "student" && locale === "en"
+                      ? `Student ID: ${user.studentId}`
+                      : `學號: ${user.studentId}`}
+                  </span>
+                )}
               </div>
 
               {/* Role Badge */}
