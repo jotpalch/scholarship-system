@@ -819,10 +819,26 @@ export default function UserProfileManagement() {
         <TabsContent value="bank" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="w-5 h-5" />
-                {t("profile_management.bank_account_info")}
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <CreditCard className="w-5 h-5" />
+                  {t("profile_management.bank_account_info")}
+                </CardTitle>
+                <Button
+                  onClick={() => handleSave("bank")}
+                  disabled={saving}
+                  size="sm"
+                >
+                  {saving ? (
+                    t("profile_management.saving")
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      {t("profile_management.save_bank_info")}
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Bank validation errors display */}
@@ -985,21 +1001,6 @@ export default function UserProfileManagement() {
                   </div>
                 </div>
               </div>
-
-              <Button
-                onClick={() => handleSave("bank")}
-                disabled={saving}
-                className="w-full"
-              >
-                {saving ? (
-                  t("profile_management.saving")
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    {t("profile_management.save_bank_info")}
-                  </>
-                )}
-              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1008,10 +1009,26 @@ export default function UserProfileManagement() {
         <TabsContent value="advisor" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <School className="w-5 h-5" />
-                {t("profile_management.advisor_info")}
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <School className="w-5 h-5" />
+                  {t("profile_management.advisor_info")}
+                </CardTitle>
+                <Button
+                  onClick={() => handleSave("advisor")}
+                  disabled={saving}
+                  size="sm"
+                >
+                  {saving ? (
+                    t("profile_management.saving")
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      {t("profile_management.save_advisor_info")}
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Advisor validation errors display */}
@@ -1114,21 +1131,6 @@ export default function UserProfileManagement() {
                   />
                 </div>
               </div>
-
-              <Button
-                onClick={() => handleSave("advisor")}
-                disabled={saving}
-                className="w-full"
-              >
-                {saving ? (
-                  t("profile_management.saving")
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    {t("profile_management.save_advisor_info")}
-                  </>
-                )}
-              </Button>
             </CardContent>
           </Card>
         </TabsContent>
