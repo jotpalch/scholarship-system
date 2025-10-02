@@ -735,8 +735,35 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
                 {expandedSections.has("student") && (
                   <div className="p-4 bg-gray-50">
                     {studentData ? (
-                      <div className="font-mono text-xs overflow-x-auto">
-                        {renderValue(studentData)}
+                      <div className="space-y-4">
+                        {/* Basic Student Info */}
+                        <div>
+                          <div className="font-semibold text-sm mb-2">基本資料</div>
+                          <div className="font-mono text-xs overflow-x-auto bg-white p-2 rounded">
+                            {renderValue(studentData.student || studentData)}
+                          </div>
+                        </div>
+
+                        {/* Semester Data */}
+                        {studentData.semesters && studentData.semesters.length > 0 && (
+                          <div>
+                            <div className="font-semibold text-sm mb-2">
+                              學期資料 ({studentData.semesters.length} 筆)
+                            </div>
+                            <div className="space-y-2">
+                              {studentData.semesters.map((semester: any, index: number) => (
+                                <div key={index} className="bg-white p-3 rounded border border-gray-200">
+                                  <div className="font-semibold text-xs mb-2 text-blue-600">
+                                    {semester.academic_year || semester.trm_year} 學年 第 {semester.term || semester.trm_term} 學期
+                                  </div>
+                                  <div className="font-mono text-xs overflow-x-auto">
+                                    {renderValue(semester)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-2">
