@@ -1860,11 +1860,11 @@ export function EnhancedStudentPortal({
 
                         if (filteredScholarships.length === 0) {
                           return (
-                            <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                            <SelectItem value="no-eligible" disabled>
                               {locale === "zh"
                                 ? "目前沒有符合資格的獎學金"
                                 : "No eligible scholarships available"}
-                            </div>
+                            </SelectItem>
                           );
                         }
 
@@ -1879,6 +1879,25 @@ export function EnhancedStudentPortal({
                       })()}
                     </SelectContent>
                   </Select>
+                  {(() => {
+                    const filteredScholarships = eligibleScholarships.filter(scholarship => {
+                      const hasCommonErrors = scholarship.errors?.some(rule => !rule.sub_type) || false;
+                      return Array.isArray(scholarship.eligible_sub_types) &&
+                        scholarship.eligible_sub_types.length > 0 &&
+                        !hasCommonErrors;
+                    });
+
+                    if (filteredScholarships.length === 0 && !editingApplication) {
+                      return (
+                        <p className="text-sm text-amber-600 mt-1">
+                          {locale === "zh"
+                            ? "目前沒有符合資格的獎學金，請檢查您的申請資格"
+                            : "No eligible scholarships available, please check your eligibility"}
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
                   {editingApplication && (
                     <p className="text-sm text-muted-foreground mt-1">
                       {locale === "zh"
