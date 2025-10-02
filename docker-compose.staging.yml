@@ -53,6 +53,8 @@ services:
       STUDENT_API_HMAC_KEY: "4d6f636b4b657946726f6d48657841424344454647484a4b4c4d4e4f505152535455565758595a"
       STUDENT_API_TIMEOUT: "10.0"
       STUDENT_API_ENCODE_TYPE: "UTF-8"
+      # Super Admin Configuration
+      SUPER_ADMIN_NYCU_ID: "your_nycu_id_here"
     depends_on:
       redis:
         condition: service_healthy
