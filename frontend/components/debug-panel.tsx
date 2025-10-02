@@ -177,6 +177,7 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
       const response = await apiClient.users.getStudentInfo();
       if (response.success && response.data) {
         console.log("🔍 Live student data fetched:", response.data);
+        console.log("🔍 Semesters data:", response.data.semesters);
         setStudentData({
           source: "api_live",
           api_endpoint: "/users/student-info",
@@ -742,6 +743,13 @@ export function DebugPanel({ isTestMode = false }: DebugPanelProps) {
                           <div className="font-mono text-xs overflow-x-auto bg-white p-2 rounded">
                             {renderValue(studentData.student || studentData)}
                           </div>
+                        </div>
+
+                        {/* Debug: Show what's in studentData */}
+                        <div className="text-xs text-gray-500 bg-yellow-50 p-2 rounded">
+                          Debug: semesters exists: {String(!!studentData.semesters)} |
+                          length: {studentData.semesters?.length || 0} |
+                          keys: {Object.keys(studentData).join(', ')}
                         </div>
 
                         {/* Semester Data */}
