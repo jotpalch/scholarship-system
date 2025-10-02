@@ -1850,21 +1850,33 @@ export function EnhancedStudentPortal({
                       />
                     </SelectTrigger>
                     <SelectContent>
-                      {eligibleScholarships
-                        .filter(scholarship => {
+                      {(() => {
+                        const filteredScholarships = eligibleScholarships.filter(scholarship => {
                           const hasCommonErrors = scholarship.errors?.some(rule => !rule.sub_type) || false;
                           return Array.isArray(scholarship.eligible_sub_types) &&
                             scholarship.eligible_sub_types.length > 0 &&
                             !hasCommonErrors;  // Exclude scholarships with common errors
-                        })
-                        .map(scholarship => (
+                        });
+
+                        if (filteredScholarships.length === 0) {
+                          return (
+                            <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                              {locale === "zh"
+                                ? "目前沒有符合資格的獎學金"
+                                : "No eligible scholarships available"}
+                            </div>
+                          );
+                        }
+
+                        return filteredScholarships.map(scholarship => (
                           <SelectItem
                             key={scholarship.id}
                             value={scholarship.code}
                           >
                             {scholarship.name}
                           </SelectItem>
-                        ))}
+                        ));
+                      })()}
                     </SelectContent>
                   </Select>
                   {editingApplication && (
