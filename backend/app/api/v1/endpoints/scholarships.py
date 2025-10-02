@@ -500,7 +500,11 @@ async def upload_terms_document(
 
         expected_mime = allowed_mime_types.get(file_extension)
         if expected_mime and actual_mime_type != expected_mime:
-            raise HTTPException(status_code=400, detail=f"檔案內容與副檔名不符：實際類型為 {actual_mime_type}")
+            # Don't expose actual_mime_type in error message to prevent potential XSS
+            raise HTTPException(
+                status_code=400,
+                detail=f"檔案內容與副檔名不符：預期 {expected_mime}",
+            )
 
         # Upload file to MinIO using the client directly
         file_stream = io.BytesIO(file_content)
