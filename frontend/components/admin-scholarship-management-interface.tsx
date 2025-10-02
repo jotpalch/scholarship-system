@@ -603,32 +603,21 @@ export function AdminScholarshipManagementInterface({
 
         {/* Application Fields Tab */}
         <TabsContent value="fields" className="space-y-4">
-          <Card className="border-2 border-gray-100 shadow-sm">
-            <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <FormInput className="h-5 w-5 text-blue-600" />
-                    申請表單欄位管理
-                  </CardTitle>
-                  <CardDescription className="text-gray-600">
-                    設定{formConfig?.title}申請表單中的欄位類型、驗證規則和要求
-                  </CardDescription>
-                </div>
-                <Button
-                  onClick={() => {
-                    setEditingField(null);
-                    setFieldFormOpen(true);
-                  }}
-                  className="nycu-gradient text-white"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  新增欄位
-                </Button>
+          {/* Fixed Fields Card */}
+          <Card className="border-2 border-blue-100 shadow-sm">
+            <CardHeader className="pb-4 bg-blue-50">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <FormInput className="h-5 w-5 text-blue-600" />
+                  固定欄位（自動帶入）
+                </CardTitle>
+                <CardDescription className="text-gray-600">
+                  這些欄位會從學生資料自動填入，無法新增或刪除
+                </CardDescription>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Fields Table */}
+              {/* Fixed Fields Table */}
               <div className="border rounded-lg overflow-hidden">
                 <Table>
                   <TableHeader className="bg-gray-50">
@@ -641,7 +630,7 @@ export function AdminScholarshipManagementInterface({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {applicationFields.map(field => (
+                    {applicationFields.filter(f => f.is_fixed === true).map(field => (
                       <TableRow
                         key={field.id || field.field_name}
                         className="hover:bg-gray-50"
@@ -700,7 +689,7 @@ export function AdminScholarshipManagementInterface({
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
+                          <div className="flex gap-2">
                             <Button
                               variant="outline"
                               size="sm"
@@ -708,10 +697,139 @@ export function AdminScholarshipManagementInterface({
                                 setEditingField(field);
                                 setFieldFormOpen(true);
                               }}
+                              className="text-blue-600 hover:text-blue-700"
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
-                            {field.id && field.id > 0 && (
+                            {field.id > 0 && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteField(field.id)}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Dynamic Fields Card */}
+          <Card className="border-2 border-gray-100 shadow-sm">
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <FormInput className="h-5 w-5 text-blue-600" />
+                    動態欄位（可自訂）
+                  </CardTitle>
+                  <CardDescription className="text-gray-600">
+                    自訂{formConfig?.title}申請表單中的欄位類型、驗證規則和要求
+                  </CardDescription>
+                </div>
+                <Button
+                  onClick={() => {
+                    setEditingField(null);
+                    setFieldFormOpen(true);
+                  }}
+                  className="nycu-gradient text-white"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  新增欄位
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Dynamic Fields Table */}
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-gray-50">
+                    <TableRow>
+                      <TableHead className="font-semibold">欄位資訊</TableHead>
+                      <TableHead className="font-semibold">類型</TableHead>
+                      <TableHead className="font-semibold">必填</TableHead>
+                      <TableHead className="font-semibold">狀態</TableHead>
+                      <TableHead className="font-semibold">操作</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {applicationFields.filter(f => !f.is_fixed).map(field => (
+                      <TableRow
+                        key={field.id || field.field_name}
+                        className="hover:bg-gray-50"
+                      >
+                        <TableCell>
+                          <div>
+                            <div className="font-medium text-gray-900">
+                              {field.field_label}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {field.field_name}
+                            </div>
+                            {field.placeholder && (
+                              <div className="text-xs text-gray-400 mt-1">
+                                {field.placeholder}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className="capitalize font-medium"
+                          >
+                            {field.field_type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              field.is_required ? "destructive" : "secondary"
+                            }
+                          >
+                            {field.is_required ? "必填" : "選填"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={field.is_active}
+                              onCheckedChange={checked => {
+                                setApplicationFields(prev =>
+                                  prev.map(f =>
+                                    f.field_name === field.field_name
+                                      ? { ...f, is_active: checked }
+                                      : f
+                                  )
+                                );
+                              }}
+                            />
+                            <span className="text-sm text-gray-500">
+                              {field.is_active ? "啟用" : "停用"}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditingField(field);
+                                setFieldFormOpen(true);
+                              }}
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            {field.id > 0 && (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -734,33 +852,21 @@ export function AdminScholarshipManagementInterface({
 
         {/* Documents Tab */}
         <TabsContent value="documents" className="space-y-4">
-          <Card className="border-2 border-gray-100 shadow-sm">
-            <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <FileText className="h-5 w-5 text-green-600" />
-                    申請文件管理
-                  </CardTitle>
-                  <CardDescription className="text-gray-600">
-                    設定{formConfig?.title}
-                    申請時需要上傳的文件類型、格式和大小限制
-                  </CardDescription>
-                </div>
-                <Button
-                  onClick={() => {
-                    setEditingDocument(null);
-                    setDocumentFormOpen(true);
-                  }}
-                  className="nycu-gradient text-white"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  新增文件
-                </Button>
+          {/* Fixed Documents Card */}
+          <Card className="border-2 border-green-100 shadow-sm">
+            <CardHeader className="pb-4 bg-green-50">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <FileText className="h-5 w-5 text-green-600" />
+                  固定文件（系統預設）
+                </CardTitle>
+                <CardDescription className="text-gray-600">
+                  這些文件由系統自動帶入，無法新增或刪除
+                </CardDescription>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Documents Table */}
+              {/* Fixed Documents Table */}
               <div className="border rounded-lg overflow-hidden">
                 <Table>
                   <TableHeader className="bg-gray-50">
@@ -774,7 +880,7 @@ export function AdminScholarshipManagementInterface({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {documentRequirements.map(doc => (
+                    {documentRequirements.filter(d => d.is_fixed === true).map(doc => (
                       <TableRow
                         key={doc.id || doc.document_name}
                         className="hover:bg-gray-50"
@@ -854,7 +960,146 @@ export function AdminScholarshipManagementInterface({
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
-                            {doc.id && doc.id > 0 && (
+                            {doc.id > 0 && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteDocument(doc.id)}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Dynamic Documents Card */}
+          <Card className="border-2 border-gray-100 shadow-sm">
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <FileText className="h-5 w-5 text-green-600" />
+                    動態文件（可自訂）
+                  </CardTitle>
+                  <CardDescription className="text-gray-600">
+                    自訂{formConfig?.title}申請時需要上傳的文件類型、格式和大小限制
+                  </CardDescription>
+                </div>
+                <Button
+                  onClick={() => {
+                    setEditingDocument(null);
+                    setDocumentFormOpen(true);
+                  }}
+                  className="nycu-gradient text-white"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  新增文件
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Dynamic Documents Table */}
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-gray-50">
+                    <TableRow>
+                      <TableHead className="font-semibold">文件資訊</TableHead>
+                      <TableHead className="font-semibold">必要性</TableHead>
+                      <TableHead className="font-semibold">支援格式</TableHead>
+                      <TableHead className="font-semibold">大小限制</TableHead>
+                      <TableHead className="font-semibold">狀態</TableHead>
+                      <TableHead className="font-semibold">操作</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {documentRequirements.filter(d => !d.is_fixed).map(doc => (
+                      <TableRow
+                        key={doc.id || doc.document_name}
+                        className="hover:bg-gray-50"
+                      >
+                        <TableCell>
+                          <div>
+                            <div className="font-medium text-gray-900">
+                              {doc.document_name}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {doc.description}
+                            </div>
+                            {doc.upload_instructions && (
+                              <div className="text-xs text-gray-400 mt-1">
+                                {doc.upload_instructions}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              doc.is_required ? "destructive" : "secondary"
+                            }
+                          >
+                            {doc.is_required ? "必要" : "選填"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-1 flex-wrap">
+                            {doc.accepted_file_types.map(type => (
+                              <Badge
+                                key={type}
+                                variant="outline"
+                                className="text-xs"
+                              >
+                                {type}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm font-medium text-gray-700">
+                            {doc.max_file_size}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={doc.is_active}
+                              onCheckedChange={checked => {
+                                setDocumentRequirements(prev =>
+                                  prev.map(d =>
+                                    d.document_name === doc.document_name
+                                      ? { ...d, is_active: checked }
+                                      : d
+                                  )
+                                );
+                              }}
+                            />
+                            <span className="text-sm text-gray-500">
+                              {doc.is_active ? "啟用" : "停用"}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditingDocument(doc);
+                                setDocumentFormOpen(true);
+                              }}
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            {doc.id > 0 && (
                               <Button
                                 variant="outline"
                                 size="sm"

@@ -1889,7 +1889,7 @@ export function EnhancedStudentPortal({
 
                     if (filteredScholarships.length === 0 && !editingApplication) {
                       return (
-                        <p className="text-sm text-amber-600 mt-1">
+                        <p className="text-sm text-amber-600 ml-1 my-1">
                           {locale === "zh"
                             ? "目前沒有符合資格的獎學金，請檢查您的申請資格"
                             : "No eligible scholarships available, please check your eligibility"}

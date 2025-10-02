@@ -88,7 +88,7 @@ export function Header({
             <div className="hidden md:block border-l border-nycu-blue-200 pl-6">
               <h1 className="font-semibold text-lg text-nycu-navy-800">
                 {locale === "zh"
-                  ? "獎學金申請與簽核作業管理系統"
+                  ? "獎學金申請與簽核系統"
                   : "NYCU Admissions Scholarship System"}
               </h1>
               <p className="text-sm text-nycu-navy-600">
@@ -142,37 +142,31 @@ export function Header({
               )}
 
               {/* User Info Text */}
-              <div className="hidden md:flex flex-col">
+              <div className="hidden md:flex flex-col px-2">
                 <span className="text-sm font-semibold text-gray-900">
                   {user.name}
                 </span>
                 {user.nycu_id && (
                   <span className="text-xs text-gray-500">
-                    {user.role === "student" && locale === "en"
-                      ? `Student ID: ${user.nycu_id}`
-                      : `學號: ${user.nycu_id}`}
+                    {user.nycu_id}
                   </span>
                 )}
               </div>
-
-              {/* Role Badge */}
-              <Badge variant={roleBadge.variant} className="text-xs">
-                {roleBadge.label}
-              </Badge>
+              {/* Logout Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onLogout}
+                className="gap-2"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">
+                  {user.role === "student" ? t("nav.logout") : "登出"}
+                </span>
+              </Button>
             </div>
 
-            {/* Logout Button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onLogout}
-              className="gap-2"
-            >
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">
-                {user.role === "student" ? t("nav.logout") : "登出"}
-              </span>
-            </Button>
+
           </div>
         </div>
       </div>
