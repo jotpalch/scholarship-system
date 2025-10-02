@@ -1642,7 +1642,7 @@ export function EnhancedStudentPortal({
                   {applicationsError}
                 </div>
               ) : applications.length === 0 ? (
-                <div className="text-center py-8">
+                <div className="text-center py-8" data-testid="applications-empty-state">
                   <div className="flex flex-col items-center gap-2">
                     <FileText className="h-12 w-12 text-muted-foreground" />
                     <p className="text-lg font-medium text-muted-foreground">
