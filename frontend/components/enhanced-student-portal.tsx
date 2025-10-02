@@ -93,9 +93,21 @@ export function EnhancedStudentPortal({
   const t = (key: string) => getTranslation(locale, key);
   const validator = useMemo(() => new FormValidator(locale), [locale]);
 
-  const [activeTab, setActiveTab] = useState(
-    !applications || applications.length === 0 ? "new-application" : "applications"
-  );
+  const {
+    applications,
+    isLoading: applicationsLoading,
+    error: applicationsError,
+    fetchApplications,
+    createApplication,
+    saveApplicationDraft,
+    submitApplication: submitApplicationApi,
+    withdrawApplication,
+    uploadDocument,
+    updateApplication,
+    deleteApplication,
+  } = useApplications();
+
+  const [activeTab, setActiveTab] = useState("new-application");
   const [editingApplication, setEditingApplication] =
     useState<Application | null>(null);
   const [selectedSubTypes, setSelectedSubTypes] = useState<
@@ -178,6 +190,17 @@ export function EnhancedStudentPortal({
     });
   };
 
+  // Update active tab based on applications
+  useEffect(() => {
+    if (!applicationsLoading && !applicationsError) {
+      if (!applications || applications.length === 0) {
+        setActiveTab("new-application");
+      } else if (activeTab === "new-application") {
+        setActiveTab("applications");
+      }
+    }
+  }, [applications, applicationsLoading, applicationsError, activeTab]);
+
   // Debug authentication status
   useEffect(() => {
     console.log("EnhancedStudentPortal mounted with user:", user);
@@ -191,20 +214,6 @@ export function EnhancedStudentPortal({
   }, [user]);
 
   // Use real application data from API
-  const {
-    applications,
-    isLoading: applicationsLoading,
-    error: applicationsError,
-    fetchApplications,
-    createApplication,
-    saveApplicationDraft,
-    submitApplication: submitApplicationApi,
-    withdrawApplication,
-    uploadDocument,
-    updateApplication,
-    deleteApplication,
-  } = useApplications();
-
   // State for eligible scholarships
   const [eligibleScholarships, setEligibleScholarships] = useState<
     ScholarshipType[]
