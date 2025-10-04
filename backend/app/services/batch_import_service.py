@@ -1,0 +1,414 @@
+"""
+Batch Import Service for offline application data import
+
+Handles Excel/CSV parsing, validation, and application creation
+for college staff importing offline collected student data.
+"""
+
+import io
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
+
+import pandas as pd
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.application import Application, ApplicationStatus
+from app.models.batch_import import BatchImport
+from app.models.scholarship import ScholarshipType
+from app.models.user import User
+from app.schemas.batch_import import ApplicationDataRow, BatchImportValidationError
+
+
+class BatchImportService:
+    """Service for handling batch import operations"""
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def parse_excel_file(
+        self, file_content: bytes, scholarship_type_id: int, academic_year: int, semester: Optional[str]
+    ) -> Tuple[List[Dict[str, Any]], List[BatchImportValidationError]]:
+        """
+        Parse Excel/CSV file and validate data
+
+        Args:
+            file_content: File bytes
+            scholarship_type_id: Scholarship type ID
+            academic_year: Academic year
+            semester: Semester (optional)
+
+        Returns:
+            Tuple of (parsed_data, validation_errors)
+        """
+        errors = []
+        parsed_data = []
+
+        try:
+            # Try reading as Excel first
+            df = pd.read_excel(io.BytesIO(file_content))
+        except Exception:
+            try:
+                # Fallback to CSV
+                df = pd.read_csv(io.BytesIO(file_content))
+            except Exception as e:
+                errors.append(
+                    BatchImportValidationError(
+                        row_number=0,
+                        student_id=None,
+                        field="file",
+                        error_type="parse_error",
+                        message=f"無法解析檔案: {str(e)}",
+                    )
+                )
+                return [], errors
+
+        # Validate required columns
+        required_columns = ["student_id", "student_name"]
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            errors.append(
+                BatchImportValidationError(
+                    row_number=0,
+                    student_id=None,
+                    field="columns",
+                    error_type="missing_columns",
+                    message=f"缺少必要欄位: {', '.join(missing_columns)}",
+                )
+            )
+            return [], errors
+
+        # Process each row
+        for idx, row in df.iterrows():
+            row_number = idx + 2  # Excel row number (header is 1)
+            student_id = str(row.get("student_id", "")).strip()
+
+            if not student_id:
+                errors.append(
+                    BatchImportValidationError(
+                        row_number=row_number,
+                        student_id=None,
+                        field="student_id",
+                        error_type="missing_required",
+                        message="學號不可為空",
+                    )
+                )
+                continue
+
+            # Build application data row
+            try:
+                data_row = {
+                    "student_id": student_id,
+                    "student_name": str(row.get("student_name", "")).strip(),
+                    "dept_code": str(row.get("dept_code", "")).strip() if pd.notna(row.get("dept_code")) else None,
+                    "bank_account": (
+                        str(row.get("bank_account", "")).strip() if pd.notna(row.get("bank_account")) else None
+                    ),
+                    "account_holder": (
+                        str(row.get("account_holder", "")).strip() if pd.notna(row.get("account_holder")) else None
+                    ),
+                    "bank_name": str(row.get("bank_name", "")).strip() if pd.notna(row.get("bank_name")) else None,
+                    "supervisor_id": (
+                        str(row.get("supervisor_id", "")).strip() if pd.notna(row.get("supervisor_id")) else None
+                    ),
+                    "supervisor_name": (
+                        str(row.get("supervisor_name", "")).strip() if pd.notna(row.get("supervisor_name")) else None
+                    ),
+                    "supervisor_email": (
+                        str(row.get("supervisor_email", "")).strip() if pd.notna(row.get("supervisor_email")) else None
+                    ),
+                    "contact_phone": (
+                        str(row.get("contact_phone", "")).strip() if pd.notna(row.get("contact_phone")) else None
+                    ),
+                    "contact_address": (
+                        str(row.get("contact_address", "")).strip() if pd.notna(row.get("contact_address")) else None
+                    ),
+                    "gpa": float(row.get("gpa")) if pd.notna(row.get("gpa")) else None,
+                    "class_ranking": int(row.get("class_ranking")) if pd.notna(row.get("class_ranking")) else None,
+                    "dept_ranking": int(row.get("dept_ranking")) if pd.notna(row.get("dept_ranking")) else None,
+                    "sub_types": [],  # Will be populated from sub_type columns
+                    "custom_fields": {},
+                }
+
+                # Parse sub_types from columns (e.g., sub_type_moe_1w, sub_type_nstc)
+                for col in df.columns:
+                    if col.startswith("sub_type_"):
+                        sub_type_code = col.replace("sub_type_", "")
+                        if row.get(col) in ["Y", "y", "是", "1", 1, True]:
+                            data_row["sub_types"].append(sub_type_code)
+
+                # Validate using Pydantic schema
+                ApplicationDataRow(**data_row)
+                parsed_data.append(data_row)
+
+            except Exception as e:
+                errors.append(
+                    BatchImportValidationError(
+                        row_number=row_number,
+                        student_id=student_id,
+                        field="row_data",
+                        error_type="validation_error",
+                        message=f"資料驗證失敗: {str(e)}",
+                    )
+                )
+
+        return parsed_data, errors
+
+    async def validate_college_permission(
+        self, student_id: str, college_code: str, dept_code: Optional[str] = None
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Validate if student belongs to the specified college
+
+        Args:
+            student_id: Student ID
+            college_code: College code (e.g., 'EC', 'CS', 'EE')
+            dept_code: Department code from import data (optional)
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        # Get student from database
+        stmt = select(User).where(User.nycu_id == student_id)
+        result = await self.db.execute(stmt)
+        student = result.scalar_one_or_none()
+
+        if not student:
+            return False, f"查無學號 {student_id} 的學生資料"
+
+        # Get student's department from raw_data JSON or dept_code column
+        if student.raw_data and isinstance(student.raw_data, dict):
+            student_dept = student.raw_data.get("deptCode") or student.dept_code
+        else:
+            student_dept = student.dept_code
+
+        if not student_dept:
+            # If no dept in database, use dept_code from import data
+            if not dept_code:
+                return False, f"學生 {student_id} 無系所資料，且匯入資料未提供 dept_code"
+            student_dept = dept_code
+
+        # Map department to college (simplified - should use actual mapping table)
+        dept_college_mapping = {
+            "EC": "EC",  # 電機學院
+            "CS": "CS",  # 資訊學院
+            "EE": "EC",  # 電機系 -> 電機學院
+            "IEE": "EC",  # 電機所 -> 電機學院
+            # Add more mappings as needed
+        }
+
+        student_college = dept_college_mapping.get(student_dept, student_dept[:2])  # Fallback to first 2 chars
+
+        if student_college != college_code:
+            return (
+                False,
+                f"學生 {student_id} 所屬學院 ({student_college}) 與匯入學院 ({college_code}) 不符",
+            )
+
+        return True, None
+
+    async def check_duplicate_application(
+        self, student_id: str, scholarship_type_id: int, academic_year: int, semester: Optional[str]
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Check if student already has an application for this scholarship
+
+        Returns:
+            Tuple of (is_duplicate, error_message)
+        """
+        # Find user by student ID
+        stmt = select(User).where(User.nycu_id == student_id)
+        result = await self.db.execute(stmt)
+        user = result.scalar_one_or_none()
+
+        if not user:
+            return False, None  # No user = no duplicate
+
+        # Check for existing application
+        app_stmt = (
+            select(Application)
+            .where(
+                Application.user_id == user.id,
+                Application.scholarship_type_id == scholarship_type_id,
+                Application.academic_year == academic_year,
+                Application.semester == semester,
+            )
+            .limit(1)
+        )
+        result = await self.db.execute(app_stmt)
+        existing_app = result.scalar_one_or_none()
+
+        if existing_app:
+            return True, f"學生 {student_id} 已有此獎學金的申請記錄 (APP-{existing_app.id})"
+
+        return False, None
+
+    async def create_batch_import_record(
+        self,
+        importer_id: int,
+        college_code: str,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: Optional[str],
+        file_name: str,
+        total_records: int,
+    ) -> BatchImport:
+        """Create a batch import record"""
+        batch_import = BatchImport(
+            importer_id=importer_id,
+            college_code=college_code,
+            scholarship_type_id=scholarship_type_id,
+            academic_year=academic_year,
+            semester=semester,
+            file_name=file_name,
+            total_records=total_records,
+            import_status="pending",
+        )
+        self.db.add(batch_import)
+        await self.db.flush()
+        return batch_import
+
+    async def create_applications_from_batch(
+        self,
+        batch_import: BatchImport,
+        parsed_data: List[Dict[str, Any]],
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: Optional[str],
+    ) -> Tuple[List[int], List[BatchImportValidationError]]:
+        """
+        Create Application records from parsed batch data
+
+        Returns:
+            Tuple of (created_application_ids, errors)
+        """
+        created_ids = []
+        errors = []
+
+        # Get scholarship type
+        scholarship = await self.db.get(ScholarshipType, scholarship_type_id)
+        if not scholarship:
+            errors.append(
+                BatchImportValidationError(
+                    row_number=0,
+                    student_id=None,
+                    field="scholarship_type",
+                    error_type="not_found",
+                    message=f"獎學金類型 ID {scholarship_type_id} 不存在",
+                )
+            )
+            return [], errors
+
+        for idx, row_data in enumerate(parsed_data):
+            student_id = row_data["student_id"]
+            row_number = idx + 2
+
+            try:
+                # Find or create user
+                stmt = select(User).where(User.nycu_id == student_id)
+                result = await self.db.execute(stmt)
+                user = result.scalar_one_or_none()
+
+                if not user:
+                    # Create user if not exists (simplified - should sync with external API)
+                    user = User(
+                        nycu_id=student_id,
+                        name=row_data["student_name"],
+                        email=f"{student_id}@nycu.edu.tw",
+                        user_type="student",
+                        role="student",
+                        dept_code=row_data.get("dept_code"),
+                        raw_data={
+                            "imported_from_batch": True,
+                            "batch_import_data": row_data,
+                        },
+                    )
+                    self.db.add(user)
+                    await self.db.flush()
+
+                # Generate app_id
+                app_id = f"APP-{academic_year}-{ApplicationStatus.submitted.value[:3].upper()}-{user.id:06d}"
+
+                # Create application
+                application = Application(
+                    app_id=app_id,
+                    user_id=user.id,
+                    scholarship_type_id=scholarship_type_id,
+                    scholarship_name=scholarship.name,
+                    amount=scholarship.amount,
+                    main_scholarship_type=scholarship.main_type,
+                    sub_scholarship_type=row_data.get("sub_types", [None])[0]
+                    if row_data.get("sub_types")
+                    else "GENERAL",
+                    scholarship_subtype_list=row_data.get("sub_types", []),
+                    sub_type_selection_mode=scholarship.sub_type_selection_mode,
+                    academic_year=academic_year,
+                    semester=semester,
+                    status=ApplicationStatus.submitted.value,
+                    imported_by_id=batch_import.importer_id,
+                    batch_import_id=batch_import.id,
+                    import_source="batch_import",
+                    document_status="pending_documents",
+                    submitted_at=datetime.now(timezone.utc),
+                    student_data={"nycu_id": student_id, "name": row_data["student_name"]},
+                    submitted_form_data={
+                        "bank_account": row_data.get("bank_account"),
+                        "account_holder": row_data.get("account_holder"),
+                        "bank_name": row_data.get("bank_name"),
+                        "supervisor_id": row_data.get("supervisor_id"),
+                        "supervisor_name": row_data.get("supervisor_name"),
+                        "supervisor_email": row_data.get("supervisor_email"),
+                        "contact_phone": row_data.get("contact_phone"),
+                        "contact_address": row_data.get("contact_address"),
+                        "gpa": row_data.get("gpa"),
+                        "class_ranking": row_data.get("class_ranking"),
+                        "dept_ranking": row_data.get("dept_ranking"),
+                        "custom_fields": row_data.get("custom_fields", {}),
+                    },
+                )
+                self.db.add(application)
+                await self.db.flush()
+                created_ids.append(application.id)
+
+            except Exception as e:
+                errors.append(
+                    BatchImportValidationError(
+                        row_number=row_number,
+                        student_id=student_id,
+                        field="application_creation",
+                        error_type="creation_error",
+                        message=f"建立申請失敗: {str(e)}",
+                    )
+                )
+
+        return created_ids, errors
+
+    async def update_batch_import_status(
+        self,
+        batch_import: BatchImport,
+        success_count: int,
+        failed_count: int,
+        errors: List[BatchImportValidationError],
+        status: str = "completed",
+    ):
+        """Update batch import record with results"""
+        batch_import.success_count = success_count
+        batch_import.failed_count = failed_count
+        batch_import.import_status = status
+
+        if errors:
+            batch_import.error_summary = {
+                "total_errors": len(errors),
+                "errors": [
+                    {
+                        "row": e.row_number,
+                        "student_id": e.student_id,
+                        "field": e.field,
+                        "type": e.error_type,
+                        "message": e.message,
+                    }
+                    for e in errors
+                ],
+            }
+
+        await self.db.commit()
