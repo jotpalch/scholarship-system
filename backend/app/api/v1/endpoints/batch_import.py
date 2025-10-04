@@ -138,6 +138,21 @@ async def upload_batch_import_data(
         total_records=len(parsed_data),
     )
 
+    # Store parsed data for confirm step
+    batch_import.parsed_data = {
+        "data": parsed_data,
+        "errors": [
+            {
+                "row_number": e.get("row_number") if isinstance(e, dict) else e.row_number,
+                "student_id": e.get("student_id") if isinstance(e, dict) else e.student_id,
+                "field": e.get("field") if isinstance(e, dict) else e.field,
+                "error_type": e.get("error_type") if isinstance(e, dict) else e.error_type,
+                "message": e.get("message") if isinstance(e, dict) else e.message,
+            }
+            for e in validation_errors
+        ],
+    }
+
     await db.commit()
 
     # Return preview (first 10 rows) and validation summary
@@ -206,12 +221,54 @@ async def confirm_batch_import(
             created_application_ids=[],
         )
 
-    # Re-parse file and create applications
-    # (In production, store parsed data in batch_import.error_summary or separate table)
-    # For now, return error indicating file needs to be re-uploaded
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="確認匯入功能需配合檔案儲存機制，請重新設計流程",
+    # Check if parsed_data exists
+    if not batch_import.parsed_data or "data" not in batch_import.parsed_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="批次匯入資料已過期或不存在，請重新上傳",
+        )
+
+    # Get parsed data
+    parsed_data = batch_import.parsed_data["data"]
+    service = BatchImportService(db)
+
+    # Update status to processing
+    batch_import.import_status = "processing"
+    await db.commit()
+
+    # Create applications
+    created_ids, creation_errors = await service.create_applications_from_batch(
+        batch_import=batch_import,
+        parsed_data=parsed_data,
+        scholarship_type_id=batch_import.scholarship_type_id,
+        academic_year=batch_import.academic_year,
+        semester=batch_import.semester,
+    )
+
+    # Update batch import status
+    await service.update_batch_import_status(
+        batch_import=batch_import,
+        success_count=len(created_ids),
+        failed_count=len(creation_errors),
+        errors=creation_errors,
+        status="completed" if len(creation_errors) == 0 else "partial",
+    )
+
+    return BatchImportConfirmResponse(
+        batch_id=batch_id,
+        success_count=len(created_ids),
+        failed_count=len(creation_errors),
+        errors=[
+            {
+                "row_number": e.row_number,
+                "student_id": e.student_id,
+                "field": e.field,
+                "error_type": e.error_type,
+                "message": e.message,
+            }
+            for e in creation_errors
+        ],
+        created_application_ids=created_ids,
     )
 
 

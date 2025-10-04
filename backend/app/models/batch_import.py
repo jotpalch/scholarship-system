@@ -39,6 +39,7 @@ class BatchImport(Base):
     success_count = Column(Integer, nullable=False, default=0)
     failed_count = Column(Integer, nullable=False, default=0)
     error_summary = Column(JSON, nullable=True)  # Store detailed errors
+    parsed_data = Column(JSON, nullable=True)  # Store parsed data for confirm step
 
     # Import status: 'pending', 'processing', 'completed', 'failed'
     import_status = Column(String(20), nullable=False, default="pending", index=True)

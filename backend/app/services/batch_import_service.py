@@ -162,12 +162,14 @@ class BatchImportService:
 
         Args:
             student_id: Student ID
-            college_code: College code (e.g., 'EC', 'CS', 'EE')
+            college_code: College code (e.g., 'E', 'C', 'I', etc.)
             dept_code: Department code from import data (optional)
 
         Returns:
             Tuple of (is_valid, error_message)
         """
+        from app.models.student import Department
+
         # Get student from database
         stmt = select(User).where(User.nycu_id == student_id)
         result = await self.db.execute(stmt)
@@ -188,16 +190,18 @@ class BatchImportService:
                 return False, f"學生 {student_id} 無系所資料，且匯入資料未提供 dept_code"
             student_dept = dept_code
 
-        # Map department to college (simplified - should use actual mapping table)
-        dept_college_mapping = {
-            "EC": "EC",  # 電機學院
-            "CS": "CS",  # 資訊學院
-            "EE": "EC",  # 電機系 -> 電機學院
-            "IEE": "EC",  # 電機所 -> 電機學院
-            # Add more mappings as needed
-        }
+        # Query department from database to get academy_code
+        dept_stmt = select(Department).where(Department.code == student_dept)
+        dept_result = await self.db.execute(dept_stmt)
+        department = dept_result.scalar_one_or_none()
 
-        student_college = dept_college_mapping.get(student_dept, student_dept[:2])  # Fallback to first 2 chars
+        if not department:
+            return False, f"查無系所代碼 {student_dept} 的資料"
+
+        if not department.academy_code:
+            return False, f"系所 {student_dept} 未設定學院代碼"
+
+        student_college = department.academy_code
 
         if student_college != college_code:
             return (
