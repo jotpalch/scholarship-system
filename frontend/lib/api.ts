@@ -3680,7 +3680,7 @@ class ApiClient {
     verifyBankAccount: async (
       applicationId: number
     ): Promise<ApiResponse<BankVerificationResult>> => {
-      return this.request("/bank-verification", {
+      return this.request("/admin/bank-verification", {
         method: "POST",
         body: JSON.stringify({ application_id: applicationId }),
       });
@@ -3689,7 +3689,7 @@ class ApiClient {
     verifyBankAccountsBatch: async (
       applicationIds: number[]
     ): Promise<ApiResponse<BankVerificationBatchResult>> => {
-      return this.request("/bank-verification/batch", {
+      return this.request("/admin/bank-verification/batch", {
         method: "POST",
         body: JSON.stringify({ application_ids: applicationIds }),
       });
