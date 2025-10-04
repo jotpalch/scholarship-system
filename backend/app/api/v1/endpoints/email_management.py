@@ -301,8 +301,8 @@ async def get_test_mode_status(
 
 @router.post("/test-mode/enable")
 async def enable_test_mode(
-    request: Request,
     redirect_emails: str,
+    request: Request,
     duration_hours: int = 24,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
@@ -482,3 +482,53 @@ async def get_test_mode_audit_logs(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get audit logs: {str(e)}")
+
+
+@router.delete("/test-mode/audit-logs/cleanup")
+async def cleanup_old_audit_logs(
+    retention_days: int = Query(90, description="保留最近 N 天的記錄，預設 90 天"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    清理舊的測試模式稽核記錄
+
+    Args:
+        retention_days: 保留天數，預設 90 天（會刪除超過此天數的記錄）
+    """
+    if not current_user.is_super_admin():
+        raise HTTPException(status_code=403, detail="只有超級管理員可以清理稽核記錄")
+
+    try:
+        from datetime import timedelta
+
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=retention_days)
+
+        # Count records to be deleted
+        count_stmt = select(EmailTestModeAudit).where(EmailTestModeAudit.timestamp < cutoff_date)
+        count_result = await db.execute(count_stmt)
+        records_to_delete = len(count_result.scalars().all())
+
+        # Delete old audit logs
+        delete_stmt = select(EmailTestModeAudit).where(EmailTestModeAudit.timestamp < cutoff_date)
+        delete_result = await db.execute(delete_stmt)
+        old_logs = delete_result.scalars().all()
+
+        for log in old_logs:
+            await db.delete(log)
+
+        await db.commit()
+
+        return ApiResponse(
+            success=True,
+            message=f"Successfully deleted {records_to_delete} audit log entries older than {retention_days} days",
+            data={
+                "deleted_count": records_to_delete,
+                "retention_days": retention_days,
+                "cutoff_date": cutoff_date.isoformat(),
+            },
+        )
+
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup audit logs: {str(e)}")

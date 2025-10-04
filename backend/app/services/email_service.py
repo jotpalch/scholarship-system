@@ -78,13 +78,26 @@ class EmailService:
             return False, {}
 
         try:
-            # Get test mode configuration from system settings
-            test_mode_config = await dynamic_config.get_json("email_test_mode", self.db, {})
+            # Get test mode configuration with row-level locking to prevent race conditions
+            from sqlalchemy import select
+
+            from app.models.system_setting import SystemSetting
+
+            # Use SELECT FOR UPDATE to lock the row while checking/updating
+            stmt = select(SystemSetting).where(SystemSetting.key == "email_test_mode").with_for_update()
+            result = await self.db.execute(stmt)
+            config_row = result.scalar_one_or_none()
+
+            if not config_row:
+                return False, {}
+
+            # Parse JSON value
+            test_mode_config = json.loads(config_row.value) if isinstance(config_row.value, str) else config_row.value
 
             enabled = test_mode_config.get("enabled", False)
             expires_at_str = test_mode_config.get("expires_at")
 
-            # Check if expired
+            # Check if expired (with row locked, only one request will update)
             if enabled and expires_at_str:
                 expires_at = datetime.fromisoformat(expires_at_str)
                 if datetime.now(timezone.utc) > expires_at:
@@ -96,13 +109,7 @@ class EmailService:
                     self.db.add(audit_log)
 
                     # Update configuration
-                    from app.services.config_management_service import ConfigurationService
-
-                    config_service = ConfigurationService(self.db)
-                    await config_service.set_configuration(
-                        key="email_test_mode", value=json.dumps(test_mode_config), user_id=None
-                    )
-
+                    config_row.value = json.dumps(test_mode_config)
                     await self.db.commit()
                     enabled = False
 
@@ -273,8 +280,9 @@ class EmailService:
                 test_emails = [old_email] if old_email else []
 
             if not test_emails:
-                logger.warning("Test mode enabled but no redirect_emails configured, disabling test mode")
-                is_test_mode = False
+                error_msg = "Test mode enabled but no redirect_emails configured"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
             else:
                 recipient_info = self._transform_recipients_for_test(to, test_emails, cc, bcc)
                 to = recipient_info["to"]
@@ -392,33 +400,41 @@ class EmailService:
         email_size_bytes: Optional[int] = None,
         **metadata,
     ):
-        """Log email to history table"""
-        try:
-            history = EmailHistory(
-                recipient_email=recipient_email,
-                cc_emails=json.dumps(cc_emails) if cc_emails else None,
-                bcc_emails=json.dumps(bcc_emails) if bcc_emails else None,
-                subject=subject,
-                body=body,
-                template_key=metadata.get("template_key"),
-                email_category=metadata.get("email_category"),
-                application_id=metadata.get("application_id"),
-                scholarship_type_id=metadata.get("scholarship_type_id"),
-                sent_by_user_id=metadata.get("sent_by_user_id"),
-                sent_by_system=metadata.get("sent_by_system", True),
-                status=status,
-                error_message=error_message,
-                email_size_bytes=email_size_bytes,
-                retry_count=metadata.get("retry_count", 0),
-            )
+        """
+        Log email to history table using a separate database session.
+        This prevents audit logging failures from affecting the main email transaction.
+        """
+        # Create a new session for audit logging to avoid transaction interference
+        from app.db.session import async_session_maker
 
-            db.add(history)
-            await db.commit()
-            logger.debug(f"Email history logged for {recipient_email}")
+        async with async_session_maker() as audit_db:
+            try:
+                history = EmailHistory(
+                    recipient_email=recipient_email,
+                    cc_emails=json.dumps(cc_emails) if cc_emails else None,
+                    bcc_emails=json.dumps(bcc_emails) if bcc_emails else None,
+                    subject=subject,
+                    body=body,
+                    template_key=metadata.get("template_key"),
+                    email_category=metadata.get("email_category"),
+                    application_id=metadata.get("application_id"),
+                    scholarship_type_id=metadata.get("scholarship_type_id"),
+                    sent_by_user_id=metadata.get("sent_by_user_id"),
+                    sent_by_system=metadata.get("sent_by_system", True),
+                    status=status,
+                    error_message=error_message,
+                    email_size_bytes=email_size_bytes,
+                    retry_count=metadata.get("retry_count", 0),
+                )
 
-        except Exception as e:
-            logger.error("Failed to log email history: %s", e)
-            await db.rollback()
+                audit_db.add(history)
+                await audit_db.commit()
+                logger.debug(f"Email history logged for {recipient_email}")
+
+            except Exception as e:
+                logger.error("Failed to log email history: %s", e)
+                await audit_db.rollback()
+                # Don't re-raise - audit logging failure shouldn't break email sending
 
     async def send_with_template(
         self,

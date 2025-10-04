@@ -29,40 +29,50 @@ async def get_all_scholarships(
     result = await db.execute(stmt)
     scholarships = result.scalars().all()
 
+    # 使用篩選參數或預設值
+    display_academic_year = academic_year if academic_year is not None else 113  # 預設 113 學年
+    display_semester = semester if semester is not None else "first"  # 預設第一學期
+
+    # Convert semester string to enum for configuration lookup
+    semester_enum = None
+    if display_semester == "first":
+        semester_enum = Semester.first
+    elif display_semester == "second":
+        semester_enum = Semester.second
+
+    # Batch load all configurations to avoid N+1 query
+    # Get scholarship IDs for batch query
+    scholarship_ids = [s.id for s in scholarships]
+
+    # Build configuration query with all conditions
+    config_conditions = [
+        ScholarshipConfiguration.scholarship_type_id.in_(scholarship_ids),
+        ScholarshipConfiguration.academic_year == display_academic_year,
+        ScholarshipConfiguration.is_active.is_(True),
+    ]
+
+    # Load configurations for both yearly (semester=None) and semester-specific
+    config_stmt = select(ScholarshipConfiguration).where(*config_conditions)
+    config_result = await db.execute(config_stmt)
+    all_configs = config_result.scalars().all()
+
+    # Create mapping of (scholarship_id, is_yearly) -> configuration
+    config_map = {}
+    for config in all_configs:
+        # Store config by (scholarship_type_id, semester) key
+        key = (config.scholarship_type_id, config.semester)
+        config_map[key] = config
+
     # Convert to dictionary format for timeline component
     scholarship_list = []
     for scholarship in scholarships:
-        # 使用篩選參數或預設值
-        display_academic_year = academic_year if academic_year is not None else 113  # 預設 113 學年
-        display_semester = semester if semester is not None else "first"  # 預設第一學期
-
-        # Convert semester string to enum for configuration lookup
-        semester_enum = None
-        if display_semester == "first":
-            semester_enum = Semester.first
-        elif display_semester == "second":
-            semester_enum = Semester.second
-
-        # Get active configuration for this scholarship and academic year
-        # For yearly scholarships, look for configurations with semester = None
-        # For semester scholarships, look for configurations with the specific semester
-        config_conditions = [
-            ScholarshipConfiguration.scholarship_type_id == scholarship.id,
-            ScholarshipConfiguration.academic_year == display_academic_year,
-            ScholarshipConfiguration.is_active.is_(True),
-        ]
-
-        # Add semester condition based on scholarship's application cycle
+        # Determine which config to use based on application cycle
         if scholarship.application_cycle and scholarship.application_cycle.value == "yearly":
-            # For yearly scholarships, look for configurations with semester = None
-            config_conditions.append(ScholarshipConfiguration.semester.is_(None))
+            # For yearly scholarships, use config with semester = None
+            config = config_map.get((scholarship.id, None))
         else:
-            # For semester scholarships, look for configurations with the specific semester
-            config_conditions.append(ScholarshipConfiguration.semester == semester_enum)
-
-        config_stmt = select(ScholarshipConfiguration).where(*config_conditions)
-        config_result = await db.execute(config_stmt)
-        config = config_result.scalar_one_or_none()
+            # For semester scholarships, use config with specific semester
+            config = config_map.get((scholarship.id, semester_enum))
 
         # Build scholarship dictionary with data from configuration or defaults
         scholarship_dict = {
