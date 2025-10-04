@@ -3389,6 +3389,94 @@ class ApiClient {
     > => {
       return this.request("/email-management/statuses");
     },
+
+    // ========== Email Test Mode Methods ==========
+
+    // Get test mode status
+    getTestModeStatus: async (): Promise<
+      ApiResponse<{
+        enabled: boolean;
+        redirect_emails: string[];
+        expires_at: string | null;
+        enabled_by?: number;
+        enabled_at?: string;
+      }>
+    > => {
+      return this.request("/email-management/test-mode/status");
+    },
+
+    // Enable test mode
+    enableTestMode: async (params: {
+      redirect_emails: string | string[];
+      duration_hours?: number;
+    }): Promise<
+      ApiResponse<{
+        enabled: boolean;
+        redirect_emails: string[];
+        expires_at: string;
+        enabled_by: number;
+        enabled_at: string;
+      }>
+    > => {
+      // Convert array to comma-separated string, or use as-is if already string
+      const emailsStr = Array.isArray(params.redirect_emails)
+        ? params.redirect_emails.join(",")
+        : params.redirect_emails;
+
+      const queryParams = new URLSearchParams({
+        redirect_emails: emailsStr,
+        duration_hours: (params.duration_hours || 24).toString(),
+      });
+      return this.request(
+        `/email-management/test-mode/enable?${queryParams.toString()}`,
+        {
+          method: "POST",
+        }
+      );
+    },
+
+    // Disable test mode
+    disableTestMode: async (): Promise<
+      ApiResponse<{
+        enabled: boolean;
+        redirect_emails: string[];
+        expires_at: null;
+        disabled_by: number;
+        disabled_at: string;
+      }>
+    > => {
+      return this.request("/email-management/test-mode/disable", {
+        method: "POST",
+      });
+    },
+
+    // Get test mode audit logs
+    getTestModeAuditLogs: async (params?: {
+      limit?: number;
+      event_type?: string;
+    }): Promise<
+      ApiResponse<{
+        items: Array<{
+          id: number;
+          event_type: string;
+          timestamp: string;
+          user_id: number | null;
+          config_before: any;
+          config_after: any;
+          original_recipient: string | null;
+          actual_recipient: string | null;
+          email_subject: string | null;
+          session_id: string | null;
+          ip_address: string | null;
+        }>;
+        total: number;
+      }>
+    > => {
+      return this.request("/email-management/test-mode/audit", {
+        method: "GET",
+        params,
+      });
+    },
   };
 
   college = {

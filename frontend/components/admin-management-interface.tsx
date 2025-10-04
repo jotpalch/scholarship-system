@@ -3,6 +3,7 @@
 import { AdminConfigurationManagement } from "@/components/admin-configuration-management";
 import { AdminRuleManagement } from "@/components/admin-rule-management";
 import { EmailHistoryTable } from "@/components/email-history-table";
+import { EmailTestModePanel } from "@/components/email-test-mode-panel";
 import { QuotaManagement } from "@/components/quota-management";
 import { ScheduledEmailsTable } from "@/components/scheduled-emails-table";
 import { ScholarshipWorkflowMermaid } from "@/components/ScholarshipWorkflowMermaid";
@@ -3608,10 +3609,11 @@ export function AdminManagementInterface({
                 value={emailManagementTab}
                 onValueChange={setEmailManagementTab}
               >
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="templates">郵件模板</TabsTrigger>
                   <TabsTrigger value="history">歷史記錄</TabsTrigger>
                   <TabsTrigger value="scheduled">排程郵件</TabsTrigger>
+                  <TabsTrigger value="test-mode">測試模式</TabsTrigger>
                 </TabsList>
 
                 {/* 郵件模板管理 */}
@@ -4127,6 +4129,11 @@ export function AdminManagementInterface({
                 {/* 排程郵件管理 */}
                 <TabsContent value="scheduled" className="mt-6">
                   <ScheduledEmailsTable currentUserRole={user.role} />
+                </TabsContent>
+
+                {/* 測試模式 */}
+                <TabsContent value="test-mode" className="mt-6">
+                  <EmailTestModePanel />
                 </TabsContent>
               </Tabs>
             </CardContent>

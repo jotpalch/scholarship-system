@@ -1,7 +1,8 @@
 import json
 import logging
 import re
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from email.message import EmailMessage
 from html import unescape
 from typing import List, Optional
@@ -11,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.dynamic_config import dynamic_config
-from app.models.email_management import EmailCategory, EmailHistory, EmailStatus, ScheduledEmail
+from app.models.email_management import EmailCategory, EmailHistory, EmailStatus, EmailTestModeAudit, ScheduledEmail
 from app.services.system_setting_service import EmailTemplateService
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,157 @@ class EmailService:
         sanitized = re.sub(r"\s+", " ", sanitized)
         return unescape(sanitized).strip()
 
+    async def _check_test_mode(self) -> tuple[bool, dict]:
+        """
+        Check if email test mode is enabled and not expired
+
+        Returns:
+            tuple: (is_enabled, config_dict)
+        """
+        if not self.db:
+            return False, {}
+
+        try:
+            # Get test mode configuration from system settings
+            test_mode_config = await dynamic_config.get_json("email_test_mode", self.db, {})
+
+            enabled = test_mode_config.get("enabled", False)
+            expires_at_str = test_mode_config.get("expires_at")
+
+            # Check if expired
+            if enabled and expires_at_str:
+                expires_at = datetime.fromisoformat(expires_at_str)
+                if datetime.now(timezone.utc) > expires_at:
+                    # Auto-disable if expired
+                    test_mode_config["enabled"] = False
+
+                    # Log expiration event
+                    audit_log = EmailTestModeAudit.log_expired(test_mode_config)
+                    self.db.add(audit_log)
+
+                    # Update configuration
+                    from app.services.config_management_service import ConfigurationService
+
+                    config_service = ConfigurationService(self.db)
+                    await config_service.set_configuration(
+                        key="email_test_mode", value=json.dumps(test_mode_config), user_id=None
+                    )
+
+                    await self.db.commit()
+                    enabled = False
+
+            return enabled, test_mode_config
+
+        except Exception as e:
+            logger.error(f"Error checking test mode: {e}")
+            return False, {}
+
+    def _transform_recipients_for_test(
+        self,
+        original_to: List[str],
+        test_emails: List[str],
+        original_cc: Optional[List[str]] = None,
+        original_bcc: Optional[List[str]] = None,
+    ) -> dict:
+        """
+        Transform recipients for test mode (supports multiple test emails)
+
+        Args:
+            original_to: Original TO recipients
+            test_emails: List of test email addresses to redirect to
+            original_cc: Original CC recipients
+            original_bcc: Original BCC recipients
+
+        Returns:
+            dict with transformed recipients and originals
+        """
+        return {
+            "to": test_emails,  # All emails go to test addresses
+            "cc": [],  # Clear CC in test mode
+            "bcc": [],  # Clear BCC in test mode
+            "original_to": original_to,
+            "original_cc": original_cc or [],
+            "original_bcc": original_bcc or [],
+        }
+
+    def _add_test_headers(self, msg: EmailMessage, original_recipients: dict, session_id: str):
+        """Add test mode headers to email"""
+        msg["X-Test-Mode"] = "true"
+        msg["X-Test-Session-ID"] = session_id
+        msg["X-Original-To"] = ", ".join(original_recipients.get("original_to", []))
+        if original_recipients.get("original_cc"):
+            msg["X-Original-CC"] = ", ".join(original_recipients["original_cc"])
+        if original_recipients.get("original_bcc"):
+            msg["X-Original-BCC"] = ", ".join(original_recipients["original_bcc"])
+
+    def _add_test_banner_to_body(
+        self, body: str, html_content: Optional[str], original_recipients: dict
+    ) -> tuple[str, Optional[str]]:
+        """Add test mode banner to email body"""
+
+        # Create banner text
+        banner_text = f"""
+⚠️ 郵件測試模式 ⚠️
+原收件人: {", ".join(original_recipients.get("original_to", []))}
+"""
+        if original_recipients.get("original_cc"):
+            banner_text += f"原副本: {', '.join(original_recipients['original_cc'])}\n"
+        if original_recipients.get("original_bcc"):
+            banner_text += f"原密件副本: {', '.join(original_recipients['original_bcc'])}\n"
+
+        banner_text += "此郵件為測試郵件，實際不會寄送給上述收件人。\n"
+        banner_text += "=" * 60 + "\n\n"
+
+        # Add to plain text body
+        new_body = banner_text + body if body else banner_text
+
+        # Add to HTML body if exists
+        new_html = None
+        if html_content:
+            original_cc_html = (
+                f'<p style="margin: 5px 0;"><strong>原副本:</strong> {", ".join(original_recipients["original_cc"])}</p>'
+                if original_recipients.get("original_cc")
+                else ""
+            )
+            original_bcc_html = (
+                f'<p style="margin: 5px 0;"><strong>原密件副本:</strong> {", ".join(original_recipients["original_bcc"])}</p>'
+                if original_recipients.get("original_bcc")
+                else ""
+            )
+
+            html_banner = f"""
+            <div style="background-color: #fff3cd; border: 2px solid #ffc107; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+                <h3 style="color: #856404; margin-top: 0;">⚠️ 郵件測試模式 ⚠️</h3>
+                <p style="margin: 5px 0;"><strong>原收件人:</strong> {", ".join(original_recipients.get("original_to", []))}</p>
+                {original_cc_html}
+                {original_bcc_html}
+                <p style="margin: 10px 0 0 0; color: #856404;">此郵件為測試郵件，實際不會寄送給上述收件人。</p>
+            </div>
+            """
+            new_html = html_banner + html_content
+
+        return new_body, new_html
+
+    async def _log_test_mode_interception(
+        self, original_recipient: str, test_recipient: str, subject: str, session_id: str, user_id: Optional[int] = None
+    ):
+        """Log email interception in test mode"""
+        if not self.db:
+            return
+
+        try:
+            audit_log = EmailTestModeAudit.log_email_intercepted(
+                original_recipient=original_recipient,
+                actual_recipient=test_recipient,
+                email_subject=subject,
+                session_id=session_id,
+                user_id=user_id,
+            )
+            self.db.add(audit_log)
+            await self.db.commit()
+        except Exception as e:
+            logger.error(f"Failed to log test mode interception: {e}")
+
     async def send_email(
         self,
         to: str | List[str],
@@ -101,6 +253,43 @@ class EmailService:
         if isinstance(to, str):
             to = [to]
 
+        # Check test mode
+        is_test_mode, test_config = await self._check_test_mode()
+        test_session_id = str(uuid.uuid4()) if is_test_mode else None
+
+        # Store original recipients
+        original_to = to.copy()
+        original_cc = cc.copy() if cc else None
+        original_bcc = bcc.copy() if bcc else None
+
+        # Transform recipients if in test mode
+        if is_test_mode:
+            # Get test emails (support both new array format and old string format for backward compatibility)
+            test_emails = test_config.get("redirect_emails", [])
+
+            # Backward compatibility: convert old redirect_email to list
+            if not test_emails and "redirect_email" in test_config:
+                old_email = test_config.get("redirect_email")
+                test_emails = [old_email] if old_email else []
+
+            if not test_emails:
+                logger.warning("Test mode enabled but no redirect_emails configured, disabling test mode")
+                is_test_mode = False
+            else:
+                recipient_info = self._transform_recipients_for_test(to, test_emails, cc, bcc)
+                to = recipient_info["to"]
+                cc = recipient_info["cc"]
+                bcc = recipient_info["bcc"]
+                subject = f"[TEST] {subject}"
+
+                # Add test banner to body
+                plain_body_for_test = body or (self._html_to_text(html_content) if html_content else "")
+                body, html_content = self._add_test_banner_to_body(plain_body_for_test, html_content, recipient_info)
+
+                logger.info(
+                    f"Test mode: Redirecting email from {', '.join(original_to)} to {', '.join(test_emails)} (session: {test_session_id})"
+                )
+
         primary_recipient = to[0] if to else ""
         status = EmailStatus.sent
         error_message = None
@@ -121,6 +310,19 @@ class EmailService:
                 msg["Cc"] = ", ".join(cc)
             if bcc:
                 msg["Bcc"] = ", ".join(bcc)
+
+            # Add test mode headers if enabled
+            if is_test_mode:
+                self._add_test_headers(
+                    msg,
+                    {
+                        "original_to": original_to,
+                        "original_cc": original_cc,
+                        "original_bcc": original_bcc,
+                    },
+                    test_session_id,
+                )
+
             msg.set_content(plain_body)
             if html_content:
                 msg.add_alternative(html_content, subtype="html")
@@ -139,6 +341,17 @@ class EmailService:
 
             logger.info("Email sent successfully to %s", primary_recipient)
 
+            # Log test mode interception
+            if is_test_mode:
+                for original_recipient in original_to:
+                    await self._log_test_mode_interception(
+                        original_recipient=original_recipient,
+                        test_recipient=primary_recipient,
+                        subject=subject,
+                        session_id=test_session_id,
+                        user_id=metadata.get("sent_by_user_id"),
+                    )
+
         except Exception as e:
             status = EmailStatus.failed
             error_message = str(e)
@@ -150,11 +363,12 @@ class EmailService:
             # Log email history if database session provided
             if db:
                 try:
+                    # Log with original recipients for history tracking
                     await self._log_email_history(
                         db=db,
-                        recipient_email=primary_recipient,
-                        cc_emails=cc,
-                        bcc_emails=bcc,
+                        recipient_email=original_to[0] if original_to else primary_recipient,
+                        cc_emails=original_cc,
+                        bcc_emails=original_bcc,
                         subject=subject,
                         body=history_body,
                         status=status,
