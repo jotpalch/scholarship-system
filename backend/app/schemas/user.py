@@ -118,3 +118,20 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     user: UserResponse
+
+
+class BulkScholarshipAssignRequest(BaseModel):
+    """Bulk scholarship assignment request schema"""
+
+    scholarship_ids: list[int] = Field(..., description="List of scholarship IDs to assign")
+    operation: str = Field("set", description="Operation type: 'set' (replace all) or 'add' (append)")
+
+
+class BulkScholarshipAssignResponse(BaseModel):
+    """Bulk scholarship assignment response schema"""
+
+    user_id: int
+    assigned_count: int
+    removed_count: int
+    total_scholarships: int
+    scholarships: list[dict]
