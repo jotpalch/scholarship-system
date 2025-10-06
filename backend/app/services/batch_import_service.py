@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.application import Application, ApplicationStatus
 from app.models.batch_import import BatchImport
+from app.models.enums import BatchImportStatus
 from app.models.scholarship import ScholarshipType
 from app.models.user import User
 from app.schemas.batch_import import ApplicationDataRow, BatchImportValidationError
@@ -266,7 +267,7 @@ class BatchImportService:
             semester=semester,
             file_name=file_name,
             total_records=total_records,
-            import_status="pending",
+            import_status=BatchImportStatus.pending.value,
         )
         self.db.add(batch_import)
         await self.db.flush()
@@ -281,33 +282,34 @@ class BatchImportService:
         semester: Optional[str],
     ) -> Tuple[List[int], List[BatchImportValidationError]]:
         """
-        Create Application records from parsed batch data
+        Create Application records from parsed batch data with transaction safety.
+
+        Uses all-or-nothing transaction strategy: if ANY row fails,
+        the entire batch is rolled back.
 
         Returns:
             Tuple of (created_application_ids, errors)
         """
+        from app.core.exceptions import BatchImportError
+
         created_ids = []
         errors = []
 
         # Get scholarship type
         scholarship = await self.db.get(ScholarshipType, scholarship_type_id)
         if not scholarship:
-            errors.append(
-                BatchImportValidationError(
-                    row_number=0,
-                    student_id=None,
-                    field="scholarship_type",
-                    error_type="not_found",
-                    message=f"獎學金類型 ID {scholarship_type_id} 不存在",
-                )
+            raise BatchImportError(
+                message=f"獎學金類型 ID {scholarship_type_id} 不存在",
+                batch_id=batch_import.id,
             )
-            return [], errors
 
-        for idx, row_data in enumerate(parsed_data):
-            student_id = row_data["student_id"]
-            row_number = idx + 2
+        # Begin transaction - all operations will be rolled back if any fails
+        current_row = 0
+        try:
+            for idx, row_data in enumerate(parsed_data):
+                student_id = row_data["student_id"]
+                current_row = idx + 2  # Track current row for error reporting
 
-            try:
                 # Find or create user
                 stmt = select(User).where(User.nycu_id == student_id)
                 result = await self.db.execute(stmt)
@@ -374,16 +376,24 @@ class BatchImportService:
                 await self.db.flush()
                 created_ids.append(application.id)
 
-            except Exception as e:
-                errors.append(
-                    BatchImportValidationError(
-                        row_number=row_number,
-                        student_id=student_id,
-                        field="application_creation",
-                        error_type="creation_error",
-                        message=f"建立申請失敗: {str(e)}",
-                    )
-                )
+        except Exception as e:
+            # Rollback all changes on any error
+            await self.db.rollback()
+
+            # Update batch status to failed
+            batch_import.import_status = BatchImportStatus.failed.value
+            batch_import.error_summary = {
+                "total_errors": 1,
+                "error_type": "transaction_rollback",
+                "failed_at_row": current_row,
+                "message": f"批次匯入失敗於第 {current_row} 行，所有變更已回復: {str(e)}",
+            }
+            await self.db.commit()
+
+            raise BatchImportError(
+                message=f"批次匯入失敗於第 {current_row} 行: {str(e)}",
+                batch_id=batch_import.id,
+            )
 
         return created_ids, errors
 
@@ -398,6 +408,7 @@ class BatchImportService:
         """Update batch import record with results"""
         batch_import.success_count = success_count
         batch_import.failed_count = failed_count
+        # Status string will be automatically converted to enum value by SQLAlchemy
         batch_import.import_status = status
 
         if errors:

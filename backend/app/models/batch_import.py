@@ -4,11 +4,12 @@ Batch Import models for offline application data import
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
+from app.models.enums import BatchImportStatus
 
 if TYPE_CHECKING:
     pass
@@ -41,8 +42,13 @@ class BatchImport(Base):
     error_summary = Column(JSON, nullable=True)  # Store detailed errors
     parsed_data = Column(JSON, nullable=True)  # Store parsed data for confirm step
 
-    # Import status: 'pending', 'processing', 'completed', 'failed'
-    import_status = Column(String(20), nullable=False, default="pending", index=True)
+    # Import status: 'pending', 'processing', 'completed', 'failed', 'cancelled', 'partial'
+    import_status = Column(
+        Enum(BatchImportStatus, values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+        default=BatchImportStatus.pending.value,
+        index=True,
+    )
 
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

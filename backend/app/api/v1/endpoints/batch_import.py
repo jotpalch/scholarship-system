@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import get_current_user
 from app.db.deps import get_db
 from app.models.batch_import import BatchImport
+from app.models.enums import BatchImportStatus
 from app.models.scholarship import ScholarshipType
 from app.models.user import User, UserRole
 from app.schemas.batch_import import (
@@ -85,6 +86,45 @@ async def upload_batch_import_data(
 
     # Read file content
     file_content = await file.read()
+
+    # Validate file size (10MB max)
+    from app.core.config import settings
+
+    if len(file_content) > settings.max_file_size:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"檔案大小超過限制 ({settings.max_file_size / 1024 / 1024:.1f}MB)",
+        )
+
+    # Validate file type using magic bytes
+    # Excel .xlsx files start with PK (ZIP signature: 50 4B)
+    # Excel .xls files start with D0 CF 11 E0 (OLE2 signature)
+    # CSV files are text, check if it's valid UTF-8/text
+    is_valid_type = False
+
+    if len(file_content) >= 4:
+        magic_bytes = file_content[:4]
+        if magic_bytes[:2] == b"PK":  # .xlsx (ZIP-based)
+            is_valid_type = True
+        elif magic_bytes == b"\xD0\xCF\x11\xE0":  # .xls (OLE2-based)
+            is_valid_type = True
+        else:
+            # Try to decode as text for CSV
+            try:
+                file_content.decode("utf-8")
+                is_valid_type = True
+            except UnicodeDecodeError:
+                try:
+                    file_content.decode("big5")  # Try Big5 for traditional Chinese
+                    is_valid_type = True
+                except UnicodeDecodeError:
+                    pass
+
+    if not is_valid_type:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="不支援的檔案格式，請上傳 Excel (.xlsx, .xls) 或 CSV 檔案",
+        )
 
     # Parse and validate
     parsed_data, validation_errors = await service.parse_excel_file(
@@ -208,7 +248,7 @@ async def confirm_batch_import(
         )
 
     # Check status
-    if batch_import.import_status != "pending":
+    if batch_import.import_status != BatchImportStatus.pending.value:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"此批次狀態為 {batch_import.import_status}，無法再次確認",
@@ -216,7 +256,7 @@ async def confirm_batch_import(
 
     if not request.confirm:
         # Cancel the batch
-        batch_import.import_status = "cancelled"
+        batch_import.import_status = BatchImportStatus.cancelled.value
         await db.commit()
         return BatchImportConfirmResponse(
             batch_id=batch_id,
@@ -238,43 +278,54 @@ async def confirm_batch_import(
     service = BatchImportService(db)
 
     # Update status to processing
-    batch_import.import_status = "processing"
+    batch_import.import_status = BatchImportStatus.processing.value
     await db.commit()
 
-    # Create applications
-    created_ids, creation_errors = await service.create_applications_from_batch(
-        batch_import=batch_import,
-        parsed_data=parsed_data,
-        scholarship_type_id=batch_import.scholarship_type_id,
-        academic_year=batch_import.academic_year,
-        semester=batch_import.semester,
-    )
+    # Create applications with transaction rollback on error
+    from app.core.exceptions import BatchImportError
 
-    # Update batch import status
-    await service.update_batch_import_status(
-        batch_import=batch_import,
-        success_count=len(created_ids),
-        failed_count=len(creation_errors),
-        errors=creation_errors,
-        status="completed" if len(creation_errors) == 0 else "partial",
-    )
+    try:
+        created_ids, creation_errors = await service.create_applications_from_batch(
+            batch_import=batch_import,
+            parsed_data=parsed_data,
+            scholarship_type_id=batch_import.scholarship_type_id,
+            academic_year=batch_import.academic_year,
+            semester=batch_import.semester,
+        )
 
-    return BatchImportConfirmResponse(
-        batch_id=batch_id,
-        success_count=len(created_ids),
-        failed_count=len(creation_errors),
-        errors=[
-            {
-                "row_number": e.row_number,
-                "student_id": e.student_id,
-                "field": e.field,
-                "error_type": e.error_type,
-                "message": e.message,
-            }
-            for e in creation_errors
-        ],
-        created_application_ids=created_ids,
-    )
+        # Update batch import status
+        await service.update_batch_import_status(
+            batch_import=batch_import,
+            success_count=len(created_ids),
+            failed_count=len(creation_errors),
+            errors=creation_errors,
+            status="completed" if len(creation_errors) == 0 else "partial",
+        )
+
+        return BatchImportConfirmResponse(
+            batch_id=batch_id,
+            success_count=len(created_ids),
+            failed_count=len(creation_errors),
+            errors=[
+                {
+                    "row_number": e.row_number,
+                    "student_id": e.student_id,
+                    "field": e.field,
+                    "error_type": e.error_type,
+                    "message": e.message,
+                }
+                for e in creation_errors
+            ],
+            created_application_ids=created_ids,
+        )
+
+    except BatchImportError as e:
+        # Re-raise to let the global exception handler deal with it
+        # Batch status has already been updated to 'failed' in the service
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=e.message,
+        )
 
 
 @router.get("/history", response_model=BatchImportHistoryResponse)
