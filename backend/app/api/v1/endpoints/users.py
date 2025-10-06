@@ -29,6 +29,7 @@ def convert_user_to_dict(user: User) -> dict:
         "status": user.status.value if user.status else None,
         "dept_code": user.dept_code,
         "dept_name": user.dept_name,
+        "college_code": user.college_code,
         "role": user.role.value if hasattr(user.role, "value") else str(user.role),
         "comment": user.comment,
         "created_at": user.created_at.isoformat(),

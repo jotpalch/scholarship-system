@@ -20,6 +20,7 @@ class UserBase(BaseModel):
     status: EmployeeStatus
     dept_code: Optional[str] = Field(None, max_length=20)
     dept_name: Optional[str] = Field(None, max_length=100)
+    college_code: Optional[str] = Field(None, max_length=10)
     role: UserRole = UserRole.student
 
 
@@ -38,6 +39,7 @@ class UserUpdate(BaseModel):
     status: Optional[EmployeeStatus] = None
     dept_code: Optional[str] = Field(None, max_length=20)
     dept_name: Optional[str] = Field(None, max_length=100)
+    college_code: Optional[str] = Field(None, max_length=10)
     role: Optional[UserRole] = None
     comment: Optional[str] = Field(None, max_length=255)
 
@@ -72,6 +74,7 @@ class UserListResponse(BaseModel):
     status: str
     dept_code: Optional[str] = None
     dept_name: Optional[str] = None
+    college_code: Optional[str] = None
     role: str
     comment: Optional[str] = None
     created_at: datetime

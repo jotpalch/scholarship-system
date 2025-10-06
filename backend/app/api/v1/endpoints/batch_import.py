@@ -5,9 +5,12 @@ Provides endpoints for uploading, validating, and confirming
 offline application data imports.
 """
 
+from io import BytesIO
 from typing import Optional
 
+import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +18,7 @@ from app.core.security import get_current_user
 from app.db.deps import get_db
 from app.models.batch_import import BatchImport
 from app.models.scholarship import ScholarshipType
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.batch_import import (
     BatchImportConfirmRequest,
     BatchImportConfirmResponse,
@@ -30,8 +33,8 @@ router = APIRouter()
 
 
 def require_college_role(current_user: User = Depends(get_current_user)) -> User:
-    """Dependency to require college role"""
-    if current_user.role != "college":
+    """Dependency to require college role or super admin"""
+    if current_user.role not in [UserRole.college, UserRole.super_admin]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="此功能僅限學院角色使用",
@@ -72,9 +75,9 @@ async def upload_batch_import_data(
             detail=f"獎學金類型 {scholarship_type} 不存在",
         )
 
-    # Get college code from user
+    # Get college code from user (skip for super_admin)
     college_code = current_user.college_code
-    if not college_code:
+    if not college_code and current_user.role != UserRole.super_admin:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="使用者未設定學院代碼",
@@ -93,22 +96,23 @@ async def upload_batch_import_data(
 
     # Additional validations
     for row_data in parsed_data:
-        # Check college permission
-        is_valid, error_msg = await service.validate_college_permission(
-            student_id=row_data["student_id"],
-            college_code=college_code,
-            dept_code=row_data.get("dept_code"),
-        )
-        if not is_valid:
-            validation_errors.append(
-                {
-                    "row_number": parsed_data.index(row_data) + 2,
-                    "student_id": row_data["student_id"],
-                    "field": "college_code",
-                    "error_type": "permission_error",
-                    "message": error_msg,
-                }
+        # Check college permission (skip for super_admin)
+        if current_user.role != UserRole.super_admin:
+            is_valid, error_msg = await service.validate_college_permission(
+                student_id=row_data["student_id"],
+                college_code=college_code,
+                dept_code=row_data.get("dept_code"),
             )
+            if not is_valid:
+                validation_errors.append(
+                    {
+                        "row_number": parsed_data.index(row_data) + 2,
+                        "student_id": row_data["student_id"],
+                        "field": "college_code",
+                        "error_type": "permission_error",
+                        "message": error_msg,
+                    }
+                )
 
         # Check duplicate
         is_duplicate, error_msg = await service.check_duplicate_application(
@@ -131,7 +135,7 @@ async def upload_batch_import_data(
     # Create batch import record
     batch_import = await service.create_batch_import_record(
         importer_id=current_user.id,
-        college_code=college_code,
+        college_code=college_code or "super_admin",  # Use special value for super_admin
         scholarship_type_id=scholarship.id,
         academic_year=academic_year,
         semester=semester,
@@ -182,11 +186,11 @@ async def confirm_batch_import(
 
     **流程**:
     1. 驗證批次記錄
-    2. 檢查權限（僅能確認自己上傳的批次）
+    2. 檢查權限（College 角色僅能確認自己上傳的批次，Super Admin 可確認所有批次）
     3. 建立所有申請記錄
     4. 更新批次狀態
 
-    **權限**: 僅限 college 角色，且僅能確認自己上傳的批次
+    **權限**: College 角色僅能確認自己上傳的批次，Super Admin 可確認所有批次
     """
     # Get batch import record
     batch_import = await db.get(BatchImport, batch_id)
@@ -196,8 +200,8 @@ async def confirm_batch_import(
             detail=f"批次匯入記錄 {batch_id} 不存在",
         )
 
-    # Verify ownership
-    if batch_import.importer_id != current_user.id:
+    # Verify ownership (skip for super_admin)
+    if batch_import.importer_id != current_user.id and current_user.role != UserRole.super_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="僅能確認自己上傳的批次匯入",
@@ -283,21 +287,28 @@ async def get_batch_import_history(
     """
     查詢批次匯入歷史記錄
 
-    **權限**: 僅限 college 角色，僅能查看自己上傳的記錄
+    **權限**: College 角色僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
     """
-    # Query batch imports for current user
-    stmt = (
-        select(BatchImport)
-        .where(BatchImport.importer_id == current_user.id)
-        .order_by(desc(BatchImport.created_at))
-        .offset(skip)
-        .limit(limit)
-    )
+    # Query batch imports
+    if current_user.role == UserRole.super_admin:
+        # Super admin can see all batch imports
+        stmt = select(BatchImport).order_by(desc(BatchImport.created_at)).offset(skip).limit(limit)
+        count_stmt = select(BatchImport)
+    else:
+        # College role can only see their own
+        stmt = (
+            select(BatchImport)
+            .where(BatchImport.importer_id == current_user.id)
+            .order_by(desc(BatchImport.created_at))
+            .offset(skip)
+            .limit(limit)
+        )
+        count_stmt = select(BatchImport).where(BatchImport.importer_id == current_user.id)
+
     result = await db.execute(stmt)
     batch_imports = result.scalars().all()
 
     # Count total
-    count_stmt = select(BatchImport).where(BatchImport.importer_id == current_user.id)
     count_result = await db.execute(count_stmt)
     total = len(count_result.scalars().all())
 
@@ -333,7 +344,7 @@ async def get_batch_import_details(
     """
     查詢批次匯入詳細資訊
 
-    **權限**: 僅限 college 角色，僅能查看自己上傳的記錄
+    **權限**: College 角色僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
     """
     # Get batch import
     batch_import = await db.get(BatchImport, batch_id)
@@ -343,8 +354,8 @@ async def get_batch_import_details(
             detail=f"批次匯入記錄 {batch_id} 不存在",
         )
 
-    # Verify ownership
-    if batch_import.importer_id != current_user.id:
+    # Verify ownership (skip for super_admin)
+    if batch_import.importer_id != current_user.id and current_user.role != UserRole.super_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="僅能查看自己上傳的批次匯入記錄",
@@ -370,4 +381,119 @@ async def get_batch_import_details(
         updated_at=batch_import.updated_at,
         importer_name=batch_import.importer.name if batch_import.importer else None,
         created_applications=created_app_ids,
+    )
+
+
+@router.get("/template")
+async def download_batch_import_template(
+    scholarship_type: str = Query(..., description="獎學金類型代碼"),
+    current_user: User = Depends(require_college_role),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    下載批次匯入範例 Excel 檔案
+
+    **範例檔案包含**:
+    - 必要欄位: student_id, student_name
+    - 可選欄位: dept_code, bank_account, account_holder, bank_name,
+                supervisor_id, supervisor_name, supervisor_email,
+                contact_phone, contact_address, gpa, class_ranking, dept_ranking
+    - 子類型欄位: 根據獎學金類型動態生成 sub_type_* 欄位
+
+    **權限**: 僅限 college 角色
+    """
+    # Validate scholarship type
+    stmt = select(ScholarshipType).where(ScholarshipType.code == scholarship_type)
+    result = await db.execute(stmt)
+    scholarship = result.scalar_one_or_none()
+
+    if not scholarship:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"獎學金類型 {scholarship_type} 不存在",
+        )
+
+    # Define base columns
+    columns = [
+        "student_id",  # 必填
+        "student_name",  # 必填
+        "dept_code",
+        "bank_account",
+        "account_holder",
+        "bank_name",
+        "supervisor_id",
+        "supervisor_name",
+        "supervisor_email",
+        "contact_phone",
+        "contact_address",
+        "gpa",
+        "class_ranking",
+        "dept_ranking",
+    ]
+
+    # Add sub_type columns if scholarship has sub types
+    if scholarship.sub_type_list:
+        for sub_type_code in scholarship.sub_type_list:
+            columns.append(f"sub_type_{sub_type_code}")
+
+    # Create sample data (2 example rows)
+    sample_data = [
+        {
+            "student_id": "111111111",
+            "student_name": "王小明",
+            "dept_code": "5201",
+            "bank_account": "1234567890123",
+            "account_holder": "王小明",
+            "bank_name": "台灣銀行",
+            "supervisor_id": "T123456",
+            "supervisor_name": "李教授",
+            "supervisor_email": "professor@example.com",
+            "contact_phone": "0912345678",
+            "contact_address": "新竹市大學路1001號",
+            "gpa": 3.8,
+            "class_ranking": 1,
+            "dept_ranking": 5,
+        },
+        {
+            "student_id": "222222222",
+            "student_name": "陳小華",
+            "dept_code": "5202",
+            "bank_account": "9876543210987",
+            "account_holder": "陳小華",
+            "bank_name": "第一銀行",
+            "supervisor_id": "T234567",
+            "supervisor_name": "張教授",
+            "supervisor_email": "prof.zhang@example.com",
+            "contact_phone": "0923456789",
+            "contact_address": "新竹市光復路二段101號",
+            "gpa": 3.9,
+            "class_ranking": 2,
+            "dept_ranking": 3,
+        },
+    ]
+
+    # Add sub_type sample values if applicable
+    if scholarship.sub_type_list:
+        for i, row in enumerate(sample_data):
+            for j, sub_type_code in enumerate(scholarship.sub_type_list):
+                # First row has first sub_type as Y, second row has second sub_type as Y
+                row[f"sub_type_{sub_type_code}"] = "Y" if i == j else ""
+
+    # Create DataFrame
+    df = pd.DataFrame(sample_data, columns=columns)
+
+    # Create Excel file in memory
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="批次匯入範例")
+
+    output.seek(0)
+
+    # Return as downloadable file
+    filename = f"batch_import_template_{scholarship_type}.xlsx"
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
     )

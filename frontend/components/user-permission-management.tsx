@@ -147,9 +147,10 @@ export function UserPermissionManagement() {
     Scholarship[]
   >([]);
 
-  // College code editing
-  const [editingCollege, setEditingCollege] = useState<number | null>(null);
-  const [collegeValue, setCollegeValue] = useState("");
+  // Academy list for displaying college names
+  const [academies, setAcademies] = useState<
+    Array<{ id: number; code: string; name: string }>
+  >([]);
 
   // Fetch users
   const fetchUsers = async () => {
@@ -245,12 +246,24 @@ export function UserPermissionManagement() {
     }
   };
 
+  const fetchAcademies = async () => {
+    try {
+      const response = await apiClient.referenceData.getAcademies();
+      if (response.success && response.data) {
+        setAcademies(response.data);
+      }
+    } catch (error) {
+      console.error("獲取學院列表失敗:", error);
+    }
+  };
+
   useEffect(() => {
     if (user?.role === "super_admin") {
       fetchUsers();
       fetchUserStats();
       fetchScholarshipPermissions();
       fetchAvailableScholarships();
+      fetchAcademies();
     }
   }, [user, userPagination.page]);
 
@@ -512,28 +525,6 @@ export function UserPermissionManagement() {
     [editingUser, scholarshipPermissions, availableScholarships]
   );
 
-  // Update college code
-  const handleUpdateCollege = async (userId: number, collegeCode: string) => {
-    try {
-      const response = await fetch(
-        `/api/v1/admin/users/${userId}/college?college_code=${collegeCode}`,
-        {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        await fetchUsers();
-        setEditingCollege(null);
-      }
-    } catch (error) {
-      console.error("Failed to update college:", error);
-    }
-  };
-
   if (user?.role !== "super_admin") {
     return (
       <Card>
@@ -730,12 +721,9 @@ export function UserPermissionManagement() {
                       <TableRow key={user.id}>
                         <TableCell className="px-5 py-4 align-middle">
                           <div className="space-y-1">
-                            <div className="font-medium">{user.name}</div>
+                            <div className="font-medium whitespace-nowrap">{user.name}<span className="text-sm text-gray-500"> | {user.nycu_id}</span></div>
                             <div className="text-sm text-gray-500">
                               {user.email}
-                            </div>
-                            <div className="text-sm text-gray-500">
-                              @{user.nycu_id}
                             </div>
                             {user.raw_data?.chinese_name && (
                               <div className="text-sm text-gray-500">
@@ -750,81 +738,51 @@ export function UserPermissionManagement() {
                           </div>
                         </TableCell>
                         <TableCell className="px-5 py-4 align-middle">
-                          <Badge
-                            variant={
-                              user.role === "super_admin"
-                                ? "destructive"
-                                : user.role === "admin"
-                                  ? "default"
-                                  : user.role === "college"
-                                    ? "secondary"
-                                    : user.role === "professor"
-                                      ? "outline"
-                                      : "default"
-                            }
-                            className="text-xs px-3 py-1 rounded-full whitespace-nowrap"
-                          >
-                            {getRoleLabel(user.role)}
-                          </Badge>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge
+                              variant={
+                                user.role === "super_admin"
+                                  ? "destructive"
+                                  : user.role === "admin"
+                                    ? "default"
+                                    : user.role === "college"
+                                      ? "secondary"
+                                      : user.role === "professor"
+                                        ? "outline"
+                                        : "default"
+                              }
+                              className="text-xs px-3 py-1 rounded-full whitespace-nowrap"
+                            >
+                              {getRoleLabel(user.role)}
+                            </Badge>
+                            {user.role === "college" && user.college_code && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs px-2 py-1 rounded-full whitespace-nowrap border-indigo-300 text-indigo-700 bg-indigo-50"
+                              >
+                                {academies.find(a => a.code === user.college_code)?.name || user.college_code}
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="px-5 py-4 align-middle w-40">
-                          <div className="space-y-1">
-                            {editingCollege === user.id ? (
-                              <div className="flex gap-1">
-                                <Input
-                                  value={collegeValue}
-                                  onChange={(e) =>
-                                    setCollegeValue(e.target.value)
-                                  }
-                                  className="w-20 h-7 text-xs"
-                                />
-                                <Button
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
-                                  onClick={() =>
-                                    handleUpdateCollege(user.id, collegeValue)
-                                  }
-                                >
-                                  存
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 px-2 text-xs"
-                                  onClick={() => setEditingCollege(null)}
-                                >
-                                  取消
-                                </Button>
-                              </div>
-                            ) : (
+                          <div className="space-y-2">
+                            {/* Portal 同步的單位資訊 (唯讀) */}
+                            {user.dept_name ? (
                               <>
-                                {user.dept_name ? (
-                                  <div
-                                    className="text-sm font-medium text-gray-900 truncate cursor-pointer hover:text-blue-600"
-                                    onClick={() => {
-                                      setEditingCollege(user.id);
-                                      setCollegeValue(user.college_code || "");
-                                    }}
-                                  >
-                                    {user.dept_name}
-                                  </div>
-                                ) : (
-                                  <div
-                                    className="text-sm text-gray-400 cursor-pointer hover:text-blue-600"
-                                    onClick={() => {
-                                      setEditingCollege(user.id);
-                                      setCollegeValue(user.college_code || "");
-                                    }}
-                                  >
-                                    未設定
-                                  </div>
-                                )}
+                                <div className="text-sm font-medium text-gray-900 truncate">
+                                  {user.dept_name}
+                                </div>
                                 {user.dept_code && (
                                   <div className="text-xs text-gray-500">
                                     代碼: {user.dept_code}
                                   </div>
                                 )}
                               </>
+                            ) : (
+                              <div className="text-sm text-gray-400">
+                                未設定單位
+                              </div>
                             )}
                           </div>
                         </TableCell>
