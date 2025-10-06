@@ -40,7 +40,7 @@ class BatchImport(Base):
     success_count = Column(Integer, nullable=False, default=0)
     failed_count = Column(Integer, nullable=False, default=0)
     error_summary = Column(JSON, nullable=True)  # Store detailed errors
-    parsed_data = Column(JSON, nullable=True)  # Store parsed data for confirm step
+    parsed_data = Column(JSON, nullable=True)  # Store parsed data for confirm step (auto-deleted after 7 days)
 
     # Import status: 'pending', 'processing', 'completed', 'failed', 'cancelled', 'partial'
     import_status = Column(
@@ -53,6 +53,9 @@ class BatchImport(Base):
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    data_expires_at = Column(
+        DateTime(timezone=True), nullable=True, index=True
+    )  # When to auto-delete parsed_data (7 days from creation)
 
     # Relationships
     importer = relationship("User", foreign_keys=[importer_id])

@@ -258,7 +258,12 @@ class BatchImportService:
         file_name: str,
         total_records: int,
     ) -> BatchImport:
-        """Create a batch import record"""
+        """Create a batch import record with 7-day TTL for sensitive data"""
+        from datetime import timedelta
+
+        # Set data expiration to 7 days from now for auto-cleanup
+        data_expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+
         batch_import = BatchImport(
             importer_id=importer_id,
             college_code=college_code,
@@ -268,10 +273,60 @@ class BatchImportService:
             file_name=file_name,
             total_records=total_records,
             import_status=BatchImportStatus.pending.value,
+            data_expires_at=data_expires_at,
         )
         self.db.add(batch_import)
         await self.db.flush()
         return batch_import
+
+    async def _get_or_create_users_bulk(self, parsed_data: List[Dict[str, Any]]) -> Dict[str, User]:
+        """
+        Bulk fetch existing users and create missing ones.
+        Returns dict mapping student_id to User object.
+        """
+        # Extract all student IDs
+        student_ids = [row["student_id"] for row in parsed_data]
+
+        # Bulk fetch existing users
+        stmt = select(User).where(User.nycu_id.in_(student_ids))
+        result = await self.db.execute(stmt)
+        existing_users = result.scalars().all()
+
+        # Map existing users by nycu_id
+        user_map = {user.nycu_id: user for user in existing_users}
+
+        # Identify missing users
+        missing_student_ids = set(student_ids) - set(user_map.keys())
+
+        # Bulk create missing users
+        if missing_student_ids:
+            new_users = []
+            for row in parsed_data:
+                student_id = row["student_id"]
+                if student_id in missing_student_ids:
+                    new_user = User(
+                        nycu_id=student_id,
+                        name=row["student_name"],
+                        email=f"{student_id}@nycu.edu.tw",
+                        user_type="student",
+                        role="student",
+                        dept_code=row.get("dept_code"),
+                        raw_data={
+                            "imported_from_batch": True,
+                            "batch_import_data": row,
+                        },
+                    )
+                    new_users.append(new_user)
+                    self.db.add(new_user)
+
+            # Flush to get IDs
+            await self.db.flush()
+
+            # Update user_map with new users
+            for user in new_users:
+                user_map[user.nycu_id] = user
+
+        return user_map
 
     async def create_applications_from_batch(
         self,
@@ -284,7 +339,12 @@ class BatchImportService:
         """
         Create Application records from parsed batch data with transaction safety.
 
-        Uses all-or-nothing transaction strategy: if ANY row fails,
+        Uses bulk operations for performance:
+        1. Bulk fetch all users
+        2. Bulk create missing users
+        3. Bulk create applications
+
+        Uses all-or-nothing transaction strategy: if ANY operation fails,
         the entire batch is rolled back.
 
         Returns:
@@ -306,31 +366,16 @@ class BatchImportService:
         # Begin transaction - all operations will be rolled back if any fails
         current_row = 0
         try:
+            # Step 1: Bulk get/create users
+            user_map = await self._get_or_create_users_bulk(parsed_data)
+
+            # Step 2: Bulk create applications
+            applications = []
             for idx, row_data in enumerate(parsed_data):
                 student_id = row_data["student_id"]
                 current_row = idx + 2  # Track current row for error reporting
 
-                # Find or create user
-                stmt = select(User).where(User.nycu_id == student_id)
-                result = await self.db.execute(stmt)
-                user = result.scalar_one_or_none()
-
-                if not user:
-                    # Create user if not exists (simplified - should sync with external API)
-                    user = User(
-                        nycu_id=student_id,
-                        name=row_data["student_name"],
-                        email=f"{student_id}@nycu.edu.tw",
-                        user_type="student",
-                        role="student",
-                        dept_code=row_data.get("dept_code"),
-                        raw_data={
-                            "imported_from_batch": True,
-                            "batch_import_data": row_data,
-                        },
-                    )
-                    self.db.add(user)
-                    await self.db.flush()
+                user = user_map[student_id]
 
                 # Generate app_id
                 app_id = f"APP-{academic_year}-{ApplicationStatus.submitted.value[:3].upper()}-{user.id:06d}"
@@ -372,9 +417,14 @@ class BatchImportService:
                         "custom_fields": row_data.get("custom_fields", {}),
                     },
                 )
+                applications.append(application)
                 self.db.add(application)
-                await self.db.flush()
-                created_ids.append(application.id)
+
+            # Flush all applications at once
+            await self.db.flush()
+
+            # Collect created IDs
+            created_ids = [app.id for app in applications]
 
         except Exception as e:
             # Rollback all changes on any error
@@ -427,3 +477,33 @@ class BatchImportService:
             }
 
         await self.db.commit()
+
+    async def cleanup_expired_data(self) -> int:
+        """
+        Clean up expired parsed_data from batch imports.
+
+        Deletes parsed_data JSON field from batch imports where:
+        - data_expires_at is in the past
+        - parsed_data is not None
+
+        Returns:
+            Number of records cleaned up
+        """
+        # Find expired batch imports with data
+        stmt = select(BatchImport).where(
+            BatchImport.data_expires_at <= datetime.now(timezone.utc), BatchImport.parsed_data.isnot(None)
+        )
+
+        result = await self.db.execute(stmt)
+        expired_batches = result.scalars().all()
+
+        count = 0
+        for batch in expired_batches:
+            # Clear sensitive parsed_data
+            batch.parsed_data = None
+            count += 1
+
+        if count > 0:
+            await self.db.commit()
+
+        return count
