@@ -1,29 +1,11 @@
 import type React from "react";
 import type { Metadata, Viewport } from "next";
-import dynamic from "next/dynamic";
 import "./globals.css";
-import { SWRConfig } from "swr";
 import { AuthProvider } from "@/hooks/use-auth";
 import { NotificationProvider } from "@/contexts/notification-context";
 import { QueryProvider } from "@/components/providers/query-provider";
-import { apiClient } from "@/lib/api";
-
-// Lazy load DebugPanel only when enabled (tree-shaken in production)
-const DebugPanel = dynamic(
-  () => import("@/components/debug-panel").then((m) => ({ default: m.DebugPanel })),
-  {
-    ssr: false,
-    loading: () => null,
-  }
-);
-
-const defaultFetcher = async (endpoint: string) => {
-  const response = await apiClient.request(endpoint);
-  if (!response.success) {
-    throw new Error(response.message || "Request failed");
-  }
-  return response.data ?? null;
-};
+import { DebugPanelWrapper } from "@/components/debug-panel-wrapper";
+import { SWRProvider } from "@/components/providers/swr-provider";
 
 export const metadata: Metadata = {
   title: "獎學金申請與簽核系統 | 國立陽明交通大學教務處",
@@ -60,20 +42,14 @@ export default function RootLayout({
     <html lang="zh-TW" className="scroll-smooth">
       <body className="antialiased">
         <QueryProvider>
-          <SWRConfig
-            value={{
-              fetcher: defaultFetcher,
-              revalidateOnFocus: true,
-              shouldRetryOnError: false,
-            }}
-          >
+          <SWRProvider>
             <AuthProvider>
               <NotificationProvider>
                 {children}
-                {process.env.NEXT_PUBLIC_ENABLE_DEBUG_PANEL === "true" && <DebugPanel />}
+                <DebugPanelWrapper />
               </NotificationProvider>
             </AuthProvider>
-          </SWRConfig>
+          </SWRProvider>
         </QueryProvider>
       </body>
     </html>
