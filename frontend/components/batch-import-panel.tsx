@@ -625,6 +625,7 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
                       <th className="px-4 py-2 text-left text-sm font-semibold">{locale === "zh" ? "成功" : "Success"}</th>
                       <th className="px-4 py-2 text-left text-sm font-semibold">{locale === "zh" ? "失敗" : "Failed"}</th>
                       <th className="px-4 py-2 text-left text-sm font-semibold">{locale === "zh" ? "狀態" : "Status"}</th>
+                      <th className="px-4 py-2 text-left text-sm font-semibold">{locale === "zh" ? "操作" : "Actions"}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -647,6 +648,27 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
                           >
                             {item.import_status === "completed" ? (locale === "zh" ? "完成" : "Completed") : item.import_status === "failed" ? (locale === "zh" ? "失敗" : "Failed") : (locale === "zh" ? "待處理" : "Pending")}
                           </span>
+                        </td>
+                        <td className="px-4 py-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                await apiClient.batchImport.downloadFile(item.id);
+                              } catch (error: any) {
+                                setError(
+                                  error.message ||
+                                    (locale === "zh"
+                                      ? "下載檔案失敗"
+                                      : "Failed to download file")
+                                );
+                              }
+                            }}
+                            title={locale === "zh" ? "下載原始檔案" : "Download original file"}
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
                         </td>
                       </tr>
                     ))}

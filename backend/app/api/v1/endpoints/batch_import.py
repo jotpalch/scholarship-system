@@ -187,6 +187,29 @@ async def upload_batch_import_data(
         total_records=len(parsed_data),
     )
 
+    # Upload original file to MinIO for later download/preview
+    from app.services.minio_service import MinioService
+
+    try:
+        minio_service = MinioService()
+        object_name = f"batch-imports/{batch_import.id}/{file.filename}"
+        minio_service.upload_file(
+            bucket_name=settings.minio_bucket,
+            object_name=object_name,
+            file_data=file_content,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            if file.filename.endswith(".xlsx")
+            else "application/vnd.ms-excel"
+            if file.filename.endswith(".xls")
+            else "text/csv",
+        )
+        batch_import.file_path = object_name
+    except Exception as e:
+        # Log error but don't fail the upload if MinIO is unavailable
+        import logging
+
+        logging.error(f"Failed to upload batch import file to MinIO: {e}")
+
     # Store parsed data for confirm step
     batch_import.parsed_data = {
         "data": parsed_data,
@@ -894,21 +917,41 @@ async def get_batch_import_history(
 
     **權限**: College 角色僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
     """
-    # Query batch imports
+    # Query batch imports - only show confirmed imports (exclude pending)
+    # Pending imports are temporary and should not appear in history until confirmed
+    confirmed_statuses = [
+        BatchImportStatus.completed,
+        BatchImportStatus.partial,
+        BatchImportStatus.failed,
+        BatchImportStatus.cancelled,
+    ]
+
     if current_user.role == UserRole.super_admin:
-        # Super admin can see all batch imports
-        stmt = select(BatchImport).order_by(desc(BatchImport.created_at)).offset(skip).limit(limit)
-        count_stmt = select(BatchImport)
-    else:
-        # College role can only see their own
+        # Super admin can see all confirmed batch imports
         stmt = (
             select(BatchImport)
-            .where(BatchImport.importer_id == current_user.id)
+            .where(BatchImport.import_status.in_(confirmed_statuses))
             .order_by(desc(BatchImport.created_at))
             .offset(skip)
             .limit(limit)
         )
-        count_stmt = select(BatchImport).where(BatchImport.importer_id == current_user.id)
+        count_stmt = select(BatchImport).where(BatchImport.import_status.in_(confirmed_statuses))
+    else:
+        # College role can only see their own confirmed imports
+        stmt = (
+            select(BatchImport)
+            .where(
+                BatchImport.importer_id == current_user.id,
+                BatchImport.import_status.in_(confirmed_statuses),
+            )
+            .order_by(desc(BatchImport.created_at))
+            .offset(skip)
+            .limit(limit)
+        )
+        count_stmt = select(BatchImport).where(
+            BatchImport.importer_id == current_user.id,
+            BatchImport.import_status.in_(confirmed_statuses),
+        )
 
     result = await db.execute(stmt)
     batch_imports = result.scalars().all()
@@ -998,6 +1041,76 @@ async def get_batch_import_details(
         "message": "查詢成功",
         "data": response_data.model_dump(),
     }
+
+
+@router.get("/{batch_id}/download")
+async def download_batch_import_file(
+    batch_id: int,
+    current_user: User = Depends(require_college_role),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    下載批次匯入的原始 Excel 檔案
+
+    **權限**: College 角色僅能下載自己上傳的檔案，Super Admin 可下載所有檔案
+    """
+    from app.services.minio_service import MinioService
+
+    # Get batch import
+    batch_import = await db.get(BatchImport, batch_id)
+    if not batch_import:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"批次匯入記錄 {batch_id} 不存在",
+        )
+
+    # Verify ownership (skip for super_admin)
+    if batch_import.importer_id != current_user.id and current_user.role != UserRole.super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="僅能下載自己上傳的批次匯入檔案",
+        )
+
+    # Check if file exists
+    if not batch_import.file_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="原始檔案不存在（可能是舊版本匯入或檔案已被刪除）",
+        )
+
+    # Get file from MinIO
+    try:
+        from app.core.config import settings
+
+        minio_service = MinioService()
+        file_data = minio_service.get_file(bucket_name=settings.minio_bucket, object_name=batch_import.file_path)
+
+        # Determine content type
+        if batch_import.file_name.endswith(".xlsx"):
+            content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        elif batch_import.file_name.endswith(".xls"):
+            content_type = "application/vnd.ms-excel"
+        else:
+            content_type = "text/csv"
+
+        # Return file as download
+        from urllib.parse import quote
+
+        encoded_filename = quote(batch_import.file_name, encoding="utf-8")
+
+        return StreamingResponse(
+            BytesIO(file_data),
+            media_type=content_type,
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
+        )
+    except Exception as e:
+        import logging
+
+        logging.error(f"Failed to download batch import file from MinIO: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="下載檔案時發生錯誤",
+        )
 
 
 @router.get("/template")

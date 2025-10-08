@@ -19,6 +19,7 @@ import {
   XCircle,
   Loader2,
   AlertTriangle,
+  Trash2,
 } from "lucide-react";
 import { FileUpload } from "@/components/file-upload";
 import type { Application } from "@/lib/api";
@@ -222,6 +223,50 @@ export function BatchApplicationFileUpload({
     }
   };
 
+  const handleDelete = async (appId: number) => {
+    if (
+      !window.confirm(
+        locale === "zh"
+          ? "確定要刪除此申請嗎？此操作無法復原。"
+          : "Are you sure you want to delete this application? This action cannot be undone."
+      )
+    ) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      const response = await apiClient.applications.deleteApplication(appId);
+
+      if (response.success) {
+        // Remove from upload states
+        setUploadStates((prev) => {
+          const updated = new Map(prev);
+          updated.delete(appId);
+          return updated;
+        });
+
+        // Notify completion (optional - refresh parent data)
+        if (onUploadComplete) {
+          onUploadComplete();
+        }
+      } else {
+        setError(
+          response.message ||
+            (locale === "zh" ? "刪除失敗" : "Failed to delete application")
+        );
+      }
+    } catch (err: any) {
+      setError(
+        err.message ||
+          (locale === "zh"
+            ? "刪除時發生錯誤"
+            : "Error occurred during deletion")
+      );
+    }
+  };
+
   const getDocumentTypeLabel = (value: string) => {
     const docType = DOCUMENT_TYPES.find((type) => type.value === value);
     return docType ? (locale === "zh" ? docType.label_zh : docType.label_en) : value;
@@ -308,6 +353,19 @@ export function BatchApplicationFileUpload({
                       {locale === "zh" ? "失敗" : "Failed"}
                     </span>
                   </div>
+                )}
+
+                {/* Delete Button */}
+                {!state.loading && state.application && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDelete(appId)}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    title={locale === "zh" ? "刪除此申請" : "Delete this application"}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 )}
               </div>
             </CardHeader>

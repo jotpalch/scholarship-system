@@ -1538,12 +1538,19 @@ class ApplicationService:
         if current_user.role == UserRole.student:
             if application.user_id != current_user.id:
                 raise AuthorizationError("You can only delete your own applications")
+            # Students can only delete draft applications
+            if application.status != ApplicationStatus.draft.value:
+                raise ValidationError("Only draft applications can be deleted")
+        elif current_user.role == UserRole.college:
+            # College users can delete batch-imported applications they created
+            if application.import_source == "batch_import" and application.imported_by_id == current_user.id:
+                # Can delete batch-imported applications
+                pass
+            else:
+                raise AuthorizationError("College users can only delete batch-imported applications they created")
         elif current_user.role not in [UserRole.admin, UserRole.super_admin]:
             raise AuthorizationError("You don't have permission to delete applications")
-
-        # Only draft applications can be deleted
-        if application.status != ApplicationStatus.draft.value:
-            raise ValidationError("Only draft applications can be deleted")
+        # Admin and super_admin can delete any application (no status restriction)
 
         # Delete associated files from MinIO if they exist
         if application.submitted_form_data and "documents" in application.submitted_form_data:

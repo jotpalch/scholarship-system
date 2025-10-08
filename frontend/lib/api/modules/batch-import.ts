@@ -288,5 +288,54 @@ export function createBatchImportApi(client: ApiClient) {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     },
+
+    /**
+     * Download original file for a batch import
+     */
+    downloadFile: async (batchId: number): Promise<void> => {
+      const token = client.getToken();
+      const baseURL =
+        typeof window !== "undefined"
+          ? ""
+          : process.env.INTERNAL_API_URL || "http://localhost:8000";
+
+      const response = await fetch(
+        `${baseURL}/api/v1/college/batch-import/${batchId}/download`,
+        {
+          method: "GET",
+          headers: {
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to download file");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+
+      // Extract filename from Content-Disposition header
+      const contentDisposition = response.headers.get("content-disposition");
+      let filename = `batch_import_${batchId}.xlsx`;
+      if (contentDisposition) {
+        // Match filename*=UTF-8''encoded_name (RFC 5987)
+        const filenameMatch = contentDisposition.match(
+          /filename\*=UTF-8''([^;]+)/
+        );
+        if (filenameMatch) {
+          filename = decodeURIComponent(filenameMatch[1].trim());
+        }
+      }
+
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    },
   };
 }
