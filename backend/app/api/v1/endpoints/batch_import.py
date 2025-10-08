@@ -188,10 +188,10 @@ async def upload_batch_import_data(
     )
 
     # Upload original file to MinIO for later download/preview
-    from app.services.minio_service import MinioService
+    from app.services.minio_service import MinIOService
 
     try:
-        minio_service = MinioService()
+        minio_service = MinIOService()
         object_name = f"batch-imports/{batch_import.id}/{file.filename}"
         minio_service.upload_file(
             bucket_name=settings.minio_bucket,
@@ -565,7 +565,7 @@ async def upload_batch_documents(
 
     from app.core.config import settings
     from app.models.application import Application, ApplicationFile
-    from app.services.minio_service import MinioService
+    from app.services.minio_service import MinIOService
 
     # Get batch import record
     batch_import = await db.get(BatchImport, batch_id)
@@ -634,7 +634,7 @@ async def upload_batch_documents(
     student_app_map = {app.student_id: app for app in applications}
 
     # Initialize MinIO service
-    minio_service = MinioService()
+    minio_service = MinIOService()
 
     # Process each file in ZIP
     for file_info in zip_file.filelist:
@@ -1054,7 +1054,7 @@ async def download_batch_import_file(
 
     **權限**: College 角色僅能下載自己上傳的檔案，Super Admin 可下載所有檔案
     """
-    from app.services.minio_service import MinioService
+    from app.services.minio_service import MinIOService
 
     # Get batch import
     batch_import = await db.get(BatchImport, batch_id)
@@ -1082,7 +1082,7 @@ async def download_batch_import_file(
     try:
         from app.core.config import settings
 
-        minio_service = MinioService()
+        minio_service = MinIOService()
         file_data = minio_service.get_file(bucket_name=settings.minio_bucket, object_name=batch_import.file_path)
 
         # Determine content type
