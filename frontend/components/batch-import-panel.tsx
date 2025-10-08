@@ -17,6 +17,7 @@ import {
   History,
   X,
 } from "lucide-react";
+import { BatchDocumentUpload } from "@/components/batch-document-upload";
 
 interface BatchImportPanelProps {
   locale?: "zh" | "en";
@@ -84,6 +85,7 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [uploadedBatch, setUploadedBatch] = useState<UploadedBatch | null>(null);
+  const [confirmedBatch, setConfirmedBatch] = useState<{ id: number; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<ImportHistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -257,6 +259,11 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
             ? `匯入完成！成功: ${response.data.success_count}, 失敗: ${response.data.failed_count}`
             : `Import complete! Success: ${response.data.success_count}, Failed: ${response.data.failed_count}`
         );
+        // Store batch info for document upload
+        setConfirmedBatch({
+          id: uploadedBatch.batch_id,
+          name: uploadedBatch.file_name,
+        });
         setUploadedBatch(null);
         fetchHistory();
       } else {
@@ -640,6 +647,33 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
                 </table>
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Document Upload Section */}
+      {confirmedBatch && (
+        <Card className="border-nycu-blue-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-nycu-navy-800">
+              <Upload className="h-5 w-5 text-nycu-blue-600" />
+              {locale === "zh" ? "批次上傳文件" : "Batch Upload Documents"}
+            </CardTitle>
+            <CardDescription>
+              {locale === "zh"
+                ? `為批次 "${confirmedBatch.name}" 上傳學生文件（存摺封面、成績單等）`
+                : `Upload student documents for batch "${confirmedBatch.name}" (bank book, transcript, etc.)`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <BatchDocumentUpload
+              batchId={confirmedBatch.id}
+              onUploadComplete={() => {
+                setConfirmedBatch(null);
+                fetchHistory();
+              }}
+              locale={locale}
+            />
           </CardContent>
         </Card>
       )}
