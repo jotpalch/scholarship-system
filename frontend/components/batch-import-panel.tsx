@@ -60,17 +60,18 @@ interface UploadedBatch {
 }
 
 interface ImportHistoryItem {
-  id: string;
+  id: number;
   file_name: string;
-  uploaded_by: number;
-  uploaded_at: string;
+  importer_name?: string;
+  created_at: string;
   total_records: number;
   success_count: number;
   failed_count: number;
-  status: "pending" | "completed" | "failed";
-  scholarship_type: string;
+  import_status: string;
+  scholarship_type_id?: number;
+  college_code: string;
   academic_year: number;
-  semester: string;
+  semester: string | null;
 }
 
 export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
@@ -616,21 +617,21 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
                     {history.map((item) => (
                       <tr key={item.id} className="border-b hover:bg-gray-50">
                         <td className="px-4 py-2 text-sm">{item.file_name}</td>
-                        <td className="px-4 py-2 text-sm">{new Date(item.uploaded_at).toLocaleString()}</td>
+                        <td className="px-4 py-2 text-sm">{new Date(item.created_at).toLocaleString()}</td>
                         <td className="px-4 py-2 text-sm">{item.total_records}</td>
                         <td className="px-4 py-2 text-sm text-green-600">{item.success_count}</td>
                         <td className="px-4 py-2 text-sm text-red-600">{item.failed_count}</td>
                         <td className="px-4 py-2 text-sm">
                           <span
                             className={`px-2 py-1 rounded text-xs font-semibold ${
-                              item.status === "completed"
+                              item.import_status === "completed"
                                 ? "bg-green-100 text-green-800"
-                                : item.status === "failed"
+                                : item.import_status === "failed"
                                 ? "bg-red-100 text-red-800"
                                 : "bg-yellow-100 text-yellow-800"
                             }`}
                           >
-                            {item.status === "completed" ? (locale === "zh" ? "完成" : "Completed") : item.status === "failed" ? (locale === "zh" ? "失敗" : "Failed") : (locale === "zh" ? "待處理" : "Pending")}
+                            {item.import_status === "completed" ? (locale === "zh" ? "完成" : "Completed") : item.import_status === "failed" ? (locale === "zh" ? "失敗" : "Failed") : (locale === "zh" ? "待處理" : "Pending")}
                           </span>
                         </td>
                       </tr>

@@ -13,7 +13,7 @@ import type { ApiClient } from '../client';
 import type { ApiResponse } from '../../api';
 
 type BatchUploadResult = {
-  batch_id: string;
+  batch_id: number;
   file_name: string;
   total_records: number;
   preview_data: Array<Record<string, any>>;
@@ -80,17 +80,18 @@ type BatchDocumentUploadResponse = {
 };
 
 type BatchHistoryItem = {
-  id: string;
+  id: number;
   file_name: string;
-  uploaded_by: number;
-  uploaded_at: string;
+  importer_name?: string;
+  created_at: string;
   total_records: number;
   success_count: number;
   failed_count: number;
-  status: "pending" | "completed" | "failed";
-  scholarship_type: string;
+  import_status: string;
+  scholarship_type_id?: number;
+  college_code: string;
   academic_year: number;
-  semester: string;
+  semester: string | null;
 };
 
 type BatchHistoryResponse = {
@@ -147,7 +148,7 @@ export function createBatchImportApi(client: ApiClient) {
      * Confirm batch import after validation
      */
     confirm: async (
-      batchId: string,
+      batchId: number,
       confirm: boolean = true
     ): Promise<ApiResponse<BatchConfirmResult>> => {
       return client.request(`/college/batch-import/${batchId}/confirm`, {
@@ -160,7 +161,7 @@ export function createBatchImportApi(client: ApiClient) {
      * Update a single record in the batch import
      */
     updateRecord: async (
-      batchId: string,
+      batchId: number,
       recordIndex: number,
       updates: Record<string, any>
     ): Promise<ApiResponse<BatchUpdateRecordResult>> => {
@@ -174,7 +175,7 @@ export function createBatchImportApi(client: ApiClient) {
      * Re-validate all records in the batch import
      */
     revalidate: async (
-      batchId: string
+      batchId: number
     ): Promise<ApiResponse<BatchRevalidateResult>> => {
       return client.request(`/college/batch-import/${batchId}/validate`, {
         method: "POST",
@@ -185,7 +186,7 @@ export function createBatchImportApi(client: ApiClient) {
      * Delete a single record from the batch import
      */
     deleteRecord: async (
-      batchId: string,
+      batchId: number,
       recordIndex: number
     ): Promise<ApiResponse<BatchDeleteRecordResult>> => {
       return client.request(
@@ -200,7 +201,7 @@ export function createBatchImportApi(client: ApiClient) {
      * Upload documents in bulk for batch import (ZIP file)
      */
     uploadDocuments: async (
-      batchId: string,
+      batchId: number,
       zipFile: File
     ): Promise<ApiResponse<BatchDocumentUploadResponse>> => {
       const formData = new FormData();
@@ -239,7 +240,7 @@ export function createBatchImportApi(client: ApiClient) {
      * Get detailed information about a specific batch import
      */
     getDetails: async (
-      batchId: string
+      batchId: number
     ): Promise<ApiResponse<BatchDetails>> => {
       return client.request(`/college/batch-import/${batchId}/details`);
     },

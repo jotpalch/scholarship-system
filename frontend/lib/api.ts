@@ -3828,7 +3828,7 @@ class ApiClient {
       semester: string
     ): Promise<
       ApiResponse<{
-        batch_id: string;
+        batch_id: number;
         file_name: string;
         total_records: number;
         preview_data: Array<Record<string, any>>;
@@ -3860,7 +3860,7 @@ class ApiClient {
     },
 
     confirm: async (
-      batchId: string,
+      batchId: number,
       confirm: boolean = true
     ): Promise<
       ApiResponse<{
@@ -3880,6 +3880,84 @@ class ApiClient {
       });
     },
 
+    updateRecord: async (
+      batchId: number,
+      recordIndex: number,
+      updates: Record<string, any>
+    ): Promise<ApiResponse<{ updated_record: Record<string, any> }>> => {
+      return this.request(`/college/batch-import/${batchId}/records`, {
+        method: "PATCH",
+        body: JSON.stringify({ record_index: recordIndex, updates }),
+      });
+    },
+
+    revalidate: async (
+      batchId: number
+    ): Promise<
+      ApiResponse<{
+        batch_id: number;
+        total_records: number;
+        valid_count: number;
+        invalid_count: number;
+        errors: Array<{
+          row: number;
+          field: string;
+          message: string;
+        }>;
+      }>
+    > => {
+      return this.request(`/college/batch-import/${batchId}/validate`, {
+        method: "POST",
+      });
+    },
+
+    deleteRecord: async (
+      batchId: number,
+      recordIndex: number
+    ): Promise<
+      ApiResponse<{
+        deleted_record: Record<string, any>;
+        remaining_records: number;
+      }>
+    > => {
+      return this.request(
+        `/college/batch-import/${batchId}/records/${recordIndex}`,
+        {
+          method: "DELETE",
+        }
+      );
+    },
+
+    uploadDocuments: async (
+      batchId: number,
+      zipFile: File
+    ): Promise<
+      ApiResponse<{
+        batch_id: number;
+        total_files: number;
+        matched_count: number;
+        unmatched_count: number;
+        error_count: number;
+        results: Array<{
+          student_id: string;
+          file_name: string;
+          document_type: string;
+          status: string;
+          message?: string;
+          application_id?: number;
+        }>;
+      }>
+    > => {
+      const formData = new FormData();
+      formData.append("file", zipFile);
+
+      return this.request(`/college/batch-import/${batchId}/documents`, {
+        method: "POST",
+        body: formData,
+        headers: {}, // Let browser set Content-Type for FormData
+      });
+    },
+
     getHistory: async (params?: {
       skip?: number;
       limit?: number;
@@ -3887,17 +3965,18 @@ class ApiClient {
     }): Promise<
       ApiResponse<{
         items: Array<{
-          id: string;
+          id: number;
           file_name: string;
-          uploaded_by: number;
-          uploaded_at: string;
+          importer_name?: string;
+          created_at: string;
           total_records: number;
           success_count: number;
           failed_count: number;
-          status: "pending" | "completed" | "failed";
-          scholarship_type: string;
+          import_status: string;
+          scholarship_type_id?: number;
+          college_code: string;
           academic_year: number;
-          semester: string;
+          semester: string | null;
         }>;
         total: number;
       }>
@@ -3917,20 +3996,21 @@ class ApiClient {
     },
 
     getDetails: async (
-      batchId: string
+      batchId: number
     ): Promise<
       ApiResponse<{
-        id: string;
+        id: number;
         file_name: string;
-        uploaded_by: number;
-        uploaded_at: string;
+        importer_name?: string;
+        created_at: string;
         total_records: number;
         success_count: number;
         failed_count: number;
-        status: "pending" | "completed" | "failed";
-        scholarship_type: string;
+        import_status: string;
+        scholarship_type_id?: number;
+        college_code: string;
         academic_year: number;
-        semester: string;
+        semester: string | null;
         validation_summary: {
           valid_count: number;
           invalid_count: number;
