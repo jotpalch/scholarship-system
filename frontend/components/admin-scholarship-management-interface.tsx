@@ -388,7 +388,7 @@ export function AdminScholarshipManagementInterface({
   // Field management handlers
   const handleCreateField = async (fieldData: ApplicationFieldCreate) => {
     try {
-      const response = await api.applicationFields.createField(fieldData);
+      const response = await api.applicationFields.createField(fieldData as any);
       if (response.success && response.data) {
         const newField = response.data as unknown as ApplicationField;
         setApplicationFields(prev => [...prev, newField]);
@@ -452,7 +452,7 @@ export function AdminScholarshipManagementInterface({
     documentData: ApplicationDocumentCreate
   ) => {
     try {
-      const response = await api.applicationFields.createDocument(documentData);
+      const response = await api.applicationFields.createDocument(documentData as any);
       if (response.success && response.data) {
         const newDocument = response.data as unknown as ApplicationDocument;
         setDocumentRequirements(prev => [...prev, newDocument]);
