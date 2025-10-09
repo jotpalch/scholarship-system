@@ -145,6 +145,36 @@ async def update_my_profile(
     }
 
 
+@router.put("/student-info")
+async def update_student_info(
+    update_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Update student information
+
+    Note: This endpoint currently only updates the User model.
+    Student detailed info is read-only from external system.
+    """
+    if current_user.role != UserRole.student:
+        raise HTTPException(status_code=403, detail="Only students can update student information")
+
+    # Currently we don't have a separate Student table, so we can only update User fields
+    # In the future, this could update additional student-specific fields
+
+    # For now, just return success with current student info
+    from app.services.application_service import get_student_data_from_user
+
+    student = await get_student_data_from_user(current_user)
+
+    return {
+        "success": True,
+        "message": "Student information retrieved successfully (updates not yet supported)",
+        "data": student,
+    }
+
+
 # ==================== 管理員專用API ====================
 
 
@@ -324,6 +354,62 @@ async def update_user(
         "message": "User updated successfully",
         "data": convert_user_to_dict(user),
     }
+
+
+@router.delete("/{id}")
+async def delete_user(
+    id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Delete user (admin only)
+
+    This is a hard delete. Use with caution.
+    """
+    result = await db.execute(select(User).where(User.id == id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Prevent self-deletion
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+
+    await db.delete(user)
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": "User deleted successfully",
+        "data": {"user_id": id},
+    }
+
+
+@router.post("/{id}/reset-password")
+async def reset_user_password(
+    id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Reset user password (admin only)
+
+    Note: This endpoint is not supported in SSO-only authentication mode.
+    Passwords are managed by the SSO provider (NYCU Portal).
+    """
+    result = await db.execute(select(User).where(User.id == id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # In SSO-only mode, password reset is not supported
+    raise HTTPException(
+        status_code=501,
+        detail="Password reset not supported in SSO authentication mode. Users must reset password via NYCU Portal.",
+    )
 
 
 @router.patch("/{id}/college")

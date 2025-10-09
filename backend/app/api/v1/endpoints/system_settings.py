@@ -359,9 +359,9 @@ async def get_configuration_data_types(current_user: User = Depends(require_admi
     }
 
 
-@router.get("/audit-logs/{id}")
+@router.get("/audit-logs/{config_key}")
 async def get_configuration_audit_logs(
-    id: str, limit: int = 50, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
+    config_key: str, limit: int = 50, db: AsyncSession = Depends(get_db), current_user: User = Depends(require_admin)
 ):
     """
     獲取配置變更審計日誌
@@ -376,7 +376,7 @@ async def get_configuration_audit_logs(
         stmt = (
             select(ConfigurationAuditLog)
             .options(selectinload(ConfigurationAuditLog.changed_by_user))
-            .where(ConfigurationAuditLog.setting_key == id)
+            .where(ConfigurationAuditLog.setting_key == config_key)
             .order_by(ConfigurationAuditLog.changed_at.desc())
             .limit(limit)
         )
