@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -13,21 +13,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Upload,
-  CheckCircle,
-  XCircle,
   Loader2,
   AlertTriangle,
   Trash2,
 } from "lucide-react";
-import { FileUpload } from "@/components/file-upload";
+import { Badge } from "@/components/ui/badge";
+import { ApplicationFileUploadDialog } from "@/components/application-file-upload-dialog";
 import type { Application } from "@/lib/api";
 
 interface BatchApplicationFileUploadProps {
@@ -36,24 +28,10 @@ interface BatchApplicationFileUploadProps {
   locale?: "zh" | "en";
 }
 
-interface ApplicationUploadState {
+interface ApplicationState {
   application: Application | null;
   loading: boolean;
-  selectedDocumentType: string;
-  files: File[];
-  uploading: boolean;
-  uploadStatus: "idle" | "success" | "error";
-  uploadMessage: string;
 }
-
-const DOCUMENT_TYPES = [
-  { value: "transcript", label_zh: "成績單", label_en: "Transcript" },
-  { value: "id_card", label_zh: "身分證", label_en: "ID Card" },
-  { value: "bank_book", label_zh: "存摺封面", label_en: "Bank Book" },
-  { value: "recommendation", label_zh: "推薦信", label_en: "Recommendation Letter" },
-  { value: "research_plan", label_zh: "研究計畫", label_en: "Research Plan" },
-  { value: "other", label_zh: "其他", label_en: "Other" },
-];
 
 interface DocumentType {
   value: string;
@@ -66,37 +44,37 @@ export function BatchApplicationFileUpload({
   onUploadComplete,
   locale = "zh",
 }: BatchApplicationFileUploadProps) {
-  const [uploadStates, setUploadStates] = useState<Map<number, ApplicationUploadState>>(
+  const [applicationStates, setApplicationStates] = useState<Map<number, ApplicationState>>(
     new Map()
   );
   const [error, setError] = useState<string | null>(null);
   const [scholarshipDocuments, setScholarshipDocuments] = useState<DocumentType[]>([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
 
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
+  const [selectedAppId, setSelectedAppId] = useState<number | null>(null);
+
   // Fetch application details on mount
   useEffect(() => {
     const fetchApplications = async () => {
-      const newStates = new Map<number, ApplicationUploadState>();
+      const newStates = new Map<number, ApplicationState>();
 
       for (const appId of applicationIds) {
         newStates.set(appId, {
           application: null,
           loading: true,
-          selectedDocumentType: "",
-          files: [],
-          uploading: false,
-          uploadStatus: "idle",
-          uploadMessage: "",
         });
       }
-      setUploadStates(newStates);
+      setApplicationStates(newStates);
 
       // Fetch each application
       for (const appId of applicationIds) {
         try {
           const response = await apiClient.applications.getApplicationById(appId);
           if (response.success && response.data) {
-            setUploadStates((prev) => {
+            setApplicationStates((prev) => {
               const updated = new Map(prev);
               const state = updated.get(appId);
               if (state) {
@@ -111,7 +89,7 @@ export function BatchApplicationFileUpload({
           }
         } catch (err) {
           console.error(`Failed to fetch application ${appId}:`, err);
-          setUploadStates((prev) => {
+          setApplicationStates((prev) => {
             const updated = new Map(prev);
             const state = updated.get(appId);
             if (state) {
@@ -135,152 +113,82 @@ export function BatchApplicationFileUpload({
   useEffect(() => {
     const fetchScholarshipDocuments = async () => {
       // Get scholarship type from the first application
-      const firstState = Array.from(uploadStates.values()).find(
+      const firstState = Array.from(applicationStates.values()).find(
         (state) => state.application && !state.loading
       );
 
       if (!firstState || !firstState.application) {
-        // No application loaded yet, use fallback
-        setScholarshipDocuments(DOCUMENT_TYPES);
         return;
       }
 
       const scholarshipType = firstState.application.scholarship_type;
       if (!scholarshipType) {
-        setScholarshipDocuments(DOCUMENT_TYPES);
         return;
       }
 
       setDocumentsLoading(true);
       try {
-        const response = await apiClient.applicationFields.getDocuments(scholarshipType);
-        if (response.success && response.data && response.data.length > 0) {
+        // Use getFormConfig to get documents including fixed documents (存摺封面)
+        const response = await apiClient.applicationFields.getFormConfig(scholarshipType);
+        if (response.success && response.data?.documents && response.data.documents.length > 0) {
           // Transform API response to DocumentType format
-          const transformedDocs: DocumentType[] = response.data.map((doc: any) => ({
+          const transformedDocs: DocumentType[] = response.data.documents.map((doc: any) => ({
             value: doc.document_name.toLowerCase().replace(/\s+/g, "_"),
             label_zh: doc.document_name,
             label_en: doc.document_name_en || doc.document_name,
           }));
           setScholarshipDocuments(transformedDocs);
         } else {
-          // Fallback to default types if no documents found
-          setScholarshipDocuments(DOCUMENT_TYPES);
+          setScholarshipDocuments([]);
         }
       } catch (err) {
         console.error("Failed to fetch scholarship documents:", err);
-        // Fallback to default types on error
-        setScholarshipDocuments(DOCUMENT_TYPES);
+        setScholarshipDocuments([]);
       } finally {
         setDocumentsLoading(false);
       }
     };
 
-    fetchScholarshipDocuments();
-  }, [uploadStates]);
+    // Only fetch when we have at least one loaded application
+    const hasLoadedApp = Array.from(applicationStates.values()).some(
+      (state) => state.application && !state.loading
+    );
 
-  const handleDocumentTypeChange = (appId: number, documentType: string) => {
-    setUploadStates((prev) => {
-      const updated = new Map(prev);
-      const state = updated.get(appId);
-      if (state) {
-        updated.set(appId, {
-          ...state,
-          selectedDocumentType: documentType,
-        });
-      }
-      return updated;
-    });
-  };
+    if (hasLoadedApp && scholarshipDocuments.length === 0 && !documentsLoading) {
+      fetchScholarshipDocuments();
+    }
+  }, [applicationStates, scholarshipDocuments.length, documentsLoading]);
 
-  const handleFilesChange = (appId: number, files: File[]) => {
-    setUploadStates((prev) => {
-      const updated = new Map(prev);
-      const state = updated.get(appId);
-      if (state) {
-        updated.set(appId, {
-          ...state,
-          files,
-        });
-      }
-      return updated;
-    });
-  };
+  // Get dynamic fields from form_data or submitted_form_data
+  const displayFields = useMemo(() => {
+    const firstApp = Array.from(applicationStates.values())
+      .find((s) => s.application)?.application;
 
-  const handleUpload = async (appId: number) => {
-    const state = uploadStates.get(appId);
-    if (!state || state.files.length === 0) {
-      setError(locale === "zh" ? "請選擇檔案" : "Please select files");
-      return;
+    if (!firstApp) return [];
+
+    // For batch import: use submitted_form_data.custom_fields (show all fields)
+    const customFields = firstApp.submitted_form_data?.custom_fields;
+    if (customFields && typeof customFields === 'object' && Object.keys(customFields).length > 0) {
+      return Object.keys(customFields); // Show all custom fields
     }
 
-    if (!state.selectedDocumentType) {
-      setError(locale === "zh" ? "請選擇文件類型" : "Please select document type");
-      return;
+    // For regular applications: use form_data (show all fields)
+    if (firstApp.form_data && typeof firstApp.form_data === 'object') {
+      return Object.keys(firstApp.form_data); // Show all form data fields
     }
 
-    setUploadStates((prev) => {
-      const updated = new Map(prev);
-      updated.set(appId, {
-        ...state,
-        uploading: true,
-        uploadStatus: "idle",
-        uploadMessage: "",
-      });
-      return updated;
-    });
+    return [];
+  }, [applicationStates]);
 
-    setError(null);
+  const handleOpenDialog = (application: Application, appId: number) => {
+    setSelectedApplication(application);
+    setSelectedAppId(appId);
+    setDialogOpen(true);
+  };
 
-    try {
-      // Upload each file
-      const uploadPromises = state.files.map((file) =>
-        apiClient.applications.uploadDocument(appId, file, state.selectedDocumentType)
-      );
-
-      const results = await Promise.allSettled(uploadPromises);
-
-      const allSuccess = results.every((result) => result.status === "fulfilled");
-
-      setUploadStates((prev) => {
-        const updated = new Map(prev);
-        const currentState = updated.get(appId);
-        if (currentState) {
-          updated.set(appId, {
-            ...currentState,
-            uploading: false,
-            uploadStatus: allSuccess ? "success" : "error",
-            uploadMessage: allSuccess
-              ? locale === "zh"
-                ? `成功上傳 ${state.files.length} 個檔案`
-                : `Successfully uploaded ${state.files.length} file(s)`
-              : locale === "zh"
-              ? "部分檔案上傳失敗"
-              : "Some files failed to upload",
-            files: allSuccess ? [] : currentState.files,
-          });
-        }
-        return updated;
-      });
-
-      if (allSuccess && onUploadComplete) {
-        onUploadComplete();
-      }
-    } catch (err: any) {
-      setUploadStates((prev) => {
-        const updated = new Map(prev);
-        const currentState = updated.get(appId);
-        if (currentState) {
-          updated.set(appId, {
-            ...currentState,
-            uploading: false,
-            uploadStatus: "error",
-            uploadMessage:
-              err.message ||
-              (locale === "zh" ? "上傳失敗" : "Upload failed"),
-          });
-        }
-        return updated;
-      });
+  const handleUploadComplete = () => {
+    if (onUploadComplete) {
+      onUploadComplete();
     }
   };
 
@@ -301,8 +209,8 @@ export function BatchApplicationFileUpload({
       const response = await apiClient.applications.deleteApplication(appId);
 
       if (response.success) {
-        // Remove from upload states
-        setUploadStates((prev) => {
+        // Remove from application states
+        setApplicationStates((prev) => {
           const updated = new Map(prev);
           updated.delete(appId);
           return updated;
@@ -326,11 +234,6 @@ export function BatchApplicationFileUpload({
             : "Error occurred during deletion")
       );
     }
-  };
-
-  const getDocumentTypeLabel = (value: string) => {
-    const docType = scholarshipDocuments.find((type) => type.value === value);
-    return docType ? (locale === "zh" ? docType.label_zh : docType.label_en) : value;
   };
 
   if (applicationIds.length === 0) {
@@ -365,23 +268,28 @@ export function BatchApplicationFileUpload({
               <TableHead className="w-[100px]">
                 {locale === "zh" ? "申請 ID" : "App ID"}
               </TableHead>
+              <TableHead className="w-[200px]">
+                {locale === "zh" ? "獎學金類型" : "Scholarship"}
+              </TableHead>
+              <TableHead className="w-[150px]">
+                {locale === "zh" ? "郵局帳號" : "Postal Account"}
+              </TableHead>
               <TableHead className="w-[180px]">
-                {locale === "zh" ? "文件類型" : "Document Type"}
+                {locale === "zh" ? "子獎學金項目" : "Sub Types"}
               </TableHead>
-              <TableHead>
-                {locale === "zh" ? "檔案" : "File"}
-              </TableHead>
-              <TableHead className="w-[200px] text-right">
+              {displayFields.map((field) => (
+                <TableHead key={field} className="min-w-[120px]">
+                  {field}
+                </TableHead>
+              ))}
+              <TableHead className="w-[240px] text-right">
                 {locale === "zh" ? "操作" : "Actions"}
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {Array.from(uploadStates.entries()).map(([appId, state]) => (
-              <TableRow key={appId} className={
-                state.uploadStatus === "success" ? "bg-green-50" :
-                state.uploadStatus === "error" ? "bg-red-50" : ""
-              }>
+            {Array.from(applicationStates.entries()).map(([appId, state]) => (
+              <TableRow key={appId}>
                 {/* Student ID */}
                 <TableCell className="font-mono text-sm">
                   {state.loading ? (
@@ -396,97 +304,64 @@ export function BatchApplicationFileUpload({
                 </TableCell>
 
                 {/* Application ID */}
-                <TableCell className="text-sm text-gray-600">
+                <TableCell className="text-sm text-muted-foreground">
                   {appId}
                 </TableCell>
 
-                {/* Document Type Selector */}
-                <TableCell>
-                  {!state.loading && state.application && (
-                    <Select
-                      value={state.selectedDocumentType}
-                      onValueChange={(value) => handleDocumentTypeChange(appId, value)}
-                      disabled={state.uploading || documentsLoading}
-                    >
-                      <SelectTrigger className="h-8">
-                        <SelectValue
-                          placeholder={
-                            documentsLoading
-                              ? locale === "zh"
-                                ? "載入中..."
-                                : "Loading..."
-                              : locale === "zh"
-                              ? "選擇類型"
-                              : "Select type"
-                          }
-                        />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {scholarshipDocuments.map((type) => (
-                          <SelectItem key={type.value} value={type.value}>
-                            {locale === "zh" ? type.label_zh : type.label_en}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                {/* Scholarship Type (Chinese Name) */}
+                <TableCell className="text-sm">
+                  {state.application?.scholarship_type_zh ||
+                   state.application?.scholarship_name ||
+                   state.application?.scholarship_type || "-"}
                 </TableCell>
 
-                {/* File Upload */}
-                <TableCell>
-                  {!state.loading && state.application && state.selectedDocumentType && (
-                    <div className="flex items-center gap-2">
-                      <FileUpload
-                        onFilesChange={(files) => handleFilesChange(appId, files)}
-                        acceptedTypes={[".pdf", ".jpg", ".jpeg", ".png"]}
-                        maxSize={10 * 1024 * 1024}
-                        maxFiles={3}
-                        fileType={state.selectedDocumentType}
-                        locale={locale}
-                        initialFiles={state.files}
-                      />
-                      {state.uploadMessage && (
-                        <div className="flex items-center gap-1 text-xs ml-2">
-                          {state.uploadStatus === "success" ? (
-                            <CheckCircle className="h-3 w-3 text-green-600" />
-                          ) : state.uploadStatus === "error" ? (
-                            <XCircle className="h-3 w-3 text-red-600" />
-                          ) : null}
-                          <span className={
-                            state.uploadStatus === "success" ? "text-green-600" :
-                            state.uploadStatus === "error" ? "text-red-600" : ""
-                          }>
-                            {state.uploadMessage}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                {/* Postal Account */}
+                <TableCell className="text-sm font-mono">
+                  {state.application?.submitted_form_data?.postal_account || "-"}
                 </TableCell>
+
+                {/* Sub Scholarship Types */}
+                <TableCell className="text-sm">
+                  <div className="flex flex-wrap gap-1">
+                    {state.application?.scholarship_subtype_list &&
+                     state.application.scholarship_subtype_list.length > 0 ? (
+                      state.application.scholarship_subtype_list.map((subType: string) => (
+                        <Badge key={subType} variant="secondary" className="text-xs">
+                          {locale === "zh"
+                            ? state.application?.sub_type_labels?.[subType]?.zh || subType
+                            : state.application?.sub_type_labels?.[subType]?.en || subType}
+                        </Badge>
+                      ))
+                    ) : (
+                      "-"
+                    )}
+                  </div>
+                </TableCell>
+
+                {/* Dynamic Form Data Fields */}
+                {displayFields.map((field) => (
+                  <TableCell key={field} className="text-sm">
+                    {state.application?.submitted_form_data?.custom_fields?.[field] ||
+                     state.application?.form_data?.[field] || "-"}
+                  </TableCell>
+                ))}
 
                 {/* Actions */}
                 <TableCell className="text-right">
                   {!state.loading && state.application && (
                     <div className="flex items-center justify-end gap-2">
-                      {state.selectedDocumentType && state.files.length > 0 && (
-                        <Button
-                          onClick={() => handleUpload(appId)}
-                          disabled={state.uploading}
-                          size="sm"
-                          className="h-8"
-                        >
-                          {state.uploading ? (
-                            <>
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            </>
-                          ) : (
-                            <>
-                              <Upload className="h-3 w-3 mr-1" />
-                              {locale === "zh" ? "上傳" : "Upload"}
-                            </>
-                          )}
-                        </Button>
-                      )}
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (state.application) {
+                            handleOpenDialog(state.application, appId);
+                          }
+                        }}
+                        className="h-8"
+                      >
+                        <Upload className="h-3 w-3 mr-1" />
+                        {locale === "zh" ? "上傳文件" : "Upload"}
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -494,7 +369,7 @@ export function BatchApplicationFileUpload({
                         className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
                         <Trash2 className="h-3 w-3 mr-1" />
-                        {locale === "zh" ? "刪除申請" : "Delete Application"}
+                        {locale === "zh" ? "刪除申請" : "Delete"}
                       </Button>
                     </div>
                   )}
@@ -505,11 +380,22 @@ export function BatchApplicationFileUpload({
         </Table>
       </div>
 
-      <div className="text-sm text-gray-500">
+      <div className="text-sm text-muted-foreground">
         {locale === "zh"
           ? `總計 ${applicationIds.length} 個申請`
           : `Total ${applicationIds.length} applications`}
       </div>
+
+      {/* Upload Dialog */}
+      <ApplicationFileUploadDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        application={selectedApplication}
+        applicationId={selectedAppId}
+        scholarshipDocuments={scholarshipDocuments}
+        onUploadComplete={handleUploadComplete}
+        locale={locale}
+      />
     </div>
   );
 }

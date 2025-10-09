@@ -129,6 +129,7 @@ export interface Application {
   dept_ranking_percent?: number;
   days_waiting?: number;
   scholarship_subtype_list?: string[];
+  sub_type_labels?: Record<string, { zh: string; en: string }>; // 子類型中英文名稱對照
   agree_terms?: boolean; // 同意條款
 
   // Extended properties for dashboard display (保留向後兼容)

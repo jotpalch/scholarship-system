@@ -791,6 +791,15 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
                   locale={locale}
                 />
               </TabsContent>
+              <TabsContent value="batch" className="mt-4">
+                <BatchDocumentUpload
+                  batchId={confirmedBatch.id}
+                  onUploadComplete={() => {
+                    fetchHistory();
+                  }}
+                  locale={locale}
+                />
+              </TabsContent>
             </Tabs>
           </CardContent>
         </Card>
