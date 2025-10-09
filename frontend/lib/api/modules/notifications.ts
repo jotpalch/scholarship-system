@@ -65,7 +65,7 @@ export function createNotificationsApi() {
           },
         },
       });
-      return toApiResponse(response);
+      return toApiResponse<NotificationResponse[]>(response);
     },
 
     /**
@@ -74,7 +74,7 @@ export function createNotificationsApi() {
      */
     getUnreadCount: async (): Promise<ApiResponse<number>> => {
       const response = await typedClient.raw.GET('/api/v1/notifications/unread-count');
-      return toApiResponse(response);
+      return toApiResponse<number>(response);
     },
 
     /**
@@ -87,7 +87,7 @@ export function createNotificationsApi() {
       const response = await typedClient.raw.PATCH('/api/v1/notifications/{notification_id}/read', {
         params: { path: { notification_id: notificationId } },
       });
-      return toApiResponse(response);
+      return toApiResponse<NotificationResponse>(response);
     },
 
     /**
@@ -98,7 +98,7 @@ export function createNotificationsApi() {
       ApiResponse<{ updated_count: number }>
     > => {
       const response = await typedClient.raw.PATCH('/api/v1/notifications/mark-all-read');
-      return toApiResponse(response);
+      return toApiResponse<{ updated_count: number }>(response);
     },
 
     /**
@@ -111,7 +111,7 @@ export function createNotificationsApi() {
       const response = await typedClient.raw.PATCH('/api/v1/notifications/{notification_id}/dismiss', {
         params: { path: { notification_id: notificationId } },
       });
-      return toApiResponse(response);
+      return toApiResponse<{ notification_id: number }>(response);
     },
 
     /**
@@ -124,7 +124,7 @@ export function createNotificationsApi() {
       const response = await typedClient.raw.GET('/api/v1/notifications/{notification_id}', {
         params: { path: { notification_id: notificationId } },
       });
-      return toApiResponse(response);
+      return toApiResponse<NotificationResponse>(response);
     },
 
     /**
@@ -135,9 +135,9 @@ export function createNotificationsApi() {
       announcementData: AnnouncementCreate
     ): Promise<ApiResponse<NotificationResponse>> => {
       const response = await typedClient.raw.POST('/api/v1/notifications/admin/create-system-announcement', {
-        body: announcementData,
+        body: announcementData as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<NotificationResponse>(response);
     },
 
     /**
@@ -148,7 +148,7 @@ export function createNotificationsApi() {
       ApiResponse<{ created_count: number; notification_ids: number[] }>
     > => {
       const response = await typedClient.raw.POST('/api/v1/notifications/admin/create-test-notifications');
-      return toApiResponse(response);
+      return toApiResponse<{ created_count: number; notification_ids: number[] }>(response);
     },
   };
 }
