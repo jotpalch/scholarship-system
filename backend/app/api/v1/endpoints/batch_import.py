@@ -1014,8 +1014,19 @@ async def get_batch_import_details(
             detail="僅能查看自己上傳的批次匯入記錄",
         )
 
-    # Get created applications
-    created_app_ids = [app.id for app in batch_import.applications]
+    # Get created applications IDs using explicit query (avoid lazy loading)
+    from app.models.application import Application
+
+    app_stmt = select(Application.id).where(Application.batch_import_id == batch_id)
+    app_result = await db.execute(app_stmt)
+    created_app_ids = [row[0] for row in app_result.fetchall()]
+
+    # Get importer name using explicit query (avoid lazy loading)
+    importer_name = None
+    if batch_import.importer_id:
+        importer_stmt = select(User.name).where(User.id == batch_import.importer_id)
+        importer_result = await db.execute(importer_stmt)
+        importer_name = importer_result.scalar_one_or_none()
 
     response_data = BatchImportDetailResponse(
         id=batch_import.id,
@@ -1032,7 +1043,7 @@ async def get_batch_import_details(
         import_status=batch_import.import_status.value if batch_import.import_status else "unknown",
         created_at=batch_import.created_at,
         updated_at=batch_import.updated_at,
-        importer_name=batch_import.importer.name if batch_import.importer else None,
+        importer_name=importer_name,
         created_applications=created_app_ids,
     )
 
@@ -1150,11 +1161,18 @@ async def delete_batch_import(
                 detail="僅能刪除自己上傳的批次匯入記錄",
             )
 
+    # Get applications using explicit query (avoid lazy loading)
+    from app.models.application import Application
+
+    app_stmt = select(Application).where(Application.batch_import_id == batch_id)
+    app_result = await db.execute(app_stmt)
+    applications = app_result.scalars().all()
+
     # Get application count for response
-    application_count = len(batch_import.applications)
+    application_count = len(applications)
 
     # Delete related applications
-    for application in batch_import.applications:
+    for application in applications:
         await db.delete(application)
 
     # Delete MinIO file if exists
