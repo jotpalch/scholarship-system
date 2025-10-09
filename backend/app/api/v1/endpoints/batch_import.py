@@ -1356,7 +1356,7 @@ async def download_batch_import_template(
     custom_fields_stmt = (
         select(ApplicationField)
         .where(ApplicationField.scholarship_type == scholarship.code)
-        .where(ApplicationField.is_active == True)
+        .where(ApplicationField.is_active)
         .order_by(ApplicationField.display_order)
     )
     custom_fields_result = await db.execute(custom_fields_stmt)
