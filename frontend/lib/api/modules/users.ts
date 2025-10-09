@@ -98,7 +98,7 @@ export function createUsersApi() {
      */
     getProfile: async (): Promise<ApiResponse<User>> => {
       const response = await typedClient.raw.GET('/api/v1/users/me');
-      return toApiResponse<User>(response);
+      return toApiResponse<User>(response as any);
     },
 
     /**
@@ -111,7 +111,7 @@ export function createUsersApi() {
       const response = await typedClient.raw.PUT('/api/v1/users/me', {
         body: userData as any,
       });
-      return toApiResponse<User>(response);
+      return toApiResponse<User>(response as any);
     },
 
     /**
@@ -120,7 +120,7 @@ export function createUsersApi() {
      */
     getStudentInfo: async (): Promise<ApiResponse<StudentInfoResponse>> => {
       const response = await typedClient.raw.GET('/api/v1/users/student-info');
-      return toApiResponse<StudentInfoResponse>(response);
+      return toApiResponse<StudentInfoResponse>(response as any);
     },
 
     /**
@@ -133,7 +133,7 @@ export function createUsersApi() {
       const response = await typedClient.raw.PUT('/api/v1/users/student-info', {
         body: studentData as any,
       });
-      return toApiResponse<Student>(response);
+      return toApiResponse<Student>(response as any);
     },
 
     /**
@@ -160,7 +160,7 @@ export function createUsersApi() {
       const response = await typedClient.raw.GET('/api/v1/users/{id}', {
         params: { path: { id: userId } },
       });
-      return toApiResponse<UserResponse>(response);
+      return toApiResponse<UserResponse>(response as any);
     },
 
     /**
@@ -171,7 +171,7 @@ export function createUsersApi() {
       const response = await typedClient.raw.POST('/api/v1/users', {
         body: userData as any,
       });
-      return toApiResponse<UserResponse>(response);
+      return toApiResponse<UserResponse>(response as any);
     },
 
     /**
@@ -183,7 +183,7 @@ export function createUsersApi() {
         params: { path: { id: userId } },
         body: userData as any,
       });
-      return toApiResponse<UserResponse>(response);
+      return toApiResponse<UserResponse>(response as any);
     },
 
     /**
@@ -198,7 +198,7 @@ export function createUsersApi() {
         success: boolean;
         message: string;
         data: { user_id: number };
-      }>(response);
+      }>(response as any);
     },
 
     /**
@@ -213,7 +213,7 @@ export function createUsersApi() {
         success: boolean;
         message: string;
         data: { user_id: number };
-      }>(response);
+      }>(response as any);
     },
 
     /**
@@ -222,7 +222,7 @@ export function createUsersApi() {
      */
     getStats: async () => {
       const response = await typedClient.raw.GET('/api/v1/users/stats/overview');
-      return toApiResponse<UserStats>(response);
+      return toApiResponse<UserStats>(response as any);
     },
   };
 }

@@ -73,7 +73,7 @@ export function createSystemSettingsApi() {
           },
         },
       });
-      return toApiResponse(response);
+      return toApiResponse(response as any);
     },
 
     /**
@@ -92,7 +92,7 @@ export function createSystemSettingsApi() {
           },
         },
       });
-      return toApiResponse(response);
+      return toApiResponse(response as any);
     },
 
     /**
@@ -105,7 +105,7 @@ export function createSystemSettingsApi() {
       const response = await typedClient.raw.POST('/api/v1/system-settings/', {
         body: configData as any,
       });
-      return toApiResponse<SystemConfiguration>(response);
+      return toApiResponse<SystemConfiguration>(response as any);
     },
 
     /**
@@ -120,7 +120,7 @@ export function createSystemSettingsApi() {
         params: { path: { id: key } },
         body: configData as any,
       });
-      return toApiResponse<SystemConfiguration>(response);
+      return toApiResponse<SystemConfiguration>(response as any);
     },
 
     /**
@@ -133,7 +133,7 @@ export function createSystemSettingsApi() {
       const response = await typedClient.raw.POST('/api/v1/system-settings/validate', {
         body: configData as any,
       });
-      return toApiResponse<ConfigurationValidationResult>(response);
+      return toApiResponse<ConfigurationValidationResult>(response as any);
     },
 
     /**
@@ -146,7 +146,7 @@ export function createSystemSettingsApi() {
       const response = await typedClient.raw.DELETE('/api/v1/system-settings/{id}', {
         params: { path: { id: key } },
       });
-      return toApiResponse<{ message: string }>(response);
+      return toApiResponse<{ message: string }>(response as any);
     },
 
     /**
@@ -155,7 +155,7 @@ export function createSystemSettingsApi() {
      */
     getCategories: async (): Promise<ApiResponse<string[]>> => {
       const response = await typedClient.raw.GET('/api/v1/system-settings/categories');
-      return toApiResponse<string[]>(response);
+      return toApiResponse<string[]>(response as any);
     },
 
     /**
@@ -164,7 +164,7 @@ export function createSystemSettingsApi() {
      */
     getDataTypes: async (): Promise<ApiResponse<string[]>> => {
       const response = await typedClient.raw.GET('/api/v1/system-settings/data-types');
-      return toApiResponse<string[]>(response);
+      return toApiResponse<string[]>(response as any);
     },
 
     /**
@@ -181,7 +181,7 @@ export function createSystemSettingsApi() {
           query: { limit },
         },
       });
-      return toApiResponse<any[]>(response);
+      return toApiResponse<any[]>(response as any);
     },
   };
 }

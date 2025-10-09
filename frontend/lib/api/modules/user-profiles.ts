@@ -68,7 +68,7 @@ export function createUserProfilesApi() {
      */
     getMyProfile: async (): Promise<ApiResponse<CompleteUserProfile>> => {
       const response = await typedClient.raw.GET('/api/v1/user-profiles/me');
-      return toApiResponse<CompleteUserProfile>(response);
+      return toApiResponse<CompleteUserProfile>(response as any);
     },
 
     /**
@@ -81,7 +81,7 @@ export function createUserProfilesApi() {
       const response = await typedClient.raw.POST('/api/v1/user-profiles/me', {
         body: profileData as any,
       });
-      return toApiResponse<UserProfile>(response);
+      return toApiResponse<UserProfile>(response as any);
     },
 
     /**
@@ -94,7 +94,7 @@ export function createUserProfilesApi() {
       const response = await typedClient.raw.PUT('/api/v1/user-profiles/me', {
         body: profileData as any,
       });
-      return toApiResponse<UserProfile>(response);
+      return toApiResponse<UserProfile>(response as any);
     },
 
     /**
@@ -107,7 +107,7 @@ export function createUserProfilesApi() {
       const response = await typedClient.raw.PUT('/api/v1/user-profiles/me/bank-info', {
         body: bankData as any,
       });
-      return toApiResponse<any>(response);
+      return toApiResponse<any>(response as any);
     },
 
     /**
@@ -120,7 +120,7 @@ export function createUserProfilesApi() {
       const response = await typedClient.raw.PUT('/api/v1/user-profiles/me/advisor-info', {
         body: advisorData,
       });
-      return toApiResponse(response);
+      return toApiResponse(response as any);
     },
 
     /**
@@ -139,7 +139,7 @@ export function createUserProfilesApi() {
           content_type: contentType,
         } as any,
       });
-      return toApiResponse<{ document_url: string }>(response);
+      return toApiResponse<{ document_url: string }>(response as any);
     },
 
     /**
@@ -155,7 +155,7 @@ export function createUserProfilesApi() {
       const response = await typedClient.raw.POST('/api/v1/user-profiles/me/bank-document/file', {
         body: formData as any,
       });
-      return toApiResponse<{ document_url: string }>(response);
+      return toApiResponse<{ document_url: string }>(response as any);
     },
 
     /**
@@ -164,7 +164,7 @@ export function createUserProfilesApi() {
      */
     deleteBankDocument: async (): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.DELETE('/api/v1/user-profiles/me/bank-document');
-      return toApiResponse(response);
+      return toApiResponse(response as any);
     },
 
     /**
@@ -173,7 +173,7 @@ export function createUserProfilesApi() {
      */
     getHistory: async (): Promise<ApiResponse<ProfileHistory[]>> => {
       const response = await typedClient.raw.GET('/api/v1/user-profiles/me/history');
-      return toApiResponse<ProfileHistory[]>(response);
+      return toApiResponse<ProfileHistory[]>(response as any);
     },
 
     /**
@@ -182,7 +182,7 @@ export function createUserProfilesApi() {
      */
     deleteProfile: async (): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.DELETE('/api/v1/user-profiles/me');
-      return toApiResponse(response);
+      return toApiResponse(response as any);
     },
 
     /**
@@ -195,7 +195,7 @@ export function createUserProfilesApi() {
        */
       getIncompleteProfiles: async (): Promise<ApiResponse<any>> => {
         const response = await typedClient.raw.GET('/api/v1/user-profiles/admin/incomplete');
-        return toApiResponse(response);
+        return toApiResponse(response as any);
       },
 
       /**
@@ -208,7 +208,7 @@ export function createUserProfilesApi() {
         const response = await typedClient.raw.GET('/api/v1/user-profiles/admin/{user_id}', {
           params: { path: { user_id: userId } },
         });
-        return toApiResponse<CompleteUserProfile>(response);
+        return toApiResponse<CompleteUserProfile>(response as any);
       },
 
       /**
@@ -221,7 +221,7 @@ export function createUserProfilesApi() {
         const response = await typedClient.raw.GET('/api/v1/user-profiles/admin/{user_id}/history', {
           params: { path: { user_id: userId } },
         });
-        return toApiResponse<ProfileHistory[]>(response);
+        return toApiResponse<ProfileHistory[]>(response as any);
       },
     },
   };

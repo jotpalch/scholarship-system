@@ -66,7 +66,7 @@ export function createProfessorStudentApi() {
           },
         },
       });
-      return toApiResponse(response);
+      return toApiResponse(response as any);
     },
 
     /**
@@ -79,7 +79,7 @@ export function createProfessorStudentApi() {
       const response = await typedClient.raw.POST('/api/v1/professor-student', {
         body: relationshipData,
       });
-      return toApiResponse(response);
+      return toApiResponse(response as any);
     },
 
     /**
@@ -94,7 +94,7 @@ export function createProfessorStudentApi() {
         params: { path: { id } },
         body: relationshipData,
       });
-      return toApiResponse(response);
+      return toApiResponse(response as any);
     },
 
     /**
@@ -107,7 +107,7 @@ export function createProfessorStudentApi() {
       const response = await typedClient.raw.DELETE('/api/v1/professor-student/{id}', {
         params: { path: { id } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response as any);
     },
   };
 }

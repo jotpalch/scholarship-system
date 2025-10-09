@@ -71,7 +71,7 @@ export function createApplicationFieldsApi() {
           query: { include_inactive: includeInactive },
         },
       });
-      return toApiResponse<ScholarshipFormConfig>(response);
+      return toApiResponse<ScholarshipFormConfig>(response as any);
     },
 
     /**
@@ -86,7 +86,7 @@ export function createApplicationFieldsApi() {
         params: { path: { scholarship_type: scholarshipType } },
         body: config as any,
       });
-      return toApiResponse<ScholarshipFormConfig>(response);
+      return toApiResponse<ScholarshipFormConfig>(response as any);
     },
 
     /**
@@ -99,7 +99,7 @@ export function createApplicationFieldsApi() {
       const response = await typedClient.raw.GET('/api/v1/application-fields/fields/{scholarship_type}', {
         params: { path: { scholarship_type: scholarshipType } },
       });
-      return toApiResponse<ApplicationField[]>(response);
+      return toApiResponse<ApplicationField[]>(response as any);
     },
 
     /**
@@ -112,7 +112,7 @@ export function createApplicationFieldsApi() {
       const response = await typedClient.raw.POST('/api/v1/application-fields/fields', {
         body: fieldData as any,
       });
-      return toApiResponse<ApplicationField>(response);
+      return toApiResponse<ApplicationField>(response as any);
     },
 
     /**
@@ -127,7 +127,7 @@ export function createApplicationFieldsApi() {
         params: { path: { field_id: fieldId } },
         body: fieldData as any,
       });
-      return toApiResponse<ApplicationField>(response);
+      return toApiResponse<ApplicationField>(response as any);
     },
 
     /**
@@ -138,7 +138,7 @@ export function createApplicationFieldsApi() {
       const response = await typedClient.raw.DELETE('/api/v1/application-fields/fields/{field_id}', {
         params: { path: { field_id: fieldId } },
       });
-      return toApiResponse<boolean>(response);
+      return toApiResponse<boolean>(response as any);
     },
 
     /**
@@ -151,7 +151,7 @@ export function createApplicationFieldsApi() {
       const response = await typedClient.raw.GET('/api/v1/application-fields/documents/{scholarship_type}', {
         params: { path: { scholarship_type: scholarshipType } },
       });
-      return toApiResponse<ApplicationDocument[]>(response);
+      return toApiResponse<ApplicationDocument[]>(response as any);
     },
 
     /**
@@ -164,7 +164,7 @@ export function createApplicationFieldsApi() {
       const response = await typedClient.raw.POST('/api/v1/application-fields/documents', {
         body: documentData as any,
       });
-      return toApiResponse<ApplicationDocument>(response);
+      return toApiResponse<ApplicationDocument>(response as any);
     },
 
     /**
@@ -179,7 +179,7 @@ export function createApplicationFieldsApi() {
         params: { path: { document_id: documentId } },
         body: documentData as any,
       });
-      return toApiResponse<ApplicationDocument>(response);
+      return toApiResponse<ApplicationDocument>(response as any);
     },
 
     /**
@@ -190,7 +190,7 @@ export function createApplicationFieldsApi() {
       const response = await typedClient.raw.DELETE('/api/v1/application-fields/documents/{document_id}', {
         params: { path: { document_id: documentId } },
       });
-      return toApiResponse<boolean>(response);
+      return toApiResponse<boolean>(response as any);
     },
 
     /**
@@ -240,7 +240,7 @@ export function createApplicationFieldsApi() {
       const response = await typedClient.raw.DELETE('/api/v1/application-fields/documents/{document_id}/example', {
         params: { path: { document_id: documentId } },
       });
-      return toApiResponse<boolean>(response);
+      return toApiResponse<boolean>(response as any);
     },
   };
 }

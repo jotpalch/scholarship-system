@@ -71,7 +71,7 @@ export function createQuotaApi() {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/available-semesters', {
         params: { query: { quota_management_mode: quotaManagementMode } },
       });
-      return toApiResponse<AvailablePeriod[]>(response);
+      return toApiResponse<AvailablePeriod[]>(response as any);
     },
 
     /**
@@ -84,7 +84,7 @@ export function createQuotaApi() {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/overview/{period}', {
         params: { path: { period } },
       });
-      return toApiResponse<ScholarshipQuotaOverview[]>(response);
+      return toApiResponse<ScholarshipQuotaOverview[]>(response as any);
     },
 
     /**
@@ -97,7 +97,7 @@ export function createQuotaApi() {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/matrix-quota-status/{period}', {
         params: { path: { period } },
       });
-      return toApiResponse<MatrixQuotaData>(response);
+      return toApiResponse<MatrixQuotaData>(response as any);
     },
 
     /**
@@ -110,7 +110,7 @@ export function createQuotaApi() {
       const response = await typedClient.raw.PUT('/api/v1/scholarship-configurations/matrix-quota', {
         body: request as any,
       });
-      return toApiResponse<UpdateQuotaResponse>(response);
+      return toApiResponse<UpdateQuotaResponse>(response as any);
     },
 
     /**
@@ -119,7 +119,7 @@ export function createQuotaApi() {
      */
     getCollegeConfigs: async (): Promise<ApiResponse<CollegeConfig[]>> => {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/colleges');
-      return toApiResponse<CollegeConfig[]>(response);
+      return toApiResponse<CollegeConfig[]>(response as any);
     },
 
     /**
@@ -128,7 +128,7 @@ export function createQuotaApi() {
      */
     getScholarshipTypeConfigs: async (): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/scholarship-types');
-      return toApiResponse<any[]>(response);
+      return toApiResponse<any[]>(response as any);
     },
 
     /**
@@ -146,7 +146,7 @@ export function createQuotaApi() {
           const response = await typedClient.raw.PUT('/api/v1/scholarship-configurations/matrix-quota', {
             body: update as any,
           });
-          const apiResponse = toApiResponse<UpdateQuotaResponse>(response);
+          const apiResponse = toApiResponse<UpdateQuotaResponse>(response as any);
           if (apiResponse.success && apiResponse.data) {
             results.push(apiResponse.data);
           } else {
@@ -219,7 +219,7 @@ export function createQuotaApi() {
           },
         },
       });
-      return toApiResponse<any[]>(response);
+      return toApiResponse<any[]>(response as any);
     },
 
     /**
@@ -232,7 +232,7 @@ export function createQuotaApi() {
       const response = await typedClient.raw.POST('/api/v1/scholarship-configurations/validate-quota', {
         body: request as any,
       });
-      return toApiResponse<{ valid: boolean; warnings: string[] }>(response);
+      return toApiResponse<{ valid: boolean; warnings: string[] }>(response as any);
     },
   };
 }
