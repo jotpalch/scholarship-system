@@ -68,7 +68,7 @@ export function createUserProfilesApi() {
      */
     getMyProfile: async (): Promise<ApiResponse<CompleteUserProfile>> => {
       const response = await typedClient.raw.GET('/api/v1/user-profiles/me');
-      return toApiResponse(response);
+      return toApiResponse<CompleteUserProfile>(response);
     },
 
     /**
@@ -79,9 +79,9 @@ export function createUserProfilesApi() {
       profileData: UserProfileUpdate
     ): Promise<ApiResponse<UserProfile>> => {
       const response = await typedClient.raw.POST('/api/v1/user-profiles/me', {
-        body: profileData,
+        body: profileData as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<UserProfile>(response);
     },
 
     /**
@@ -92,9 +92,9 @@ export function createUserProfilesApi() {
       profileData: UserProfileUpdate
     ): Promise<ApiResponse<UserProfile>> => {
       const response = await typedClient.raw.PUT('/api/v1/user-profiles/me', {
-        body: profileData,
+        body: profileData as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<UserProfile>(response);
     },
 
     /**
@@ -105,9 +105,9 @@ export function createUserProfilesApi() {
       bankData: BankInfoUpdate
     ): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.PUT('/api/v1/user-profiles/me/bank-info', {
-        body: bankData,
+        body: bankData as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<any>(response);
     },
 
     /**
@@ -137,9 +137,9 @@ export function createUserProfilesApi() {
           photo_data: photoData,
           filename,
           content_type: contentType,
-        },
+        } as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<{ document_url: string }>(response);
     },
 
     /**
@@ -155,7 +155,7 @@ export function createUserProfilesApi() {
       const response = await typedClient.raw.POST('/api/v1/user-profiles/me/bank-document/file', {
         body: formData as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<{ document_url: string }>(response);
     },
 
     /**
@@ -173,7 +173,7 @@ export function createUserProfilesApi() {
      */
     getHistory: async (): Promise<ApiResponse<ProfileHistory[]>> => {
       const response = await typedClient.raw.GET('/api/v1/user-profiles/me/history');
-      return toApiResponse(response);
+      return toApiResponse<ProfileHistory[]>(response);
     },
 
     /**
@@ -208,7 +208,7 @@ export function createUserProfilesApi() {
         const response = await typedClient.raw.GET('/api/v1/user-profiles/admin/{user_id}', {
           params: { path: { user_id: userId } },
         });
-        return toApiResponse(response);
+        return toApiResponse<CompleteUserProfile>(response);
       },
 
       /**
@@ -221,7 +221,7 @@ export function createUserProfilesApi() {
         const response = await typedClient.raw.GET('/api/v1/user-profiles/admin/{user_id}/history', {
           params: { path: { user_id: userId } },
         });
-        return toApiResponse(response);
+        return toApiResponse<ProfileHistory[]>(response);
       },
     },
   };

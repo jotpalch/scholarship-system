@@ -98,7 +98,7 @@ export function createUsersApi() {
      */
     getProfile: async (): Promise<ApiResponse<User>> => {
       const response = await typedClient.raw.GET('/api/v1/users/me');
-      return toApiResponse(response);
+      return toApiResponse<User>(response);
     },
 
     /**
@@ -109,9 +109,9 @@ export function createUsersApi() {
       userData: Partial<User>
     ): Promise<ApiResponse<User>> => {
       const response = await typedClient.raw.PUT('/api/v1/users/me', {
-        body: userData,
+        body: userData as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<User>(response);
     },
 
     /**
@@ -120,7 +120,7 @@ export function createUsersApi() {
      */
     getStudentInfo: async (): Promise<ApiResponse<StudentInfoResponse>> => {
       const response = await typedClient.raw.GET('/api/v1/users/student-info');
-      return toApiResponse(response);
+      return toApiResponse<StudentInfoResponse>(response);
     },
 
     /**
@@ -131,9 +131,9 @@ export function createUsersApi() {
       studentData: Partial<Student>
     ): Promise<ApiResponse<Student>> => {
       const response = await typedClient.raw.PUT('/api/v1/users/student-info', {
-        body: studentData,
+        body: studentData as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<Student>(response);
     },
 
     /**
@@ -169,7 +169,7 @@ export function createUsersApi() {
      */
     create: async (userData: UserCreate) => {
       const response = await typedClient.raw.POST('/api/v1/users', {
-        body: userData,
+        body: userData as any,
       });
       return toApiResponse<UserResponse>(response);
     },
@@ -181,7 +181,7 @@ export function createUsersApi() {
     update: async (userId: number, userData: UserUpdate) => {
       const response = await typedClient.raw.PUT('/api/v1/users/{id}', {
         params: { path: { id: userId } },
-        body: userData,
+        body: userData as any,
       });
       return toApiResponse<UserResponse>(response);
     },
