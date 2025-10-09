@@ -1011,7 +1011,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/announcements/{announcement_id}": {
+    "/api/v1/admin/announcements/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1022,18 +1022,18 @@ export interface paths {
          * Get Announcement
          * @description Get specific system announcement (admin only)
          */
-        get: operations["get_announcement_api_v1_admin_announcements__announcement_id__get"];
+        get: operations["get_announcement_api_v1_admin_announcements__id__get"];
         /**
          * Update Announcement
          * @description Update system announcement (admin only)
          */
-        put: operations["update_announcement_api_v1_admin_announcements__announcement_id__put"];
+        put: operations["update_announcement_api_v1_admin_announcements__id__put"];
         post?: never;
         /**
          * Delete Announcement
          * @description Delete system announcement (admin only)
          */
-        delete: operations["delete_announcement_api_v1_admin_announcements__announcement_id__delete"];
+        delete: operations["delete_announcement_api_v1_admin_announcements__id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1143,7 +1143,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/scholarships/sub-type-configs/{config_id}": {
+    "/api/v1/admin/scholarships/sub-type-configs/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1155,13 +1155,13 @@ export interface paths {
          * Update Sub Type Config
          * @description Update sub-type configuration
          */
-        put: operations["update_sub_type_config_api_v1_admin_scholarships_sub_type_configs__config_id__put"];
+        put: operations["update_sub_type_config_api_v1_admin_scholarships_sub_type_configs__id__put"];
         post?: never;
         /**
          * Delete Sub Type Config
          * @description Delete sub-type configuration (soft delete by setting is_active=False)
          */
-        delete: operations["delete_sub_type_config_api_v1_admin_scholarships_sub_type_configs__config_id__delete"];
+        delete: operations["delete_sub_type_config_api_v1_admin_scholarships_sub_type_configs__id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1211,7 +1211,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/scholarship-permissions/{permission_id}": {
+    "/api/v1/admin/scholarship-permissions/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1223,13 +1223,13 @@ export interface paths {
          * Update Scholarship Permission
          * @description Update scholarship permission (admin only)
          */
-        put: operations["update_scholarship_permission_api_v1_admin_scholarship_permissions__permission_id__put"];
+        put: operations["update_scholarship_permission_api_v1_admin_scholarship_permissions__id__put"];
         post?: never;
         /**
          * Delete Scholarship Permission
          * @description Delete scholarship permission (admin can only delete permissions for scholarships they manage, and cannot delete their own permissions)
          */
-        delete: operations["delete_scholarship_permission_api_v1_admin_scholarship_permissions__permission_id__delete"];
+        delete: operations["delete_scholarship_permission_api_v1_admin_scholarship_permissions__id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1299,7 +1299,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/scholarship-rules/{rule_id}": {
+    "/api/v1/admin/scholarship-rules/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1310,18 +1310,18 @@ export interface paths {
          * Get Scholarship Rule
          * @description Get a specific scholarship rule
          */
-        get: operations["get_scholarship_rule_api_v1_admin_scholarship_rules__rule_id__get"];
+        get: operations["get_scholarship_rule_api_v1_admin_scholarship_rules__id__get"];
         /**
          * Update Scholarship Rule
          * @description Update a scholarship rule
          */
-        put: operations["update_scholarship_rule_api_v1_admin_scholarship_rules__rule_id__put"];
+        put: operations["update_scholarship_rule_api_v1_admin_scholarship_rules__id__put"];
         post?: never;
         /**
          * Delete Scholarship Rule
          * @description Delete a scholarship rule
          */
-        delete: operations["delete_scholarship_rule_api_v1_admin_scholarship_rules__rule_id__delete"];
+        delete: operations["delete_scholarship_rule_api_v1_admin_scholarship_rules__id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1487,7 +1487,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/applications/{application_id}/assign-professor": {
+    "/api/v1/admin/applications/{id}/assign-professor": {
         parameters: {
             query?: never;
             header?: never;
@@ -1499,7 +1499,7 @@ export interface paths {
          * Assign Professor To Application
          * @description Assign a professor to review an application
          */
-        put: operations["assign_professor_to_application_api_v1_admin_applications__application_id__assign_professor_put"];
+        put: operations["assign_professor_to_application_api_v1_admin_applications__id__assign_professor_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1645,6 +1645,160 @@ export interface paths {
          * @description Batch verify bank account information for multiple applications (admin only)
          */
         post: operations["batch_verify_bank_accounts_api_v1_admin_bank_verification_batch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/applications/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Admin Update Application Status
+         * @description Update application status (admin version)
+         *
+         *     This is a wrapper around the applications endpoint for admin-specific access.
+         */
+        patch: operations["admin_update_application_status_api_v1_admin_applications__id__status_patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/scholarship-email-templates/{scholarship_type_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Scholarship Email Templates
+         * @description Get all email templates for a scholarship type
+         */
+        get: operations["get_scholarship_email_templates_api_v1_admin_scholarship_email_templates__scholarship_type_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/scholarship-email-templates/{scholarship_type_id}/{template_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Scholarship Email Template
+         * @description Get a specific email template
+         */
+        get: operations["get_scholarship_email_template_api_v1_admin_scholarship_email_templates__scholarship_type_id___template_key__get"];
+        /**
+         * Update Scholarship Email Template
+         * @description Update an email template
+         */
+        put: operations["update_scholarship_email_template_api_v1_admin_scholarship_email_templates__scholarship_type_id___template_key__put"];
+        post?: never;
+        /**
+         * Delete Scholarship Email Template
+         * @description Delete an email template
+         */
+        delete: operations["delete_scholarship_email_template_api_v1_admin_scholarship_email_templates__scholarship_type_id___template_key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/scholarship-email-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Scholarship Email Template
+         * @description Create a new email template
+         */
+        post: operations["create_scholarship_email_template_api_v1_admin_scholarship_email_templates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/scholarship-email-templates/{scholarship_type_id}/bulk-create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Create Scholarship Email Templates
+         * @description Bulk create email templates
+         */
+        post: operations["bulk_create_scholarship_email_templates_api_v1_admin_scholarship_email_templates__scholarship_type_id__bulk_create_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/scholarship-email-templates/{scholarship_type_id}/available": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Available Scholarship Email Templates
+         * @description Get available email template keys for a scholarship type
+         */
+        get: operations["get_available_scholarship_email_templates_api_v1_admin_scholarship_email_templates__scholarship_type_id__available_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/professor-student-relationships": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Professor Student Relationships
+         * @description Get all professor-student relationships with pagination
+         */
+        get: operations["get_professor_student_relationships_api_v1_admin_professor_student_relationships_get"];
+        put?: never;
+        /**
+         * Create Professor Student Relationship
+         * @description Create a new professor-student relationship
+         */
+        post: operations["create_professor_student_relationship_api_v1_admin_professor_student_relationships_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7189,6 +7343,33 @@ export interface components {
          * @enum {string}
          */
         EmailStatus: "sent" | "failed" | "bounced" | "pending";
+        /** EmailTemplateSchema */
+        EmailTemplateSchema: {
+            /** Key */
+            key: string;
+            /** Subject Template */
+            subject_template: string;
+            /** Body Template */
+            body_template: string;
+            /** Cc */
+            cc?: string | null;
+            /** Bcc */
+            bcc?: string | null;
+            sending_type: components["schemas"]["SendingType"];
+            /** Recipient Options */
+            recipient_options?: {
+                [key: string]: string;
+            }[] | null;
+            /**
+             * Requires Approval
+             * @default false
+             */
+            requires_approval: boolean;
+            /** Max Recipients */
+            max_recipients?: number | null;
+            /** Updated At */
+            updated_at?: string | null;
+        };
         /**
          * EmailTemplateUpdateSchema
          * @description Schema for updating email templates
@@ -8451,6 +8632,11 @@ export interface components {
             /** Error */
             error?: string | null;
         };
+        /**
+         * SendingType
+         * @enum {string}
+         */
+        SendingType: "single" | "bulk";
         /**
          * SimpleTestEmailRequest
          * @description Schema for sending simple test email without template
@@ -10854,12 +11040,12 @@ export interface operations {
             };
         };
     };
-    get_announcement_api_v1_admin_announcements__announcement_id__get: {
+    get_announcement_api_v1_admin_announcements__id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                announcement_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -10885,12 +11071,12 @@ export interface operations {
             };
         };
     };
-    update_announcement_api_v1_admin_announcements__announcement_id__put: {
+    update_announcement_api_v1_admin_announcements__id__put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                announcement_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -10920,12 +11106,12 @@ export interface operations {
             };
         };
     };
-    delete_announcement_api_v1_admin_announcements__announcement_id__delete: {
+    delete_announcement_api_v1_admin_announcements__id__delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                announcement_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -11124,12 +11310,12 @@ export interface operations {
             };
         };
     };
-    update_sub_type_config_api_v1_admin_scholarships_sub_type_configs__config_id__put: {
+    update_sub_type_config_api_v1_admin_scholarships_sub_type_configs__id__put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                config_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -11159,12 +11345,12 @@ export interface operations {
             };
         };
     };
-    delete_sub_type_config_api_v1_admin_scholarships_sub_type_configs__config_id__delete: {
+    delete_sub_type_config_api_v1_admin_scholarships_sub_type_configs__id__delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                config_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -11275,12 +11461,12 @@ export interface operations {
             };
         };
     };
-    update_scholarship_permission_api_v1_admin_scholarship_permissions__permission_id__put: {
+    update_scholarship_permission_api_v1_admin_scholarship_permissions__id__put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                permission_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -11310,12 +11496,12 @@ export interface operations {
             };
         };
     };
-    delete_scholarship_permission_api_v1_admin_scholarship_permissions__permission_id__delete: {
+    delete_scholarship_permission_api_v1_admin_scholarship_permissions__id__delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                permission_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -11460,12 +11646,12 @@ export interface operations {
             };
         };
     };
-    get_scholarship_rule_api_v1_admin_scholarship_rules__rule_id__get: {
+    get_scholarship_rule_api_v1_admin_scholarship_rules__id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                rule_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -11491,12 +11677,12 @@ export interface operations {
             };
         };
     };
-    update_scholarship_rule_api_v1_admin_scholarship_rules__rule_id__put: {
+    update_scholarship_rule_api_v1_admin_scholarship_rules__id__put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                rule_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -11526,12 +11712,12 @@ export interface operations {
             };
         };
     };
-    delete_scholarship_rule_api_v1_admin_scholarship_rules__rule_id__delete: {
+    delete_scholarship_rule_api_v1_admin_scholarship_rules__id__delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                rule_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -11807,12 +11993,12 @@ export interface operations {
             };
         };
     };
-    assign_professor_to_application_api_v1_admin_applications__application_id__assign_professor_put: {
+    assign_professor_to_application_api_v1_admin_applications__id__assign_professor_put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                application_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -12085,6 +12271,336 @@ export interface operations {
                 "application/json": components["schemas"]["BankVerificationBatchRequestSchema"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_application_status_api_v1_admin_applications__id__status_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_scholarship_email_templates_api_v1_admin_scholarship_email_templates__scholarship_type_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scholarship_type_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_scholarship_email_template_api_v1_admin_scholarship_email_templates__scholarship_type_id___template_key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scholarship_type_id: number;
+                template_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_scholarship_email_template_api_v1_admin_scholarship_email_templates__scholarship_type_id___template_key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scholarship_type_id: number;
+                template_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailTemplateUpdateSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_scholarship_email_template_api_v1_admin_scholarship_email_templates__scholarship_type_id___template_key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scholarship_type_id: number;
+                template_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_scholarship_email_template_api_v1_admin_scholarship_email_templates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailTemplateSchema"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_create_scholarship_email_templates_api_v1_admin_scholarship_email_templates__scholarship_type_id__bulk_create_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scholarship_type_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailTemplateSchema"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_available_scholarship_email_templates_api_v1_admin_scholarship_email_templates__scholarship_type_id__available_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scholarship_type_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_professor_student_relationships_api_v1_admin_professor_student_relationships_get: {
+        parameters: {
+            query?: {
+                /** @description Page number */
+                page?: number;
+                /** @description Page size */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_professor_student_relationship_api_v1_admin_professor_student_relationships_post: {
+        parameters: {
+            query: {
+                relationship_data: unknown;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

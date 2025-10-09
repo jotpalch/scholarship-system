@@ -116,8 +116,8 @@ export function createAdminApi() {
       status: string,
       reviewNotes?: string
     ): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.PATCH('/api/v1/admin/applications/{application_id}/status', {
-        params: { path: { application_id: applicationId } },
+      const response = await typedClient.raw.PATCH('/api/v1/admin/applications/{id}/status', {
+        params: { path: { id: applicationId } },
         body: { status, review_notes: reviewNotes },
       });
       return toApiResponse(response) as ApiResponse<any>;
@@ -772,8 +772,8 @@ export function createAdminApi() {
      * Type-safe: Path parameter and request body validated against OpenAPI
      */
     assignProfessor: async (applicationId: number, professorNycuId: string): Promise<ApiResponse<any>> => {
-      const response = await typedClient.raw.PUT('/api/v1/admin/applications/{application_id}/assign-professor', {
-        params: { path: { application_id: applicationId } },
+      const response = await typedClient.raw.PUT('/api/v1/admin/applications/{id}/assign-professor', {
+        params: { path: { id: applicationId } },
         body: { professor_nycu_id: professorNycuId },
       });
       return toApiResponse(response) as ApiResponse<any>;
