@@ -29,7 +29,7 @@ export function createAdminApi() {
      */
     getDashboardStats: async (): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/dashboard/stats');
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -40,7 +40,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/admin/recent-applications', {
         params: { query: { limit } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -51,7 +51,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/admin/system-announcements', {
         params: { query: { limit } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -60,7 +60,7 @@ export function createAdminApi() {
      */
     getSystemStats: async (): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/dashboard/stats');
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     // ========== Application Management ==========
@@ -83,7 +83,7 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -104,7 +104,7 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -120,7 +120,7 @@ export function createAdminApi() {
         params: { path: { application_id: applicationId } },
         body: { status, review_notes: reviewNotes },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     // ========== Email Templates ==========
@@ -133,7 +133,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/admin/email-template', {
         params: { query: { key } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -144,7 +144,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.PUT('/api/v1/admin/email-template', {
         body: template,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -155,7 +155,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/admin/email-templates', {
         params: { query: { sending_type: sendingType } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     // Scholarship Email Templates
@@ -169,7 +169,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarship-email-templates/{scholarship_type_id}', {
         params: { path: { scholarship_type_id: scholarshipTypeId } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<{ items: any[]; total: number }>;
     },
 
     /**
@@ -183,7 +183,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarship-email-templates/{scholarship_type_id}/{template_key}', {
         params: { path: { scholarship_type_id: scholarshipTypeId, template_key: templateKey } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -194,7 +194,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-email-templates', {
         body: templateData,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -210,7 +210,7 @@ export function createAdminApi() {
         params: { path: { scholarship_type_id: scholarshipTypeId, template_key: templateKey } },
         body: templateData,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -224,7 +224,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.DELETE('/api/v1/admin/scholarship-email-templates/{scholarship_type_id}/{template_key}', {
         params: { path: { scholarship_type_id: scholarshipTypeId, template_key: templateKey } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<boolean>;
     },
 
     /**
@@ -237,7 +237,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-email-templates/{scholarship_type_id}/bulk-create', {
         params: { path: { scholarship_type_id: scholarshipTypeId } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<{ items: any[]; total: number }>;
     },
 
     /**
@@ -250,7 +250,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarship-email-templates/{scholarship_type_id}/available', {
         params: { path: { scholarship_type_id: scholarshipTypeId } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     // ========== System Settings ==========
@@ -263,7 +263,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/admin/system-setting', {
         params: { query: { key } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -274,7 +274,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.PUT('/api/v1/admin/system-setting', {
         body: setting,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     // ========== Announcements ==========
@@ -299,7 +299,7 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -310,7 +310,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/admin/announcements/{id}', {
         params: { path: { id } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -321,7 +321,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.POST('/api/v1/admin/announcements', {
         body: announcementData,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -333,7 +333,7 @@ export function createAdminApi() {
         params: { path: { id } },
         body: announcementData,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -344,7 +344,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.DELETE('/api/v1/admin/announcements/{id}', {
         params: { path: { id } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<{ message: string }>;
     },
 
     // ========== Scholarship Management ==========
@@ -355,7 +355,7 @@ export function createAdminApi() {
      */
     getScholarshipStats: async (): Promise<ApiResponse<Record<string, any>>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarships/stats');
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<Record<string, any>>;
     },
 
     /**
@@ -376,7 +376,7 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<Record<string, any>>;
     },
 
     /**
@@ -387,7 +387,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarships/{scholarship_code}/sub-types', {
         params: { path: { scholarship_code: scholarshipCode } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -396,7 +396,7 @@ export function createAdminApi() {
      */
     getSubTypeTranslations: async (): Promise<ApiResponse<Record<string, Record<string, string>>>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarships/sub-type-translations');
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<Record<string, Record<string, string>>>;
     },
 
     // ========== Workflows (Not Implemented) ==========
@@ -440,7 +440,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarship-rules', {
         params: { query: filters },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -451,7 +451,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarship-rules/{id}', {
         params: { path: { id } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -462,7 +462,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-rules', {
         body: rule,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -474,7 +474,7 @@ export function createAdminApi() {
         params: { path: { id } },
         body: rule,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -485,7 +485,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.DELETE('/api/v1/admin/scholarship-rules/{id}', {
         params: { path: { id } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<{ message: string }>;
     },
 
     /**
@@ -496,7 +496,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-rules/copy', {
         body: copyRequest,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -507,7 +507,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-rules/bulk-operation', {
         body: operation,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -518,7 +518,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarship-rules/templates', {
         params: { query: { scholarship_type_id } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -529,7 +529,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-rules/create-template', {
         body: templateRequest,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -540,7 +540,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-rules/apply-template', {
         body: templateRequest,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -557,7 +557,7 @@ export function createAdminApi() {
           query: { scholarship_type_id: scholarshipTypeId },
         },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<{ message: string }>;
     },
 
     /**
@@ -568,7 +568,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/scholarship-rules/scholarship-types/{scholarship_type_id}/sub-types', {
         params: { path: { scholarship_type_id: scholarshipTypeId } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     // ========== Scholarship Permissions ==========
@@ -581,7 +581,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarship-permissions', {
         params: { query: { user_id: userId } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -590,7 +590,7 @@ export function createAdminApi() {
      */
     getCurrentUserScholarshipPermissions: async (): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarship-permissions/current-user');
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -601,7 +601,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-permissions', {
         body: permission,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -613,7 +613,7 @@ export function createAdminApi() {
         params: { path: { id } },
         body: permission,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -624,7 +624,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.DELETE('/api/v1/admin/scholarship-permissions/{id}', {
         params: { path: { id } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<{ message: string }>;
     },
 
     /**
@@ -633,7 +633,7 @@ export function createAdminApi() {
      */
     getAllScholarshipsForPermissions: async (): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarships/all-for-permissions');
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -642,7 +642,7 @@ export function createAdminApi() {
      */
     getMyScholarships: async (): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarships/my-scholarships');
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -653,7 +653,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/available-semesters', {
         params: { query: { scholarship_code: scholarshipCode } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<string[]>;
     },
 
     /**
@@ -662,7 +662,7 @@ export function createAdminApi() {
      */
     getAvailableYears: async (): Promise<ApiResponse<number[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/scholarships/available-years');
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<number[]>;
     },
 
     // ========== Scholarship Configuration Management ==========
@@ -673,7 +673,7 @@ export function createAdminApi() {
      */
     getScholarshipConfigTypes: async (): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/scholarship-types');
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -691,7 +691,7 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -702,7 +702,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/configurations/{id}', {
         params: { path: { id } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -713,7 +713,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.POST('/api/v1/scholarship-configurations/configurations', {
         body: configData,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -725,7 +725,7 @@ export function createAdminApi() {
         params: { path: { id } },
         body: configData,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -736,7 +736,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.DELETE('/api/v1/scholarship-configurations/configurations/{id}', {
         params: { path: { id } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -751,7 +751,7 @@ export function createAdminApi() {
         params: { path: { id } },
         body: targetData,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     // ========== Professor Management ==========
@@ -764,7 +764,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/admin/professors', {
         params: { query: { search } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -776,7 +776,7 @@ export function createAdminApi() {
         params: { path: { application_id: applicationId } },
         body: { professor_nycu_id: professorNycuId },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -787,7 +787,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/admin/professors', {
         params: { query: { search } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     // ========== System Configuration Management ==========
@@ -798,7 +798,7 @@ export function createAdminApi() {
      */
     getConfigurations: async (): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.GET('/api/v1/admin/configurations');
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -809,7 +809,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.POST('/api/v1/admin/configurations', {
         body: configData,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -820,7 +820,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.PUT('/api/v1/admin/configurations/bulk', {
         body: configurations,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -831,7 +831,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.POST('/api/v1/admin/configurations/validate', {
         body: configData,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -842,7 +842,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.DELETE('/api/v1/admin/configurations/{key}', {
         params: { path: { key } },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<string>;
     },
 
     // ========== Bank Verification ==========
@@ -855,7 +855,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification', {
         body: { application_id: applicationId },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     /**
@@ -866,7 +866,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification/batch', {
         body: { application_ids: applicationIds },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
 
     // ========== Professor-Student Relationships ==========
@@ -885,7 +885,7 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -896,7 +896,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.POST('/api/v1/admin/professor-student-relationships', {
         body: relationshipData,
       });
-      return toApiResponse(response);
+      return toApiResponse(response) as ApiResponse<any>;
     },
   };
 }

@@ -66,16 +66,27 @@ type UserCreate = {
   status?: "在學" | "畢業" | "在職" | "退休";
   dept_code?: string;
   dept_name?: string;
+  college_code?: string;
   comment?: string;
+  raw_data?: {
+    chinese_name?: string;
+    english_name?: string;
+    [key: string]: any;
+  };
+  // Backward compatibility fields
+  username?: string;
+  full_name?: string;
+  chinese_name?: string;
+  english_name?: string;
 };
 
 type UserUpdate = Partial<UserCreate>;
 
 type UserStats = {
   total_users: number;
-  by_role: Record<string, number>;
-  by_user_type: Record<string, number>;
-  by_status: Record<string, number>;
+  role_distribution: Record<string, number>;
+  user_type_distribution: Record<string, number>;
+  status_distribution: Record<string, number>;
   recent_registrations: number;
 };
 
