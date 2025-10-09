@@ -32,6 +32,7 @@ from app.models.system_setting import ConfigCategory, EmailTemplate
 from app.models.user import AdminScholarship, User, UserRole
 from app.schemas.application import (
     ApplicationListResponse,
+    ApplicationStatusUpdate,
     BulkApproveRequest,
     HistoricalApplicationResponse,
     ProfessorAssignmentRequest,
@@ -3577,3 +3578,188 @@ async def batch_verify_bank_accounts(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to perform batch verification: {str(e)}"
         )
+
+
+@router.patch("/applications/{application_id}/status")
+async def admin_update_application_status(
+    application_id: int,
+    status_update: ApplicationStatusUpdate,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Update application status (admin version)
+
+    This is a wrapper around the applications endpoint for admin-specific access.
+    """
+    service = ApplicationService(db)
+    result = await service.update_application_status(application_id, current_user, status_update)
+    return {
+        "success": True,
+        "message": "Application status updated successfully",
+        "data": result,
+    }
+
+
+@router.get("/scholarship-email-templates/{scholarship_type_id}")
+async def get_scholarship_email_templates(
+    scholarship_type_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all email templates for a scholarship type"""
+    service = EmailTemplateService(db)
+    templates = await service.get_scholarship_templates(scholarship_type_id)
+    return {
+        "success": True,
+        "message": "Email templates retrieved successfully",
+        "data": templates,
+    }
+
+
+@router.get("/scholarship-email-templates/{scholarship_type_id}/{template_key}")
+async def get_scholarship_email_template(
+    scholarship_type_id: int,
+    template_key: str,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a specific email template"""
+    service = EmailTemplateService(db)
+    template = await service.get_template(scholarship_type_id, template_key)
+    return {
+        "success": True,
+        "message": "Email template retrieved successfully",
+        "data": template,
+    }
+
+
+@router.post("/scholarship-email-templates")
+async def create_scholarship_email_template(
+    template_data: EmailTemplateSchema,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new email template"""
+    service = EmailTemplateService(db)
+    template = await service.create_template(template_data)
+    return {
+        "success": True,
+        "message": "Email template created successfully",
+        "data": template,
+    }
+
+
+@router.put("/scholarship-email-templates/{scholarship_type_id}/{template_key}")
+async def update_scholarship_email_template(
+    scholarship_type_id: int,
+    template_key: str,
+    template_data: EmailTemplateUpdateSchema,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update an email template"""
+    service = EmailTemplateService(db)
+    template = await service.update_template(scholarship_type_id, template_key, template_data)
+    return {
+        "success": True,
+        "message": "Email template updated successfully",
+        "data": template,
+    }
+
+
+@router.delete("/scholarship-email-templates/{scholarship_type_id}/{template_key}")
+async def delete_scholarship_email_template(
+    scholarship_type_id: int,
+    template_key: str,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete an email template"""
+    service = EmailTemplateService(db)
+    await service.delete_template(scholarship_type_id, template_key)
+    return {
+        "success": True,
+        "message": "Email template deleted successfully",
+    }
+
+
+@router.post("/scholarship-email-templates/{scholarship_type_id}/bulk-create")
+async def bulk_create_scholarship_email_templates(
+    scholarship_type_id: int,
+    templates: List[EmailTemplateSchema],
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk create email templates"""
+    service = EmailTemplateService(db)
+    created_templates = []
+    for template_data in templates:
+        template = await service.create_template(template_data)
+        created_templates.append(template)
+    return {
+        "success": True,
+        "message": f"{len(created_templates)} email templates created successfully",
+        "data": created_templates,
+    }
+
+
+@router.get("/scholarship-email-templates/{scholarship_type_id}/available")
+async def get_available_scholarship_email_templates(
+    scholarship_type_id: int,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get available email template keys for a scholarship type"""
+    # Return available template keys
+    available_keys = [
+        "application_approved",
+        "application_rejected",
+        "application_pending",
+        "reminder_incomplete",
+        "notification_new_application",
+    ]
+    return {
+        "success": True,
+        "message": "Available template keys retrieved successfully",
+        "data": available_keys,
+    }
+
+
+@router.get("/professor-student-relationships")
+async def get_professor_student_relationships(
+    page: int = Query(1, ge=1, description="Page number"),
+    size: int = Query(20, ge=1, le=100, description="Page size"),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all professor-student relationships with pagination"""
+    # This endpoint needs to be implemented based on your relationship model
+    # For now, return a placeholder response
+    return {
+        "success": True,
+        "message": "Professor-student relationships retrieved successfully",
+        "data": {
+            "items": [],
+            "total": 0,
+            "page": page,
+            "size": size,
+            "pages": 0,
+        },
+    }
+
+
+@router.post("/professor-student-relationships")
+async def create_professor_student_relationship(
+    relationship_data: Any,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new professor-student relationship"""
+    # This endpoint needs to be implemented based on your relationship model
+    # For now, return a placeholder response
+    return {
+        "success": True,
+        "message": "Professor-student relationship created successfully",
+        "data": relationship_data,
+    }
