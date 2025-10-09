@@ -232,9 +232,20 @@ export class ApiClient {
         // If response already has success structure (with message or data), return as-is
         if ("success" in data && ("message" in data || "data" in data)) {
           // Ensure message property exists for consistency
+          const message = data.message || "Request completed successfully";
+
+          // Log warning in development if message was missing
+          if (!data.message && process.env.NODE_ENV === 'development') {
+            console.warn('⚠️ API Response missing message field:', {
+              endpoint,
+              success: data.success,
+              hasData: !!data.data,
+            });
+          }
+
           return {
             success: data.success,
-            message: data.message || "Request completed successfully",
+            message,
             data: data.data,
           } as ApiResponse<T>;
         }

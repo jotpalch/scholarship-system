@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useTransition } from "react";
 import { apiClient } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -79,6 +79,8 @@ interface ImportHistoryItem {
 }
 
 export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
+  const [isPending, startTransition] = useTransition();
+  const abortControllerRef = React.useRef<AbortController | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [scholarships, setScholarships] = useState<Scholarship[]>([]);
   const [selectedScholarship, setSelectedScholarship] = useState<Scholarship | null>(null);
@@ -115,6 +117,16 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
       setSelectedPeriod("");
     }
   }, [selectedScholarship]);
+
+  // Cleanup: Abort pending requests on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, []);
 
   const fetchScholarships = async () => {
     setIsLoadingScholarships(true);
@@ -266,14 +278,16 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
             ? `匯入完成！成功: ${response.data.success_count}, 失敗: ${response.data.failed_count}`
             : `Import complete! Success: ${response.data.success_count}, Failed: ${response.data.failed_count}`
         );
-        // Store batch info for document upload
-        setConfirmedBatch({
-          id: uploadedBatch.batch_id,
-          name: uploadedBatch.file_name,
-          applicationIds: response.data.created_application_ids || [],
+        // Batch state updates to prevent race conditions and UI flicker
+        startTransition(() => {
+          setConfirmedBatch({
+            id: uploadedBatch.batch_id,
+            name: uploadedBatch.file_name,
+            applicationIds: response.data?.created_application_ids || [],
+          });
+          setUploadedBatch(null);
+          fetchHistory();
         });
-        setUploadedBatch(null);
-        fetchHistory();
       } else {
         setError(response.message || (locale === "zh" ? "確認匯入失敗" : "Confirm import failed"));
       }
@@ -285,9 +299,25 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
   };
 
   const handleCancel = () => {
+    // Abort any pending API requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+
+    // Release file object if it exists
+    if (selectedFile) {
+      // If the file object has a URL, revoke it to free memory
+      // Note: This is for files created with createObjectURL, not File objects from input
+      // But we still set it to null to release the reference
+      setSelectedFile(null);
+    }
+
+    // Clear state
     setUploadedBatch(null);
-    setSelectedFile(null);
     setError(null);
+    setIsUploading(false);
+    setIsConfirming(false);
   };
 
   const handleViewBatch = async (batchId: number, batchName: string) => {
