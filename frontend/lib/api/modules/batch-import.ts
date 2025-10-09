@@ -100,6 +100,7 @@ type BatchHistoryResponse = {
 };
 
 type BatchDetails = BatchHistoryItem & {
+  created_applications?: number[];
   validation_summary: {
     valid_count: number;
     invalid_count: number;
@@ -287,6 +288,15 @@ export function createBatchImportApi(client: ApiClient) {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
+    },
+
+    /**
+     * Delete a batch import and all its related applications
+     */
+    deleteBatch: async (batchId: number): Promise<ApiResponse<{ batch_id: number; deleted_applications: number }>> => {
+      return client.request(`/college/batch-import/${batchId}`, {
+        method: "DELETE",
+      });
     },
 
     /**

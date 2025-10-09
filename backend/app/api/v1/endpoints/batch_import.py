@@ -1113,6 +1113,73 @@ async def download_batch_import_file(
         )
 
 
+@router.delete("/{batch_id}")
+async def delete_batch_import(
+    batch_id: int,
+    current_user: User = Depends(require_college_role),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    刪除批次匯入記錄及其所有相關申請
+
+    **權限**: College 角色僅能刪除自己上傳的批次，Admin/Super Admin 可刪除所有批次
+    """
+    import logging
+
+    from app.core.config import settings
+    from app.services.minio_service import MinIOService
+
+    logger = logging.getLogger(__name__)
+
+    # Get batch import with related applications
+    stmt = select(BatchImport).where(BatchImport.id == batch_id)
+    result = await db.execute(stmt)
+    batch_import = result.scalar_one_or_none()
+
+    if not batch_import:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"批次匯入記錄 {batch_id} 不存在",
+        )
+
+    # Verify ownership (skip for admin/super_admin)
+    if current_user.role not in [UserRole.admin, UserRole.super_admin]:
+        if batch_import.importer_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="僅能刪除自己上傳的批次匯入記錄",
+            )
+
+    # Get application count for response
+    application_count = len(batch_import.applications)
+
+    # Delete related applications
+    for application in batch_import.applications:
+        await db.delete(application)
+
+    # Delete MinIO file if exists
+    if batch_import.file_path:
+        try:
+            minio_service = MinIOService()
+            minio_service.delete_file(bucket_name=settings.minio_bucket, object_name=batch_import.file_path)
+        except Exception as e:
+            logger.warning(f"Failed to delete batch import file from MinIO: {e}")
+            # Continue with batch deletion even if MinIO deletion fails
+
+    # Delete batch import record
+    await db.delete(batch_import)
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": f"成功刪除批次匯入記錄及其 {application_count} 個申請",
+        "data": {
+            "batch_id": batch_id,
+            "deleted_applications": application_count,
+        },
+    }
+
+
 @router.get("/template")
 async def download_batch_import_template(
     scholarship_type: str = Query(..., description="獎學金類型代碼"),

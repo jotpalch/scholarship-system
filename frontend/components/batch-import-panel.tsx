@@ -16,6 +16,7 @@ import {
   Eye,
   History,
   X,
+  Trash2,
 } from "lucide-react";
 import { BatchDocumentUpload } from "@/components/batch-document-upload";
 import { BatchApplicationFileUpload } from "@/components/batch-application-file-upload";
@@ -287,6 +288,61 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
     setUploadedBatch(null);
     setSelectedFile(null);
     setError(null);
+  };
+
+  const handleViewBatch = async (batchId: number, batchName: string) => {
+    try {
+      const response = await apiClient.batchImport.getDetails(batchId);
+      if (response.success && response.data) {
+        setConfirmedBatch({
+          id: batchId,
+          name: batchName,
+          applicationIds: response.data.created_applications || [],
+        });
+        // Scroll to document upload section
+        setTimeout(() => {
+          const uploadSection = document.getElementById('document-upload-section');
+          if (uploadSection) {
+            uploadSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 100);
+      }
+    } catch (error: any) {
+      setError(
+        error.message || (locale === "zh" ? "獲取批次詳情失敗" : "Failed to get batch details")
+      );
+    }
+  };
+
+  const handleDeleteBatch = async (batchId: number, applicationCount: number) => {
+    const confirmMessage =
+      locale === "zh"
+        ? `確定要刪除此批次嗎？這將刪除 ${applicationCount} 個申請，此操作無法復原。`
+        : `Are you sure you want to delete this batch? This will delete ${applicationCount} applications. This action cannot be undone.`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      const response = await apiClient.batchImport.deleteBatch(batchId);
+      if (response.success) {
+        // Clear confirmedBatch if it's the one being deleted
+        if (confirmedBatch?.id === batchId) {
+          setConfirmedBatch(null);
+        }
+        // Refresh history
+        await fetchHistory();
+        alert(
+          response.message ||
+            (locale === "zh" ? "批次刪除成功" : "Batch deleted successfully")
+        );
+      }
+    } catch (error: any) {
+      setError(
+        error.message || (locale === "zh" ? "刪除批次失敗" : "Failed to delete batch")
+      );
+    }
   };
 
   const renderPreviewTable = () => {
@@ -650,25 +706,45 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
                           </span>
                         </td>
                         <td className="px-4 py-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={async () => {
-                              try {
-                                await apiClient.batchImport.downloadFile(item.id);
-                              } catch (error: any) {
-                                setError(
-                                  error.message ||
-                                    (locale === "zh"
-                                      ? "下載檔案失敗"
-                                      : "Failed to download file")
-                                );
-                              }
-                            }}
-                            title={locale === "zh" ? "下載原始檔案" : "Download original file"}
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewBatch(item.id, item.file_name)}
+                              title={locale === "zh" ? "查看/上傳文件" : "View/Upload Files"}
+                              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  await apiClient.batchImport.downloadFile(item.id);
+                                } catch (error: any) {
+                                  setError(
+                                    error.message ||
+                                      (locale === "zh"
+                                        ? "下載檔案失敗"
+                                        : "Failed to download file")
+                                  );
+                                }
+                              }}
+                              title={locale === "zh" ? "下載原始檔案" : "Download original file"}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteBatch(item.id, item.total_records)}
+                              title={locale === "zh" ? "刪除批次" : "Delete batch"}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -682,7 +758,7 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
 
       {/* Document Upload Section */}
       {confirmedBatch && (
-        <Card className="border-nycu-blue-200">
+        <Card id="document-upload-section" className="border-nycu-blue-200">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-nycu-navy-800">
               <Upload className="h-5 w-5 text-nycu-blue-600" />
