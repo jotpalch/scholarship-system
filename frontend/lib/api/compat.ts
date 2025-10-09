@@ -9,11 +9,12 @@ import type { ApiResponse } from '../api.legacy';
 
 /**
  * openapi-fetch response type
+ * Flexible definition to handle various error structures from FastAPI
  */
 export interface FetchResponse<T> {
   data?: T;
   error?: {
-    detail?: string;
+    detail?: string | any[] | any; // FastAPI can return string, validation errors array, or other structures
     message?: string;
     [key: string]: any;
   };
@@ -37,10 +38,19 @@ export function toApiResponse<T>(
 ): ApiResponse<T> {
   // Handle error responses
   if (response.error) {
-    const errorMessage =
-      response.error.detail ||
-      response.error.message ||
-      `Request failed with status ${response.response.status}`;
+    let errorMessage: string;
+
+    // Handle different error detail formats
+    if (typeof response.error.detail === 'string') {
+      errorMessage = response.error.detail;
+    } else if (Array.isArray(response.error.detail)) {
+      // FastAPI validation errors
+      errorMessage = response.error.detail
+        .map((err: any) => `${err.loc?.join('.')}: ${err.msg}`)
+        .join(', ');
+    } else {
+      errorMessage = response.error.message || `Request failed with status ${response.response.status}`;
+    }
 
     return {
       success: false,
@@ -80,11 +90,17 @@ export function toApiResponse<T>(
  */
 export function extractErrorMessage(response: FetchResponse<any>): string {
   if (response.error) {
-    return (
-      response.error.detail ||
-      response.error.message ||
-      `Request failed with status ${response.response.status}`
-    );
+    // Handle different error detail formats
+    if (typeof response.error.detail === 'string') {
+      return response.error.detail;
+    } else if (Array.isArray(response.error.detail)) {
+      // FastAPI validation errors
+      return response.error.detail
+        .map((err: any) => `${err.loc?.join('.')}: ${err.msg}`)
+        .join(', ');
+    } else {
+      return response.error.message || `Request failed with status ${response.response.status}`;
+    }
   }
 
   if (!response.response.ok) {

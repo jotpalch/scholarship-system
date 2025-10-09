@@ -38,17 +38,37 @@ All API client modules have been successfully migrated to use `openapi-fetch` wi
 - ✅ Pre-commit hooks for automatic type checking
 - ✅ Documentation (OPENAPI_TYPES_GUIDE.md)
 
-## 🚧 In Progress (Phase 2: Type Alignment)
+## ✅ Completed (Phase 2.1: Core Type Alignment)
 
-### Known Type Conflicts
+### Type Infrastructure Fixes
 
-The following components/files have type conflicts between legacy types (`api.legacy.ts`) and generated types (`schema.d.ts`). These need to be resolved in a follow-up PR:
+- ✅ **compat.ts**: Enhanced error handling for FastAPI validation errors (array format)
+- ✅ **UserStats**: Updated to match backend schema (user_type_distribution, status_distribution)
+- ✅ **CompleteUserProfile**: Fixed structure (user_info as Record<string, any>)
+- ✅ **ApplicationDocument**: Added missing `example_file_url` field
+- ✅ **FetchResponse**: Flexible error.detail type to handle string | array | object
 
-#### Component Type Mismatches
+### Type Generation Improvements
 
-1. **User Stats** (`app/admin/test-users/page.tsx`, `components/admin-management-interface.tsx`, `components/user-permission-management.tsx`)
-   - Missing properties: `role_distribution`, `active_users`, `inactive_users`
-   - **Fix**: Update backend UserStats schema or fix frontend usage
+- Improved `toApiResponse()` to handle FastAPI validation error arrays
+- Enhanced error message extraction for better debugging
+- Updated legacy types to align with current backend schemas
+
+## 🚧 In Progress (Phase 2.2: Component-Level Fixes)
+
+### Current Status: 277 TypeScript errors remaining
+
+**See `PHASE_2_COMPONENT_FIXES.md` for detailed fix guide**
+
+### Error Categories Summary
+
+1. **UserStats field usage** (~10 errors) - Components reference `active_users`/`inactive_users` which were replaced by `status_distribution`
+2. **ApplicationField/Document conflicts** (~50 errors) - Type mixing from different import sources
+3. **Admin module type inference** (~50 errors) - Need explicit type annotations in admin.ts
+4. **UI component variants** (~10 errors) - Non-standard variants like "warning", "success"
+5. **Misc schema mismatches** (~157 errors) - Various missing fields and structure differences
+
+### Known Type Conflicts (Phase 2.2)
 
 2. **Application Fields** (`components/admin-scholarship-management-interface.tsx`)
    - Property name mismatch: `required` vs `is_required`

@@ -665,8 +665,8 @@ export interface UserUpdate {
 export interface UserStats {
   total_users: number;
   role_distribution: Record<string, number>;
-  active_users: number;
-  inactive_users: number;
+  user_type_distribution: Record<string, number>;
+  status_distribution: Record<string, number>;
   recent_registrations: number;
 }
 
@@ -760,6 +760,7 @@ export interface ApplicationDocument {
   is_active: boolean;
   upload_instructions?: string;
   upload_instructions_en?: string;
+  example_file_url?: string; // MinIO object name for example file
   validation_rules?: Record<string, any>;
   created_at: string;
   updated_at: string;
@@ -1119,9 +1120,9 @@ export interface UserProfile {
 }
 
 export interface CompleteUserProfile {
-  user_info: UserResponse;
+  user_info: Record<string, any>; // From User model API
   profile: UserProfile | null;
-  student_info?: any;
+  student_info?: Record<string, any>; // Student-specific data if applicable
 }
 
 export interface UserProfileUpdate {
