@@ -25,7 +25,7 @@ export function createCollegeApi() {
       params?: string
     ): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.GET('/api/v1/college-review/applications');
-      return toApiResponse(response);
+      return toApiResponse<any[]>(response);
     },
 
     /**
@@ -44,7 +44,7 @@ export function createCollegeApi() {
           },
         },
       });
-      return toApiResponse(response);
+      return toApiResponse<any[]>(response);
     },
 
     /**
@@ -55,7 +55,7 @@ export function createCollegeApi() {
       const response = await typedClient.raw.GET('/api/v1/college-review/rankings/{ranking_id}', {
         params: { path: { ranking_id: rankingId } },
       });
-      return toApiResponse(response);
+      return toApiResponse<any>(response);
     },
 
     /**
@@ -72,7 +72,7 @@ export function createCollegeApi() {
       const response = await typedClient.raw.POST('/api/v1/college-review/rankings', {
         body: data,
       });
-      return toApiResponse(response);
+      return toApiResponse<any>(response);
     },
 
     /**
@@ -87,7 +87,7 @@ export function createCollegeApi() {
         params: { path: { ranking_id: rankingId } },
         body: newOrder,
       });
-      return toApiResponse(response);
+      return toApiResponse<any>(response);
     },
 
     /**
@@ -102,7 +102,7 @@ export function createCollegeApi() {
         params: { path: { ranking_id: rankingId } },
         body: { distribution_rules: distributionRules },
       });
-      return toApiResponse(response);
+      return toApiResponse<any>(response);
     },
 
     /**
@@ -113,7 +113,7 @@ export function createCollegeApi() {
       const response = await typedClient.raw.POST('/api/v1/college-review/rankings/{ranking_id}/finalize', {
         params: { path: { ranking_id: rankingId } },
       });
-      return toApiResponse(response);
+      return toApiResponse<any>(response);
     },
 
     /**
@@ -134,7 +134,7 @@ export function createCollegeApi() {
           },
         },
       });
-      return toApiResponse(response);
+      return toApiResponse<any>(response);
     },
 
     /**
@@ -153,7 +153,7 @@ export function createCollegeApi() {
           },
         },
       });
-      return toApiResponse(response);
+      return toApiResponse<any>(response);
     },
 
     /**
@@ -172,7 +172,15 @@ export function createCollegeApi() {
       }>
     > => {
       const response = await typedClient.raw.GET('/api/v1/college-review/available-combinations');
-      return toApiResponse(response);
+      return toApiResponse<{
+        scholarship_types: Array<{
+          code: string;
+          name: string;
+          name_en?: string;
+        }>;
+        academic_years: number[];
+        semesters: string[];
+      }>(response);
     },
   };
 }

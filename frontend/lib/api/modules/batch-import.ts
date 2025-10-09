@@ -147,7 +147,7 @@ export function createBatchImportApi() {
         },
         body: formData as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<BatchUploadResult>(response);
     },
 
     /**
@@ -162,7 +162,7 @@ export function createBatchImportApi() {
         params: { path: { batch_id: batchId } },
         body: { batch_id: batchId, confirm },
       });
-      return toApiResponse(response);
+      return toApiResponse<BatchConfirmResult>(response);
     },
 
     /**
@@ -178,7 +178,7 @@ export function createBatchImportApi() {
         params: { path: { batch_id: batchId } },
         body: { record_index: recordIndex, updates },
       });
-      return toApiResponse(response);
+      return toApiResponse<BatchUpdateRecordResult>(response);
     },
 
     /**
@@ -191,7 +191,7 @@ export function createBatchImportApi() {
       const response = await typedClient.raw.POST('/api/v1/college-review/batch-import/{batch_id}/validate', {
         params: { path: { batch_id: batchId } },
       });
-      return toApiResponse(response);
+      return toApiResponse<BatchRevalidateResult>(response);
     },
 
     /**
@@ -205,7 +205,7 @@ export function createBatchImportApi() {
       const response = await typedClient.raw.DELETE('/api/v1/college-review/batch-import/{batch_id}/records/{record_index}', {
         params: { path: { batch_id: batchId, record_index: recordIndex } },
       });
-      return toApiResponse(response);
+      return toApiResponse<BatchDeleteRecordResult>(response);
     },
 
     /**
@@ -223,7 +223,7 @@ export function createBatchImportApi() {
         params: { path: { batch_id: batchId } },
         body: formData as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<BatchDocumentUploadResponse>(response);
     },
 
     /**
@@ -244,7 +244,7 @@ export function createBatchImportApi() {
           },
         },
       });
-      return toApiResponse(response);
+      return toApiResponse<BatchHistoryResponse>(response);
     },
 
     /**
@@ -257,7 +257,7 @@ export function createBatchImportApi() {
       const response = await typedClient.raw.GET('/api/v1/college-review/batch-import/{batch_id}/details', {
         params: { path: { batch_id: batchId } },
       });
-      return toApiResponse(response);
+      return toApiResponse<BatchDetails>(response);
     },
 
     /**
@@ -313,7 +313,7 @@ export function createBatchImportApi() {
       const response = await typedClient.raw.DELETE('/api/v1/college-review/batch-import/{batch_id}', {
         params: { path: { batch_id: batchId } },
       });
-      return toApiResponse(response);
+      return toApiResponse<{ batch_id: number; deleted_applications: number }>(response);
     },
 
     /**

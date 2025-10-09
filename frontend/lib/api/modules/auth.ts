@@ -36,7 +36,12 @@ export function createAuthApi() {
         body: { username, password },
       });
 
-      const apiResponse = toApiResponse(response);
+      const apiResponse = toApiResponse<{
+        access_token: string;
+        token_type: string;
+        expires_in: number;
+        user: User;
+      }>(response);
 
       // Store token after successful login
       if (apiResponse.success && apiResponse.data?.access_token) {
@@ -78,7 +83,7 @@ export function createAuthApi() {
         body: userData,
       });
 
-      return toApiResponse(response);
+      return toApiResponse<User>(response);
     },
 
     /**
@@ -88,7 +93,7 @@ export function createAuthApi() {
      */
     getCurrentUser: async (): Promise<ApiResponse<User>> => {
       const response = await typedClient.raw.GET('/api/v1/auth/me');
-      return toApiResponse(response);
+      return toApiResponse<User>(response);
     },
 
     /**
@@ -101,7 +106,7 @@ export function createAuthApi() {
     > => {
       const response = await typedClient.raw.POST('/api/v1/auth/refresh', {});
 
-      const apiResponse = toApiResponse(response);
+      const apiResponse = toApiResponse<{ access_token: string; token_type: string }>(response);
 
       // Update token after successful refresh
       if (apiResponse.success && apiResponse.data?.access_token) {
@@ -118,7 +123,7 @@ export function createAuthApi() {
      */
     getMockUsers: async (): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.GET('/api/v1/auth/mock-sso/users');
-      return toApiResponse(response);
+      return toApiResponse<any[]>(response);
     },
 
     /**
@@ -140,7 +145,12 @@ export function createAuthApi() {
         body: { nycu_id },
       });
 
-      const apiResponse = toApiResponse(response);
+      const apiResponse = toApiResponse<{
+        access_token: string;
+        token_type: string;
+        expires_in: number;
+        user: User;
+      }>(response);
 
       // Store token after successful mock login
       if (apiResponse.success && apiResponse.data?.access_token) {

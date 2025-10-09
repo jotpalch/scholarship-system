@@ -3841,7 +3841,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/applications": {
+    "/api/v1/college-review/applications": {
         parameters: {
             query?: never;
             header?: never;
@@ -3852,7 +3852,7 @@ export interface paths {
          * Get Applications For Review
          * @description Get applications that are ready for college review
          */
-        get: operations["get_applications_for_review_api_v1_college_applications_get"];
+        get: operations["get_applications_for_review_api_v1_college_review_applications_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3861,7 +3861,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/applications/{application_id}/review": {
+    "/api/v1/college-review/applications/{application_id}/review": {
         parameters: {
             query?: never;
             header?: never;
@@ -3874,14 +3874,14 @@ export interface paths {
          * Create College Review
          * @description Create or update a college review for an application
          */
-        post: operations["create_college_review_api_v1_college_applications__application_id__review_post"];
+        post: operations["create_college_review_api_v1_college_review_applications__application_id__review_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/reviews/{review_id}": {
+    "/api/v1/college-review/reviews/{review_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3893,7 +3893,7 @@ export interface paths {
          * Update College Review
          * @description Update an existing college review
          */
-        put: operations["update_college_review_api_v1_college_reviews__review_id__put"];
+        put: operations["update_college_review_api_v1_college_review_reviews__review_id__put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3901,7 +3901,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/rankings": {
+    "/api/v1/college-review/rankings": {
         parameters: {
             query?: never;
             header?: never;
@@ -3912,20 +3912,20 @@ export interface paths {
          * Get Rankings
          * @description Get all rankings for the current user or all if admin
          */
-        get: operations["get_rankings_api_v1_college_rankings_get"];
+        get: operations["get_rankings_api_v1_college_review_rankings_get"];
         put?: never;
         /**
          * Create Ranking
          * @description Create a new ranking for a scholarship sub-type
          */
-        post: operations["create_ranking_api_v1_college_rankings_post"];
+        post: operations["create_ranking_api_v1_college_review_rankings_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/rankings/{ranking_id}": {
+    "/api/v1/college-review/rankings/{ranking_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3936,7 +3936,7 @@ export interface paths {
          * Get Ranking
          * @description Get a ranking with all its items
          */
-        get: operations["get_ranking_api_v1_college_rankings__ranking_id__get"];
+        get: operations["get_ranking_api_v1_college_review_rankings__ranking_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3945,7 +3945,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/rankings/{ranking_id}/order": {
+    "/api/v1/college-review/rankings/{ranking_id}/order": {
         parameters: {
             query?: never;
             header?: never;
@@ -3957,7 +3957,7 @@ export interface paths {
          * Update Ranking Order
          * @description Update the ranking order of applications
          */
-        put: operations["update_ranking_order_api_v1_college_rankings__ranking_id__order_put"];
+        put: operations["update_ranking_order_api_v1_college_review_rankings__ranking_id__order_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3965,7 +3965,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/rankings/{ranking_id}/distribute": {
+    "/api/v1/college-review/rankings/{ranking_id}/distribute": {
         parameters: {
             query?: never;
             header?: never;
@@ -3978,14 +3978,14 @@ export interface paths {
          * Execute Quota Distribution
          * @description Execute quota-based distribution for a ranking
          */
-        post: operations["execute_quota_distribution_api_v1_college_rankings__ranking_id__distribute_post"];
+        post: operations["execute_quota_distribution_api_v1_college_review_rankings__ranking_id__distribute_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/rankings/{ranking_id}/finalize": {
+    "/api/v1/college-review/rankings/{ranking_id}/finalize": {
         parameters: {
             query?: never;
             header?: never;
@@ -3998,14 +3998,14 @@ export interface paths {
          * Finalize Ranking
          * @description Finalize a ranking (makes it read-only)
          */
-        post: operations["finalize_ranking_api_v1_college_rankings__ranking_id__finalize_post"];
+        post: operations["finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/quota-status": {
+    "/api/v1/college-review/quota-status": {
         parameters: {
             query?: never;
             header?: never;
@@ -4016,7 +4016,7 @@ export interface paths {
          * Get Quota Status
          * @description Get quota status for a scholarship type
          */
-        get: operations["get_quota_status_api_v1_college_quota_status_get"];
+        get: operations["get_quota_status_api_v1_college_review_quota_status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4025,7 +4025,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/statistics": {
+    "/api/v1/college-review/statistics": {
         parameters: {
             query?: never;
             header?: never;
@@ -4036,7 +4036,7 @@ export interface paths {
          * Get College Review Statistics
          * @description Get college review statistics
          */
-        get: operations["get_college_review_statistics_api_v1_college_statistics_get"];
+        get: operations["get_college_review_statistics_api_v1_college_review_statistics_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4045,7 +4045,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/available-combinations": {
+    "/api/v1/college-review/available-combinations": {
         parameters: {
             query?: never;
             header?: never;
@@ -4056,7 +4056,7 @@ export interface paths {
          * Get Available Combinations
          * @description Get available combinations of scholarship types, academic years, and semesters from configurations
          */
-        get: operations["get_available_combinations_api_v1_college_available_combinations_get"];
+        get: operations["get_available_combinations_api_v1_college_review_available_combinations_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4065,7 +4065,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/batch-import/upload-data": {
+    "/api/v1/college-review/batch-import/upload-data": {
         parameters: {
             query?: never;
             header?: never;
@@ -4086,14 +4086,14 @@ export interface paths {
          *
          *     **權限**: 僅限 college 角色
          */
-        post: operations["upload_batch_import_data_api_v1_college_batch_import_upload_data_post"];
+        post: operations["upload_batch_import_data_api_v1_college_review_batch_import_upload_data_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/batch-import/{batch_id}/records": {
+    "/api/v1/college-review/batch-import/{batch_id}/records": {
         parameters: {
             query?: never;
             header?: never;
@@ -4117,10 +4117,10 @@ export interface paths {
          *
          *     **權限**: College 角色僅能編輯自己上傳的批次
          */
-        patch: operations["update_batch_record_api_v1_college_batch_import__batch_id__records_patch"];
+        patch: operations["update_batch_record_api_v1_college_review_batch_import__batch_id__records_patch"];
         trace?: never;
     };
-    "/api/v1/college/batch-import/{batch_id}/validate": {
+    "/api/v1/college-review/batch-import/{batch_id}/validate": {
         parameters: {
             query?: never;
             header?: never;
@@ -4141,14 +4141,14 @@ export interface paths {
          *
          *     **權限**: College 角色僅能驗證自己上傳的批次
          */
-        post: operations["revalidate_batch_import_api_v1_college_batch_import__batch_id__validate_post"];
+        post: operations["revalidate_batch_import_api_v1_college_review_batch_import__batch_id__validate_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/batch-import/{batch_id}/records/{record_index}": {
+    "/api/v1/college-review/batch-import/{batch_id}/records/{record_index}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4170,13 +4170,13 @@ export interface paths {
          *
          *     **權限**: College 角色僅能刪除自己上傳的批次中的記錄
          */
-        delete: operations["delete_batch_record_api_v1_college_batch_import__batch_id__records__record_index__delete"];
+        delete: operations["delete_batch_record_api_v1_college_review_batch_import__batch_id__records__record_index__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/batch-import/{batch_id}/documents": {
+    "/api/v1/college-review/batch-import/{batch_id}/documents": {
         parameters: {
             query?: never;
             header?: never;
@@ -4207,14 +4207,14 @@ export interface paths {
          *
          *     **權限**: College 角色僅能為自己的批次上傳文件
          */
-        post: operations["upload_batch_documents_api_v1_college_batch_import__batch_id__documents_post"];
+        post: operations["upload_batch_documents_api_v1_college_review_batch_import__batch_id__documents_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/batch-import/{batch_id}/confirm": {
+    "/api/v1/college-review/batch-import/{batch_id}/confirm": {
         parameters: {
             query?: never;
             header?: never;
@@ -4235,14 +4235,14 @@ export interface paths {
          *
          *     **權限**: College 角色僅能確認自己上傳的批次，Super Admin 可確認所有批次
          */
-        post: operations["confirm_batch_import_api_v1_college_batch_import__batch_id__confirm_post"];
+        post: operations["confirm_batch_import_api_v1_college_review_batch_import__batch_id__confirm_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/batch-import/history": {
+    "/api/v1/college-review/batch-import/history": {
         parameters: {
             query?: never;
             header?: never;
@@ -4255,7 +4255,7 @@ export interface paths {
          *
          *     **權限**: College 角色僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
          */
-        get: operations["get_batch_import_history_api_v1_college_batch_import_history_get"];
+        get: operations["get_batch_import_history_api_v1_college_review_batch_import_history_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4264,7 +4264,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/batch-import/{batch_id}/details": {
+    "/api/v1/college-review/batch-import/{batch_id}/details": {
         parameters: {
             query?: never;
             header?: never;
@@ -4277,7 +4277,7 @@ export interface paths {
          *
          *     **權限**: College 角色僅能查看自己上傳的記錄，Super Admin 可查看所有記錄
          */
-        get: operations["get_batch_import_details_api_v1_college_batch_import__batch_id__details_get"];
+        get: operations["get_batch_import_details_api_v1_college_review_batch_import__batch_id__details_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4286,7 +4286,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/batch-import/{batch_id}/download": {
+    "/api/v1/college-review/batch-import/{batch_id}/download": {
         parameters: {
             query?: never;
             header?: never;
@@ -4299,7 +4299,7 @@ export interface paths {
          *
          *     **權限**: College 角色僅能下載自己上傳的檔案，Super Admin 可下載所有檔案
          */
-        get: operations["download_batch_import_file_api_v1_college_batch_import__batch_id__download_get"];
+        get: operations["download_batch_import_file_api_v1_college_review_batch_import__batch_id__download_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4308,7 +4308,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/batch-import/{batch_id}": {
+    "/api/v1/college-review/batch-import/{batch_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4324,13 +4324,13 @@ export interface paths {
          *
          *     **權限**: College 角色僅能刪除自己上傳的批次，Admin/Super Admin 可刪除所有批次
          */
-        delete: operations["delete_batch_import_api_v1_college_batch_import__batch_id__delete"];
+        delete: operations["delete_batch_import_api_v1_college_review_batch_import__batch_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/college/batch-import/template": {
+    "/api/v1/college-review/batch-import/template": {
         parameters: {
             query?: never;
             header?: never;
@@ -4349,7 +4349,7 @@ export interface paths {
          *
          *     **權限**: 僅限 college 角色
          */
-        get: operations["download_batch_import_template_api_v1_college_batch_import_template_get"];
+        get: operations["download_batch_import_template_api_v1_college_review_batch_import_template_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5529,18 +5529,6 @@ export interface components {
             /** Trace Id */
             trace_id?: string | null;
         };
-        /** ApiResponse[CollegeReviewResponse] */
-        ApiResponse_CollegeReviewResponse_: {
-            /** Success */
-            success: boolean;
-            /** Message */
-            message: string;
-            data?: components["schemas"]["CollegeReviewResponse"] | null;
-            /** Errors */
-            errors?: string[] | null;
-            /** Trace Id */
-            trace_id?: string | null;
-        };
         /** ApiResponse[Dict[str, Any]] */
         ApiResponse_Dict_str__Any__: {
             /** Success */
@@ -6584,8 +6572,8 @@ export interface components {
              */
             updates: Record<string, never>;
         };
-        /** Body_create_ranking_api_v1_college_rankings_post */
-        Body_create_ranking_api_v1_college_rankings_post: {
+        /** Body_create_ranking_api_v1_college_review_rankings_post */
+        Body_create_ranking_api_v1_college_review_rankings_post: {
             /**
              * Scholarship Type Id
              * @description Scholarship type ID
@@ -6696,8 +6684,8 @@ export interface components {
              */
             file: string;
         };
-        /** Body_upload_batch_documents_api_v1_college_batch_import__batch_id__documents_post */
-        Body_upload_batch_documents_api_v1_college_batch_import__batch_id__documents_post: {
+        /** Body_upload_batch_documents_api_v1_college_review_batch_import__batch_id__documents_post */
+        Body_upload_batch_documents_api_v1_college_review_batch_import__batch_id__documents_post: {
             /**
              * File
              * Format: binary
@@ -6705,8 +6693,8 @@ export interface components {
              */
             file: string;
         };
-        /** Body_upload_batch_import_data_api_v1_college_batch_import_upload_data_post */
-        Body_upload_batch_import_data_api_v1_college_batch_import_upload_data_post: {
+        /** Body_upload_batch_import_data_api_v1_college_review_batch_import_upload_data_post */
+        Body_upload_batch_import_data_api_v1_college_review_batch_import_upload_data_post: {
             /**
              * File
              * Format: binary
@@ -6857,51 +6845,6 @@ export interface components {
             scoring_weights?: {
                 [key: string]: number;
             } | null;
-        };
-        /**
-         * CollegeReviewResponse
-         * @description Schema for college review response
-         */
-        CollegeReviewResponse: {
-            /** Id */
-            id: number;
-            /** Application Id */
-            application_id: number;
-            /** Reviewer Id */
-            reviewer_id: number;
-            /** Ranking Score */
-            ranking_score: number | null;
-            /** Academic Score */
-            academic_score: number | null;
-            /** Professor Review Score */
-            professor_review_score: number | null;
-            /** College Criteria Score */
-            college_criteria_score: number | null;
-            /** Special Circumstances Score */
-            special_circumstances_score: number | null;
-            /** Review Comments */
-            review_comments: string | null;
-            /** Recommendation */
-            recommendation: string;
-            /** Decision Reason */
-            decision_reason: string | null;
-            /** Preliminary Rank */
-            preliminary_rank: number | null;
-            /** Final Rank */
-            final_rank: number | null;
-            /** Review Status */
-            review_status: string;
-            /** Is Priority */
-            is_priority: boolean;
-            /** Needs Special Attention */
-            needs_special_attention: boolean;
-            /** Reviewed At */
-            reviewed_at: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
         };
         /**
          * CollegeReviewUpdate
@@ -16069,7 +16012,7 @@ export interface operations {
             };
         };
     };
-    get_applications_for_review_api_v1_college_applications_get: {
+    get_applications_for_review_api_v1_college_review_applications_get: {
         parameters: {
             query?: {
                 /** @description Filter by scholarship type ID */
@@ -16095,7 +16038,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiResponse_List_Dict_str__Any___"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -16109,7 +16052,7 @@ export interface operations {
             };
         };
     };
-    create_college_review_api_v1_college_applications__application_id__review_post: {
+    create_college_review_api_v1_college_review_applications__application_id__review_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -16121,370 +16064,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CollegeReviewCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse_CollegeReviewResponse_"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_college_review_api_v1_college_reviews__review_id__put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                review_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CollegeReviewUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse_CollegeReviewResponse_"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_rankings_api_v1_college_rankings_get: {
-        parameters: {
-            query?: {
-                /** @description Filter by academic year */
-                academic_year?: number | null;
-                /** @description Filter by semester */
-                semester?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse_List_Dict_str__Any___"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_ranking_api_v1_college_rankings_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["Body_create_ranking_api_v1_college_rankings_post"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse_Dict_str__Any__"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_ranking_api_v1_college_rankings__ranking_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ranking_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse_Dict_str__Any__"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_ranking_order_api_v1_college_rankings__ranking_id__order_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ranking_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RankingOrderUpdate"][];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse_Dict_str__Any__"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    execute_quota_distribution_api_v1_college_rankings__ranking_id__distribute_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ranking_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["QuotaDistributionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse_Dict_str__Any__"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    finalize_ranking_api_v1_college_rankings__ranking_id__finalize_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ranking_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse_Dict_str__Any__"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_quota_status_api_v1_college_quota_status_get: {
-        parameters: {
-            query: {
-                /** @description Scholarship type ID */
-                scholarship_type_id: number;
-                /** @description Academic year */
-                academic_year: number;
-                /** @description Semester */
-                semester?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse_Dict_str__Any__"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_college_review_statistics_api_v1_college_statistics_get: {
-        parameters: {
-            query?: {
-                /** @description Filter by academic year */
-                academic_year?: number | null;
-                /** @description Filter by semester */
-                semester?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse_Dict_str__Any__"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_available_combinations_api_v1_college_available_combinations_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiResponse_Dict_str__Any__"];
-                };
-            };
-        };
-    };
-    upload_batch_import_data_api_v1_college_batch_import_upload_data_post: {
-        parameters: {
-            query: {
-                /** @description 獎學金類型代碼 */
-                scholarship_type: string;
-                /** @description 學年度 */
-                academic_year: number;
-                /** @description 學期 */
-                semester?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_upload_batch_import_data_api_v1_college_batch_import_upload_data_post"];
             };
         };
         responses: {
@@ -16508,7 +16087,371 @@ export interface operations {
             };
         };
     };
-    update_batch_record_api_v1_college_batch_import__batch_id__records_patch: {
+    update_college_review_api_v1_college_review_reviews__review_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollegeReviewUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_rankings_api_v1_college_review_rankings_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by academic year */
+                academic_year?: number | null;
+                /** @description Filter by semester */
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_ranking_api_v1_college_review_rankings_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_create_ranking_api_v1_college_review_rankings_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ranking_api_v1_college_review_rankings__ranking_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_ranking_order_api_v1_college_review_rankings__ranking_id__order_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RankingOrderUpdate"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    execute_quota_distribution_api_v1_college_review_rankings__ranking_id__distribute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuotaDistributionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    finalize_ranking_api_v1_college_review_rankings__ranking_id__finalize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_quota_status_api_v1_college_review_quota_status_get: {
+        parameters: {
+            query: {
+                /** @description Scholarship type ID */
+                scholarship_type_id: number;
+                /** @description Academic year */
+                academic_year: number;
+                /** @description Semester */
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_college_review_statistics_api_v1_college_review_statistics_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by academic year */
+                academic_year?: number | null;
+                /** @description Filter by semester */
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_available_combinations_api_v1_college_review_available_combinations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    upload_batch_import_data_api_v1_college_review_batch_import_upload_data_post: {
+        parameters: {
+            query: {
+                /** @description 獎學金類型代碼 */
+                scholarship_type: string;
+                /** @description 學年度 */
+                academic_year: number;
+                /** @description 學期 */
+                semester?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_batch_import_data_api_v1_college_review_batch_import_upload_data_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_batch_record_api_v1_college_review_batch_import__batch_id__records_patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -16543,7 +16486,7 @@ export interface operations {
             };
         };
     };
-    revalidate_batch_import_api_v1_college_batch_import__batch_id__validate_post: {
+    revalidate_batch_import_api_v1_college_review_batch_import__batch_id__validate_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -16574,7 +16517,7 @@ export interface operations {
             };
         };
     };
-    delete_batch_record_api_v1_college_batch_import__batch_id__records__record_index__delete: {
+    delete_batch_record_api_v1_college_review_batch_import__batch_id__records__record_index__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -16606,7 +16549,7 @@ export interface operations {
             };
         };
     };
-    upload_batch_documents_api_v1_college_batch_import__batch_id__documents_post: {
+    upload_batch_documents_api_v1_college_review_batch_import__batch_id__documents_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -16617,7 +16560,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "multipart/form-data": components["schemas"]["Body_upload_batch_documents_api_v1_college_batch_import__batch_id__documents_post"];
+                "multipart/form-data": components["schemas"]["Body_upload_batch_documents_api_v1_college_review_batch_import__batch_id__documents_post"];
             };
         };
         responses: {
@@ -16641,7 +16584,7 @@ export interface operations {
             };
         };
     };
-    confirm_batch_import_api_v1_college_batch_import__batch_id__confirm_post: {
+    confirm_batch_import_api_v1_college_review_batch_import__batch_id__confirm_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -16676,7 +16619,7 @@ export interface operations {
             };
         };
     };
-    get_batch_import_history_api_v1_college_batch_import_history_get: {
+    get_batch_import_history_api_v1_college_review_batch_import_history_get: {
         parameters: {
             query?: {
                 /** @description 跳過筆數 */
@@ -16710,7 +16653,7 @@ export interface operations {
             };
         };
     };
-    get_batch_import_details_api_v1_college_batch_import__batch_id__details_get: {
+    get_batch_import_details_api_v1_college_review_batch_import__batch_id__details_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -16741,7 +16684,7 @@ export interface operations {
             };
         };
     };
-    download_batch_import_file_api_v1_college_batch_import__batch_id__download_get: {
+    download_batch_import_file_api_v1_college_review_batch_import__batch_id__download_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -16772,7 +16715,7 @@ export interface operations {
             };
         };
     };
-    delete_batch_import_api_v1_college_batch_import__batch_id__delete: {
+    delete_batch_import_api_v1_college_review_batch_import__batch_id__delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -16803,7 +16746,7 @@ export interface operations {
             };
         };
     };
-    download_batch_import_template_api_v1_college_batch_import_template_get: {
+    download_batch_import_template_api_v1_college_review_batch_import_template_get: {
         parameters: {
             query: {
                 /** @description 獎學金類型代碼 */

@@ -35,7 +35,7 @@ export function createApplicationsApi() {
       const response = await typedClient.raw.GET('/api/v1/applications', {
         params: { query: status ? { status } : undefined },
       });
-      return toApiResponse(response);
+      return toApiResponse<Application[]>(response);
     },
 
     /**
@@ -49,7 +49,7 @@ export function createApplicationsApi() {
       const response = await typedClient.raw.GET('/api/v1/applications/college/review', {
         params: { query: { status, scholarship_type: scholarshipType } },
       });
-      return toApiResponse(response);
+      return toApiResponse<Application[]>(response);
     },
 
     /**
@@ -63,7 +63,7 @@ export function createApplicationsApi() {
       const response = await typedClient.raw.GET('/api/v1/applications/review/list', {
         params: { query: { scholarship_type: scholarshipType, status } },
       });
-      return toApiResponse(response);
+      return toApiResponse<Application[]>(response);
     },
 
     /**
@@ -78,7 +78,7 @@ export function createApplicationsApi() {
         params: { query: isDraft ? { is_draft: true } : undefined },
         body: applicationData,
       });
-      return toApiResponse(response);
+      return toApiResponse<Application>(response);
     },
 
     /**
@@ -91,7 +91,7 @@ export function createApplicationsApi() {
       const response = await typedClient.raw.GET('/api/v1/applications/{id}', {
         params: { path: { id } },
       });
-      return toApiResponse(response);
+      return toApiResponse<Application>(response);
     },
 
     /**
@@ -106,7 +106,7 @@ export function createApplicationsApi() {
         params: { path: { id } },
         body: applicationData,
       });
-      return toApiResponse(response);
+      return toApiResponse<Application>(response);
     },
 
     /**
@@ -121,7 +121,7 @@ export function createApplicationsApi() {
         params: { path: { id } },
         body: statusData,
       });
-      return toApiResponse(response);
+      return toApiResponse<Application>(response);
     },
 
     /**
@@ -141,7 +141,7 @@ export function createApplicationsApi() {
         params: { path: { id: applicationId } },
         body: formData as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<any>(response);
     },
 
     /**
@@ -154,7 +154,7 @@ export function createApplicationsApi() {
       const response = await typedClient.raw.POST('/api/v1/applications/{id}/submit', {
         params: { path: { id: applicationId } },
       });
-      return toApiResponse(response);
+      return toApiResponse<Application>(response);
     },
 
     /**
@@ -167,7 +167,7 @@ export function createApplicationsApi() {
       const response = await typedClient.raw.DELETE('/api/v1/applications/{id}', {
         params: { path: { id: applicationId } },
       });
-      return toApiResponse(response);
+      return toApiResponse<{ success: boolean; message: string }>(response);
     },
 
     /**
@@ -180,7 +180,7 @@ export function createApplicationsApi() {
       const response = await typedClient.raw.POST('/api/v1/applications/{id}/withdraw', {
         params: { path: { id: applicationId } },
       });
-      return toApiResponse(response);
+      return toApiResponse<Application>(response);
     },
 
     /**
@@ -202,7 +202,7 @@ export function createApplicationsApi() {
         },
         body: formData as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<any>(response);
     },
 
     /**
@@ -215,7 +215,7 @@ export function createApplicationsApi() {
       const response = await typedClient.raw.GET('/api/v1/applications/{id}/files', {
         params: { path: { id: applicationId } },
       });
-      return toApiResponse(response);
+      return toApiResponse<ApplicationFile[]>(response);
     },
 
     /**
@@ -263,7 +263,7 @@ export function createApplicationsApi() {
           ...(selectedAwards ? { selected_awards: selectedAwards } : {}),
         },
       });
-      return toApiResponse(response);
+      return toApiResponse<Application>(response);
     },
   };
 }
