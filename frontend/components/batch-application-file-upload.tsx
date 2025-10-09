@@ -3,8 +3,15 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -14,7 +21,6 @@ import {
 } from "@/components/ui/select";
 import {
   Upload,
-  FileText,
   CheckCircle,
   XCircle,
   Loader2,
@@ -49,6 +55,12 @@ const DOCUMENT_TYPES = [
   { value: "other", label_zh: "其他", label_en: "Other" },
 ];
 
+interface DocumentType {
+  value: string;
+  label_zh: string;
+  label_en: string;
+}
+
 export function BatchApplicationFileUpload({
   applicationIds,
   onUploadComplete,
@@ -58,6 +70,8 @@ export function BatchApplicationFileUpload({
     new Map()
   );
   const [error, setError] = useState<string | null>(null);
+  const [scholarshipDocuments, setScholarshipDocuments] = useState<DocumentType[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
 
   // Fetch application details on mount
   useEffect(() => {
@@ -116,6 +130,53 @@ export function BatchApplicationFileUpload({
       fetchApplications();
     }
   }, [applicationIds]);
+
+  // Fetch scholarship-specific document types
+  useEffect(() => {
+    const fetchScholarshipDocuments = async () => {
+      // Get scholarship type from the first application
+      const firstState = Array.from(uploadStates.values()).find(
+        (state) => state.application && !state.loading
+      );
+
+      if (!firstState || !firstState.application) {
+        // No application loaded yet, use fallback
+        setScholarshipDocuments(DOCUMENT_TYPES);
+        return;
+      }
+
+      const scholarshipType = firstState.application.scholarship_type;
+      if (!scholarshipType) {
+        setScholarshipDocuments(DOCUMENT_TYPES);
+        return;
+      }
+
+      setDocumentsLoading(true);
+      try {
+        const response = await apiClient.applicationFields.getDocuments(scholarshipType);
+        if (response.success && response.data && response.data.length > 0) {
+          // Transform API response to DocumentType format
+          const transformedDocs: DocumentType[] = response.data.map((doc: any) => ({
+            value: doc.document_name.toLowerCase().replace(/\s+/g, "_"),
+            label_zh: doc.document_name,
+            label_en: doc.document_name_en || doc.document_name,
+          }));
+          setScholarshipDocuments(transformedDocs);
+        } else {
+          // Fallback to default types if no documents found
+          setScholarshipDocuments(DOCUMENT_TYPES);
+        }
+      } catch (err) {
+        console.error("Failed to fetch scholarship documents:", err);
+        // Fallback to default types on error
+        setScholarshipDocuments(DOCUMENT_TYPES);
+      } finally {
+        setDocumentsLoading(false);
+      }
+    };
+
+    fetchScholarshipDocuments();
+  }, [uploadStates]);
 
   const handleDocumentTypeChange = (appId: number, documentType: string) => {
     setUploadStates((prev) => {
@@ -268,7 +329,7 @@ export function BatchApplicationFileUpload({
   };
 
   const getDocumentTypeLabel = (value: string) => {
-    const docType = DOCUMENT_TYPES.find((type) => type.value === value);
+    const docType = scholarshipDocuments.find((type) => type.value === value);
     return docType ? (locale === "zh" ? docType.label_zh : docType.label_en) : value;
   };
 
@@ -286,123 +347,95 @@ export function BatchApplicationFileUpload({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileText className="h-5 w-5" />
-          {locale === "zh" ? "個別上傳申請文件" : "Upload Application Documents Individually"}
-        </CardTitle>
-        <CardDescription>
-          {locale === "zh"
-            ? `為 ${applicationIds.length} 個申請分別上傳文件`
-            : `Upload documents for ${applicationIds.length} applications individually`}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {error && (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
+    <div className="space-y-4">
+      {error && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-        {Array.from(uploadStates.entries()).map(([appId, state]) => (
-          <Card key={appId} className="border-gray-200">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">
+      <div className="overflow-hidden rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[120px]">
+                {locale === "zh" ? "學號" : "Student ID"}
+              </TableHead>
+              <TableHead className="w-[100px]">
+                {locale === "zh" ? "申請 ID" : "App ID"}
+              </TableHead>
+              <TableHead className="w-[180px]">
+                {locale === "zh" ? "文件類型" : "Document Type"}
+              </TableHead>
+              <TableHead>
+                {locale === "zh" ? "檔案" : "File"}
+              </TableHead>
+              <TableHead className="w-[200px] text-right">
+                {locale === "zh" ? "操作" : "Actions"}
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {Array.from(uploadStates.entries()).map(([appId, state]) => (
+              <TableRow key={appId} className={
+                state.uploadStatus === "success" ? "bg-green-50" :
+                state.uploadStatus === "error" ? "bg-red-50" : ""
+              }>
+                {/* Student ID */}
+                <TableCell className="font-mono text-sm">
                   {state.loading ? (
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      {locale === "zh" ? "載入中..." : "Loading..."}
-                    </div>
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : state.application ? (
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm">
-                          {locale === "zh" ? "學號" : "Student ID"}:{" "}
-                          {state.application.student_id}
-                        </span>
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {locale === "zh" ? "申請 ID" : "Application ID"}: {appId}
-                      </div>
-                    </div>
+                    state.application.student_id
                   ) : (
-                    <span className="text-red-500">
-                      {locale === "zh"
-                        ? `無法載入申請 ${appId}`
-                        : `Failed to load application ${appId}`}
+                    <span className="text-red-500 text-xs">
+                      {locale === "zh" ? "載入失敗" : "Error"}
                     </span>
                   )}
-                </CardTitle>
+                </TableCell>
 
-                {state.uploadStatus === "success" && (
-                  <div className="flex items-center gap-2 text-green-600">
-                    <CheckCircle className="h-5 w-5" />
-                    <span className="text-sm font-medium">
-                      {locale === "zh" ? "已完成" : "Completed"}
-                    </span>
-                  </div>
-                )}
+                {/* Application ID */}
+                <TableCell className="text-sm text-gray-600">
+                  {appId}
+                </TableCell>
 
-                {state.uploadStatus === "error" && (
-                  <div className="flex items-center gap-2 text-red-600">
-                    <XCircle className="h-5 w-5" />
-                    <span className="text-sm font-medium">
-                      {locale === "zh" ? "失敗" : "Failed"}
-                    </span>
-                  </div>
-                )}
-
-                {/* Delete Button */}
-                {!state.loading && state.application && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDelete(appId)}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    title={locale === "zh" ? "刪除此申請" : "Delete this application"}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-
-            <CardContent className="space-y-4">
-              {!state.loading && state.application && (
-                <>
-                  {/* Document Type Selector */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">
-                      {locale === "zh" ? "文件類型" : "Document Type"}
-                    </label>
+                {/* Document Type Selector */}
+                <TableCell>
+                  {!state.loading && state.application && (
                     <Select
                       value={state.selectedDocumentType}
                       onValueChange={(value) => handleDocumentTypeChange(appId, value)}
-                      disabled={state.uploading}
+                      disabled={state.uploading || documentsLoading}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="h-8">
                         <SelectValue
                           placeholder={
-                            locale === "zh" ? "選擇文件類型" : "Select document type"
+                            documentsLoading
+                              ? locale === "zh"
+                                ? "載入中..."
+                                : "Loading..."
+                              : locale === "zh"
+                              ? "選擇類型"
+                              : "Select type"
                           }
                         />
                       </SelectTrigger>
                       <SelectContent>
-                        {DOCUMENT_TYPES.map((type) => (
+                        {scholarshipDocuments.map((type) => (
                           <SelectItem key={type.value} value={type.value}>
                             {locale === "zh" ? type.label_zh : type.label_en}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
+                  )}
+                </TableCell>
 
-                  {/* File Upload */}
-                  {state.selectedDocumentType && (
-                    <>
+                {/* File Upload */}
+                <TableCell>
+                  {!state.loading && state.application && state.selectedDocumentType && (
+                    <div className="flex items-center gap-2">
                       <FileUpload
                         onFilesChange={(files) => handleFilesChange(appId, files)}
                         acceptedTypes={[".pdf", ".jpg", ".jpeg", ".png"]}
@@ -412,53 +445,71 @@ export function BatchApplicationFileUpload({
                         locale={locale}
                         initialFiles={state.files}
                       />
+                      {state.uploadMessage && (
+                        <div className="flex items-center gap-1 text-xs ml-2">
+                          {state.uploadStatus === "success" ? (
+                            <CheckCircle className="h-3 w-3 text-green-600" />
+                          ) : state.uploadStatus === "error" ? (
+                            <XCircle className="h-3 w-3 text-red-600" />
+                          ) : null}
+                          <span className={
+                            state.uploadStatus === "success" ? "text-green-600" :
+                            state.uploadStatus === "error" ? "text-red-600" : ""
+                          }>
+                            {state.uploadMessage}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </TableCell>
 
-                      {/* Upload Button */}
-                      {state.files.length > 0 && (
+                {/* Actions */}
+                <TableCell className="text-right">
+                  {!state.loading && state.application && (
+                    <div className="flex items-center justify-end gap-2">
+                      {state.selectedDocumentType && state.files.length > 0 && (
                         <Button
                           onClick={() => handleUpload(appId)}
                           disabled={state.uploading}
-                          className="w-full"
+                          size="sm"
+                          className="h-8"
                         >
                           {state.uploading ? (
                             <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              {locale === "zh" ? "上傳中..." : "Uploading..."}
+                              <Loader2 className="h-3 w-3 animate-spin" />
                             </>
                           ) : (
                             <>
-                              <Upload className="mr-2 h-4 w-4" />
-                              {locale === "zh"
-                                ? `上傳 ${getDocumentTypeLabel(state.selectedDocumentType)}`
-                                : `Upload ${getDocumentTypeLabel(state.selectedDocumentType)}`}
+                              <Upload className="h-3 w-3 mr-1" />
+                              {locale === "zh" ? "上傳" : "Upload"}
                             </>
                           )}
                         </Button>
                       )}
-
-                      {/* Upload Status Message */}
-                      {state.uploadMessage && (
-                        <Alert
-                          variant={
-                            state.uploadStatus === "success" ? "default" : "destructive"
-                          }
-                        >
-                          {state.uploadStatus === "success" ? (
-                            <CheckCircle className="h-4 w-4" />
-                          ) : (
-                            <XCircle className="h-4 w-4" />
-                          )}
-                          <AlertDescription>{state.uploadMessage}</AlertDescription>
-                        </Alert>
-                      )}
-                    </>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(appId)}
+                        className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        {locale === "zh" ? "刪除申請" : "Delete Application"}
+                      </Button>
+                    </div>
                   )}
-                </>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </CardContent>
-    </Card>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="text-sm text-gray-500">
+        {locale === "zh"
+          ? `總計 ${applicationIds.length} 個申請`
+          : `Total ${applicationIds.length} applications`}
+      </div>
+    </div>
   );
 }

@@ -771,25 +771,15 @@ export function BatchImportPanel({ locale = "zh" }: BatchImportPanelProps) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="batch" className="w-full">
+            <Tabs defaultValue="individual" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="batch">
-                  {locale === "zh" ? "批次 ZIP 上傳" : "Batch ZIP Upload"}
-                </TabsTrigger>
                 <TabsTrigger value="individual">
                   {locale === "zh" ? "個別上傳" : "Individual Upload"}
                 </TabsTrigger>
+                <TabsTrigger value="batch">
+                  {locale === "zh" ? "批次 ZIP 上傳" : "Batch ZIP Upload"}
+                </TabsTrigger>
               </TabsList>
-              <TabsContent value="batch" className="mt-4">
-                <BatchDocumentUpload
-                  batchId={confirmedBatch.id}
-                  onUploadComplete={() => {
-                    setConfirmedBatch(null);
-                    fetchHistory();
-                  }}
-                  locale={locale}
-                />
-              </TabsContent>
               <TabsContent value="individual" className="mt-4">
                 <BatchApplicationFileUpload
                   applicationIds={confirmedBatch.applicationIds}
