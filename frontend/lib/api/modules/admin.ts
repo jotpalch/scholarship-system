@@ -236,6 +236,7 @@ export function createAdminApi() {
     ): Promise<ApiResponse<{ items: any[]; total: number }>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-email-templates/{scholarship_type_id}/bulk-create', {
         params: { path: { scholarship_type_id: scholarshipTypeId } },
+        body: {} as any,
       });
       return toApiResponse(response) as ApiResponse<{ items: any[]; total: number }>;
     },
@@ -376,7 +377,7 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response) as ApiResponse<Record<string, any>>;
+      return toApiResponse(response) as ApiResponse<any[]>;
     },
 
     /**
@@ -568,7 +569,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/scholarship-rules/scholarship-types/{scholarship_type_id}/sub-types', {
         params: { path: { scholarship_type_id: scholarshipTypeId } },
       });
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as unknown as ApiResponse<any[]>;
     },
 
     // ========== Scholarship Permissions ==========
@@ -653,7 +654,7 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/available-semesters', {
         params: { query: { scholarship_code: scholarshipCode } },
       });
-      return toApiResponse(response) as ApiResponse<string[]>;
+      return toApiResponse(response) as unknown as ApiResponse<string[]>;
     },
 
     /**
@@ -673,7 +674,7 @@ export function createAdminApi() {
      */
     getScholarshipConfigTypes: async (): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/scholarship-types');
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as unknown as ApiResponse<any[]>;
     },
 
     /**
@@ -691,7 +692,7 @@ export function createAdminApi() {
           },
         },
       });
-      return toApiResponse(response) as ApiResponse<any[]>;
+      return toApiResponse(response) as unknown as ApiResponse<any[]>;
     },
 
     /**
@@ -879,9 +880,8 @@ export function createAdminApi() {
       const response = await typedClient.raw.GET('/api/v1/admin/professor-student-relationships', {
         params: {
           query: {
-            professor_id: params?.professor_id,
-            student_id: params?.student_id,
-            is_active: params?.is_active,
+            page: params?.page,
+            size: params?.size,
           },
         },
       });
@@ -894,7 +894,7 @@ export function createAdminApi() {
      */
     createProfessorStudentRelationship: async (relationshipData: any): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/professor-student-relationships', {
-        body: relationshipData as any,
+        params: { query: { relationship_data: relationshipData } },
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
