@@ -84,9 +84,9 @@ export function createSystemSettingsApi() {
       key: string,
       includeSensitive?: boolean
     ): Promise<ApiResponse<SystemConfiguration>> => {
-      const response = await typedClient.raw.GET('/api/v1/system-settings/{key}', {
+      const response = await typedClient.raw.GET('/api/v1/system-settings/{id}', {
         params: {
-          path: { key },
+          path: { id: key },
           query: {
             include_sensitive: includeSensitive,
           },
@@ -116,8 +116,8 @@ export function createSystemSettingsApi() {
       key: string,
       configData: SystemConfigurationUpdate
     ): Promise<ApiResponse<SystemConfiguration>> => {
-      const response = await typedClient.raw.PUT('/api/v1/system-settings/{key}', {
-        params: { path: { key } },
+      const response = await typedClient.raw.PUT('/api/v1/system-settings/{id}', {
+        params: { path: { id: key } },
         body: configData,
       });
       return toApiResponse(response);
@@ -143,8 +143,8 @@ export function createSystemSettingsApi() {
     deleteConfiguration: async (
       key: string
     ): Promise<ApiResponse<{ message: string }>> => {
-      const response = await typedClient.raw.DELETE('/api/v1/system-settings/{key}', {
-        params: { path: { key } },
+      const response = await typedClient.raw.DELETE('/api/v1/system-settings/{id}', {
+        params: { path: { id: key } },
       });
       return toApiResponse(response);
     },

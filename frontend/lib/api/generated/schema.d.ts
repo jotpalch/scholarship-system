@@ -587,7 +587,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/applications/{application_id}": {
+    "/api/v1/applications/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -598,24 +598,24 @@ export interface paths {
          * Get Application
          * @description Get application by ID
          */
-        get: operations["get_application_api_v1_applications__application_id__get"];
+        get: operations["get_application_api_v1_applications__id__get"];
         /**
          * Update Application
          * @description Update application
          */
-        put: operations["update_application_api_v1_applications__application_id__put"];
+        put: operations["update_application_api_v1_applications__id__put"];
         post?: never;
         /**
          * Delete Application
          * @description Delete application (only draft applications can be deleted)
          */
-        delete: operations["delete_application_api_v1_applications__application_id__delete"];
+        delete: operations["delete_application_api_v1_applications__id__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/applications/{application_id}/submit": {
+    "/api/v1/applications/{id}/submit": {
         parameters: {
             query?: never;
             header?: never;
@@ -628,14 +628,14 @@ export interface paths {
          * Submit Application
          * @description Submit application for review
          */
-        post: operations["submit_application_api_v1_applications__application_id__submit_post"];
+        post: operations["submit_application_api_v1_applications__id__submit_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/applications/{application_id}/files": {
+    "/api/v1/applications/{id}/files": {
         parameters: {
             query?: never;
             header?: never;
@@ -646,7 +646,7 @@ export interface paths {
          * Get Application Files
          * @description Get all files for an application - 現在從 submitted_form_data.documents 中獲取
          */
-        get: operations["get_application_files_api_v1_applications__application_id__files_get"];
+        get: operations["get_application_files_api_v1_applications__id__files_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -655,7 +655,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/applications/{application_id}/files/upload": {
+    "/api/v1/applications/{id}/files/upload": {
         parameters: {
             query?: never;
             header?: never;
@@ -668,7 +668,7 @@ export interface paths {
          * Upload File
          * @description Upload file for application using MinIO
          */
-        post: operations["upload_file_api_v1_applications__application_id__files_upload_post"];
+        post: operations["upload_file_api_v1_applications__id__files_upload_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -695,7 +695,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/applications/{application_id}/status": {
+    "/api/v1/applications/{id}/status": {
         parameters: {
             query?: never;
             header?: never;
@@ -707,7 +707,7 @@ export interface paths {
          * Update Application Status
          * @description Update application status (staff only)
          */
-        put: operations["update_application_status_api_v1_applications__application_id__status_put"];
+        put: operations["update_application_status_api_v1_applications__id__status_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -715,7 +715,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/applications/{application_id}/review": {
+    "/api/v1/applications/{id}/review": {
         parameters: {
             query?: never;
             header?: never;
@@ -728,7 +728,7 @@ export interface paths {
          * Submit Professor Review
          * @description Submit professor's review and selected awards for an application
          */
-        post: operations["submit_professor_review_api_v1_applications__application_id__review_post"];
+        post: operations["submit_professor_review_api_v1_applications__id__review_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -755,7 +755,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/applications/{application_id}/student-data": {
+    "/api/v1/applications/{id}/student-data": {
         parameters: {
             query?: never;
             header?: never;
@@ -766,12 +766,12 @@ export interface paths {
          * Get Student Data
          * @description 取得申請的學生相關資料
          */
-        get: operations["get_student_data_api_v1_applications__application_id__student_data_get"];
+        get: operations["get_student_data_api_v1_applications__id__student_data_get"];
         /**
          * Update Student Data
          * @description 更新申請的學生相關資料 (銀行帳號、指導教授資訊等)
          */
-        put: operations["update_student_data_api_v1_applications__application_id__student_data_put"];
+        put: operations["update_student_data_api_v1_applications__id__student_data_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2932,7 +2932,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/scholarship-configurations/configurations/{config_id}": {
+    "/api/v1/scholarship-configurations/configurations/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -2943,24 +2943,24 @@ export interface paths {
          * Get Scholarship Configuration
          * @description Get a specific scholarship configuration by ID
          */
-        get: operations["get_scholarship_configuration_api_v1_scholarship_configurations_configurations__config_id__get"];
+        get: operations["get_scholarship_configuration_api_v1_scholarship_configurations_configurations__id__get"];
         /**
          * Update Scholarship Configuration
          * @description Update a scholarship configuration (excluding quota fields)
          */
-        put: operations["update_scholarship_configuration_api_v1_scholarship_configurations_configurations__config_id__put"];
+        put: operations["update_scholarship_configuration_api_v1_scholarship_configurations_configurations__id__put"];
         post?: never;
         /**
          * Deactivate Scholarship Configuration
          * @description Deactivate (soft delete) a scholarship configuration
          */
-        delete: operations["deactivate_scholarship_configuration_api_v1_scholarship_configurations_configurations__config_id__delete"];
+        delete: operations["deactivate_scholarship_configuration_api_v1_scholarship_configurations_configurations__id__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/scholarship-configurations/configurations/{config_id}/duplicate": {
+    "/api/v1/scholarship-configurations/configurations/{id}/duplicate": {
         parameters: {
             query?: never;
             header?: never;
@@ -2973,14 +2973,14 @@ export interface paths {
          * Duplicate Scholarship Configuration
          * @description Duplicate a scholarship configuration to a new academic period
          */
-        post: operations["duplicate_scholarship_configuration_api_v1_scholarship_configurations_configurations__config_id__duplicate_post"];
+        post: operations["duplicate_scholarship_configuration_api_v1_scholarship_configurations_configurations__id__duplicate_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/scholarship-configurations/{config_id}/whitelist": {
+    "/api/v1/scholarship-configurations/{id}/whitelist": {
         parameters: {
             query?: never;
             header?: never;
@@ -2993,7 +2993,7 @@ export interface paths {
          *
          *     Returns whitelist organized by sub-scholarship type with student details
          */
-        get: operations["get_configuration_whitelist_api_v1_scholarship_configurations__config_id__whitelist_get"];
+        get: operations["get_configuration_whitelist_api_v1_scholarship_configurations__id__whitelist_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3002,7 +3002,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/scholarship-configurations/{config_id}/whitelist/batch": {
+    "/api/v1/scholarship-configurations/{id}/whitelist/batch": {
         parameters: {
             query?: never;
             header?: never;
@@ -3023,7 +3023,7 @@ export interface paths {
          *         ]
          *     }
          */
-        post: operations["batch_add_whitelist_api_v1_scholarship_configurations__config_id__whitelist_batch_post"];
+        post: operations["batch_add_whitelist_api_v1_scholarship_configurations__id__whitelist_batch_post"];
         /**
          * Batch Remove Whitelist
          * @description Batch remove students from whitelist
@@ -3034,13 +3034,13 @@ export interface paths {
          *         "sub_type": "nstc"  // Optional, if null removes from all sub-types
          *     }
          */
-        delete: operations["batch_remove_whitelist_api_v1_scholarship_configurations__config_id__whitelist_batch_delete"];
+        delete: operations["batch_remove_whitelist_api_v1_scholarship_configurations__id__whitelist_batch_delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/scholarship-configurations/{config_id}/whitelist/import": {
+    "/api/v1/scholarship-configurations/{id}/whitelist/import": {
         parameters: {
             query?: never;
             header?: never;
@@ -3056,14 +3056,14 @@ export interface paths {
          *     Expected Excel format:
          *     | 學號 | 姓名 | 子獎學金類型 | 備註 |
          */
-        post: operations["import_whitelist_excel_api_v1_scholarship_configurations__config_id__whitelist_import_post"];
+        post: operations["import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/scholarship-configurations/{config_id}/whitelist/export": {
+    "/api/v1/scholarship-configurations/{id}/whitelist/export": {
         parameters: {
             query?: never;
             header?: never;
@@ -3074,7 +3074,7 @@ export interface paths {
          * Export Whitelist Excel
          * @description Export whitelist to Excel file
          */
-        get: operations["export_whitelist_excel_api_v1_scholarship_configurations__config_id__whitelist_export_get"];
+        get: operations["export_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_export_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3083,7 +3083,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/scholarship-configurations/{config_id}/whitelist/template": {
+    "/api/v1/scholarship-configurations/{id}/whitelist/template": {
         parameters: {
             query?: never;
             header?: never;
@@ -3094,7 +3094,7 @@ export interface paths {
          * Download Whitelist Template
          * @description Download whitelist import template Excel file
          */
-        get: operations["download_whitelist_template_api_v1_scholarship_configurations__config_id__whitelist_template_get"];
+        get: operations["download_whitelist_template_api_v1_scholarship_configurations__id__whitelist_template_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5351,7 +5351,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/system-settings/{config_key}": {
+    "/api/v1/system-settings/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -5362,18 +5362,18 @@ export interface paths {
          * Get Configuration
          * @description 獲取單一系統配置
          */
-        get: operations["get_configuration_api_v1_system_settings__config_key__get"];
+        get: operations["get_configuration_api_v1_system_settings__id__get"];
         /**
          * Update Configuration
          * @description 更新系統配置
          */
-        put: operations["update_configuration_api_v1_system_settings__config_key__put"];
+        put: operations["update_configuration_api_v1_system_settings__id__put"];
         post?: never;
         /**
          * Delete Configuration
          * @description 刪除系統配置
          */
-        delete: operations["delete_configuration_api_v1_system_settings__config_key__delete"];
+        delete: operations["delete_configuration_api_v1_system_settings__id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -5439,7 +5439,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/system-settings/audit-logs/{config_key}": {
+    "/api/v1/system-settings/audit-logs/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -5450,7 +5450,7 @@ export interface paths {
          * Get Configuration Audit Logs
          * @description 獲取配置變更審計日誌
          */
-        get: operations["get_configuration_audit_logs_api_v1_system_settings_audit_logs__config_key__get"];
+        get: operations["get_configuration_audit_logs_api_v1_system_settings_audit_logs__id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6628,8 +6628,8 @@ export interface components {
              */
             file: string;
         };
-        /** Body_import_whitelist_excel_api_v1_scholarship_configurations__config_id__whitelist_import_post */
-        Body_import_whitelist_excel_api_v1_scholarship_configurations__config_id__whitelist_import_post: {
+        /** Body_import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post */
+        Body_import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post: {
             /**
              * File
              * Format: binary
@@ -6722,8 +6722,8 @@ export interface components {
              */
             file: string;
         };
-        /** Body_upload_file_api_v1_applications__application_id__files_upload_post */
-        Body_upload_file_api_v1_applications__application_id__files_upload_post: {
+        /** Body_upload_file_api_v1_applications__id__files_upload_post */
+        Body_upload_file_api_v1_applications__id__files_upload_post: {
             /**
              * File
              * Format: binary
@@ -10175,13 +10175,13 @@ export interface operations {
             };
         };
     };
-    get_application_api_v1_applications__application_id__get: {
+    get_application_api_v1_applications__id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description Application ID */
-                application_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -10207,13 +10207,13 @@ export interface operations {
             };
         };
     };
-    update_application_api_v1_applications__application_id__put: {
+    update_application_api_v1_applications__id__put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description Application ID */
-                application_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -10243,13 +10243,13 @@ export interface operations {
             };
         };
     };
-    delete_application_api_v1_applications__application_id__delete: {
+    delete_application_api_v1_applications__id__delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description Application ID */
-                application_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -10275,13 +10275,13 @@ export interface operations {
             };
         };
     };
-    submit_application_api_v1_applications__application_id__submit_post: {
+    submit_application_api_v1_applications__id__submit_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description Application ID */
-                application_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -10307,13 +10307,13 @@ export interface operations {
             };
         };
     };
-    get_application_files_api_v1_applications__application_id__files_get: {
+    get_application_files_api_v1_applications__id__files_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description Application ID */
-                application_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -10339,7 +10339,7 @@ export interface operations {
             };
         };
     };
-    upload_file_api_v1_applications__application_id__files_upload_post: {
+    upload_file_api_v1_applications__id__files_upload_post: {
         parameters: {
             query?: {
                 /** @description File type */
@@ -10348,13 +10348,13 @@ export interface operations {
             header?: never;
             path: {
                 /** @description Application ID */
-                application_id: number;
+                id: number;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "multipart/form-data": components["schemas"]["Body_upload_file_api_v1_applications__application_id__files_upload_post"];
+                "multipart/form-data": components["schemas"]["Body_upload_file_api_v1_applications__id__files_upload_post"];
             };
         };
         responses: {
@@ -10412,13 +10412,13 @@ export interface operations {
             };
         };
     };
-    update_application_status_api_v1_applications__application_id__status_put: {
+    update_application_status_api_v1_applications__id__status_put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description Application ID */
-                application_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -10448,13 +10448,13 @@ export interface operations {
             };
         };
     };
-    submit_professor_review_api_v1_applications__application_id__review_post: {
+    submit_professor_review_api_v1_applications__id__review_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description Application ID */
-                application_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -10518,12 +10518,12 @@ export interface operations {
             };
         };
     };
-    get_student_data_api_v1_applications__application_id__student_data_get: {
+    get_student_data_api_v1_applications__id__student_data_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                application_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -10549,7 +10549,7 @@ export interface operations {
             };
         };
     };
-    update_student_data_api_v1_applications__application_id__student_data_put: {
+    update_student_data_api_v1_applications__id__student_data_put: {
         parameters: {
             query?: {
                 /** @description 是否重新從外部API獲取基本學生資料 */
@@ -10557,7 +10557,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                application_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -14507,12 +14507,12 @@ export interface operations {
             };
         };
     };
-    get_scholarship_configuration_api_v1_scholarship_configurations_configurations__config_id__get: {
+    get_scholarship_configuration_api_v1_scholarship_configurations_configurations__id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                config_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -14538,12 +14538,12 @@ export interface operations {
             };
         };
     };
-    update_scholarship_configuration_api_v1_scholarship_configurations_configurations__config_id__put: {
+    update_scholarship_configuration_api_v1_scholarship_configurations_configurations__id__put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                config_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -14573,12 +14573,12 @@ export interface operations {
             };
         };
     };
-    deactivate_scholarship_configuration_api_v1_scholarship_configurations_configurations__config_id__delete: {
+    deactivate_scholarship_configuration_api_v1_scholarship_configurations_configurations__id__delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                config_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -14604,12 +14604,12 @@ export interface operations {
             };
         };
     };
-    duplicate_scholarship_configuration_api_v1_scholarship_configurations_configurations__config_id__duplicate_post: {
+    duplicate_scholarship_configuration_api_v1_scholarship_configurations_configurations__id__duplicate_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                config_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -14639,12 +14639,12 @@ export interface operations {
             };
         };
     };
-    get_configuration_whitelist_api_v1_scholarship_configurations__config_id__whitelist_get: {
+    get_configuration_whitelist_api_v1_scholarship_configurations__id__whitelist_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                config_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -14670,12 +14670,12 @@ export interface operations {
             };
         };
     };
-    batch_add_whitelist_api_v1_scholarship_configurations__config_id__whitelist_batch_post: {
+    batch_add_whitelist_api_v1_scholarship_configurations__id__whitelist_batch_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                config_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -14705,12 +14705,12 @@ export interface operations {
             };
         };
     };
-    batch_remove_whitelist_api_v1_scholarship_configurations__config_id__whitelist_batch_delete: {
+    batch_remove_whitelist_api_v1_scholarship_configurations__id__whitelist_batch_delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                config_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -14740,18 +14740,18 @@ export interface operations {
             };
         };
     };
-    import_whitelist_excel_api_v1_scholarship_configurations__config_id__whitelist_import_post: {
+    import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                config_id: number;
+                id: number;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "multipart/form-data": components["schemas"]["Body_import_whitelist_excel_api_v1_scholarship_configurations__config_id__whitelist_import_post"];
+                "multipart/form-data": components["schemas"]["Body_import_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_import_post"];
             };
         };
         responses: {
@@ -14775,12 +14775,12 @@ export interface operations {
             };
         };
     };
-    export_whitelist_excel_api_v1_scholarship_configurations__config_id__whitelist_export_get: {
+    export_whitelist_excel_api_v1_scholarship_configurations__id__whitelist_export_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                config_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -14806,12 +14806,12 @@ export interface operations {
             };
         };
     };
-    download_whitelist_template_api_v1_scholarship_configurations__config_id__whitelist_template_get: {
+    download_whitelist_template_api_v1_scholarship_configurations__id__whitelist_template_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                config_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -18410,14 +18410,14 @@ export interface operations {
             };
         };
     };
-    get_configuration_api_v1_system_settings__config_key__get: {
+    get_configuration_api_v1_system_settings__id__get: {
         parameters: {
             query?: {
                 include_sensitive?: boolean;
             };
             header?: never;
             path: {
-                config_key: string;
+                id: string;
             };
             cookie?: never;
         };
@@ -18443,12 +18443,12 @@ export interface operations {
             };
         };
     };
-    update_configuration_api_v1_system_settings__config_key__put: {
+    update_configuration_api_v1_system_settings__id__put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                config_key: string;
+                id: string;
             };
             cookie?: never;
         };
@@ -18478,12 +18478,12 @@ export interface operations {
             };
         };
     };
-    delete_configuration_api_v1_system_settings__config_key__delete: {
+    delete_configuration_api_v1_system_settings__id__delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                config_key: string;
+                id: string;
             };
             cookie?: never;
         };
@@ -18582,14 +18582,14 @@ export interface operations {
             };
         };
     };
-    get_configuration_audit_logs_api_v1_system_settings_audit_logs__config_key__get: {
+    get_configuration_audit_logs_api_v1_system_settings_audit_logs__id__get: {
         parameters: {
             query?: {
                 limit?: number;
             };
             header?: never;
             path: {
-                config_key: string;
+                id: string;
             };
             cookie?: never;
         };

@@ -44,9 +44,9 @@ export function createWhitelistApi() {
         search?: string;
       }
     ): Promise<ApiResponse<WhitelistResponse[]>> => {
-      const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/{configuration_id}/whitelist', {
+      const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/{id}/whitelist', {
         params: {
-          path: { configuration_id: configurationId },
+          path: { id: configurationId },
           query: {
             page: params?.page,
             size: params?.size,
@@ -73,8 +73,8 @@ export function createWhitelistApi() {
         }>;
       }>
     > => {
-      const response = await typedClient.raw.POST('/api/v1/scholarship-configurations/{configuration_id}/whitelist/batch', {
-        params: { path: { configuration_id: configurationId } },
+      const response = await typedClient.raw.POST('/api/v1/scholarship-configurations/{id}/whitelist/batch', {
+        params: { path: { id: configurationId } },
         body: request,
       });
       return toApiResponse(response);
@@ -99,8 +99,8 @@ export function createWhitelistApi() {
         }>;
       }>
     > => {
-      const response = await typedClient.raw.DELETE('/api/v1/scholarship-configurations/{configuration_id}/whitelist/batch', {
-        params: { path: { configuration_id: configurationId } },
+      const response = await typedClient.raw.DELETE('/api/v1/scholarship-configurations/{id}/whitelist/batch', {
+        params: { path: { id: configurationId } },
         body: request,
       });
       return toApiResponse(response);
@@ -126,8 +126,8 @@ export function createWhitelistApi() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await typedClient.raw.POST('/api/v1/scholarship-configurations/{configuration_id}/whitelist/import', {
-        params: { path: { configuration_id: configurationId } },
+      const response = await typedClient.raw.POST('/api/v1/scholarship-configurations/{id}/whitelist/import', {
+        params: { path: { id: configurationId } },
         body: formData as any,
       });
       return toApiResponse(response);

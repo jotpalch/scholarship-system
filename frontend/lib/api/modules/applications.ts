@@ -137,8 +137,8 @@ export function createApplicationsApi() {
       formData.append('file', file);
       formData.append('file_type', fileType);
 
-      const response = await typedClient.raw.POST('/api/v1/applications/{application_id}/files', {
-        params: { path: { application_id: applicationId } },
+      const response = await typedClient.raw.POST('/api/v1/applications/{id}/files', {
+        params: { path: { id: applicationId } },
         body: formData as any,
       });
       return toApiResponse(response);
@@ -151,8 +151,8 @@ export function createApplicationsApi() {
     submitApplication: async (
       applicationId: number
     ): Promise<ApiResponse<Application>> => {
-      const response = await typedClient.raw.POST('/api/v1/applications/{application_id}/submit', {
-        params: { path: { application_id: applicationId } },
+      const response = await typedClient.raw.POST('/api/v1/applications/{id}/submit', {
+        params: { path: { id: applicationId } },
       });
       return toApiResponse(response);
     },
@@ -177,8 +177,8 @@ export function createApplicationsApi() {
     withdrawApplication: async (
       applicationId: number
     ): Promise<ApiResponse<Application>> => {
-      const response = await typedClient.raw.POST('/api/v1/applications/{application_id}/withdraw', {
-        params: { path: { application_id: applicationId } },
+      const response = await typedClient.raw.POST('/api/v1/applications/{id}/withdraw', {
+        params: { path: { id: applicationId } },
       });
       return toApiResponse(response);
     },
@@ -195,9 +195,9 @@ export function createApplicationsApi() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await typedClient.raw.POST('/api/v1/applications/{application_id}/files/upload', {
+      const response = await typedClient.raw.POST('/api/v1/applications/{id}/files/upload', {
         params: {
-          path: { application_id: applicationId },
+          path: { id: applicationId },
           query: { file_type: fileType },
         },
         body: formData as any,
@@ -212,8 +212,8 @@ export function createApplicationsApi() {
     getApplicationFiles: async (
       applicationId: number
     ): Promise<ApiResponse<ApplicationFile[]>> => {
-      const response = await typedClient.raw.GET('/api/v1/applications/{application_id}/files', {
-        params: { path: { application_id: applicationId } },
+      const response = await typedClient.raw.GET('/api/v1/applications/{id}/files', {
+        params: { path: { id: applicationId } },
       });
       return toApiResponse(response);
     },
@@ -254,10 +254,10 @@ export function createApplicationsApi() {
       recommendation: string,
       selectedAwards?: string[]
     ): Promise<ApiResponse<Application>> => {
-      const response = await typedClient.raw.POST('/api/v1/applications/{application_id}/review', {
-        params: { path: { application_id: applicationId } },
+      const response = await typedClient.raw.POST('/api/v1/applications/{id}/review', {
+        params: { path: { id: applicationId } },
         body: {
-          application_id: applicationId,
+          id: applicationId,
           review_stage: reviewStage,
           recommendation,
           ...(selectedAwards ? { selected_awards: selectedAwards } : {}),
