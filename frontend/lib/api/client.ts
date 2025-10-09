@@ -229,9 +229,14 @@ export class ApiClient {
 
       // Handle different response formats from backend
       if (data && typeof data === "object") {
-        // If response already has success/message structure, return as-is
-        if ("success" in data && "message" in data) {
-          return data as ApiResponse<T>;
+        // If response already has success structure (with message or data), return as-is
+        if ("success" in data && ("message" in data || "data" in data)) {
+          // Ensure message property exists for consistency
+          return {
+            success: data.success,
+            message: data.message || "Request completed successfully",
+            data: data.data,
+          } as ApiResponse<T>;
         }
         // If it's a PaginatedResponse, wrap it
         else if (
