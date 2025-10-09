@@ -29,7 +29,7 @@ export function createWhitelistApi() {
         params: { path: { id: scholarshipId } },
         body: { enabled },
       });
-      return toApiResponse(response);
+      return toApiResponse<{ success: boolean }>(response as any);
     },
 
     /**
@@ -47,14 +47,10 @@ export function createWhitelistApi() {
       const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/{id}/whitelist', {
         params: {
           path: { id: configurationId },
-          query: {
-            page: params?.page,
-            size: params?.size,
-            search: params?.search,
-          },
-        },
+          ...(params && { query: params }),
+        } as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<WhitelistResponse[]>(response as any);
     },
 
     /**
@@ -75,9 +71,12 @@ export function createWhitelistApi() {
     > => {
       const response = await typedClient.raw.POST('/api/v1/scholarship-configurations/{id}/whitelist/batch', {
         params: { path: { id: configurationId } },
-        body: request,
+        body: request as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<{
+        success_count: number;
+        failed_items: Array<{ nycu_id: string; reason: string; }>;
+      }>(response as any);
     },
 
     /**
@@ -101,9 +100,12 @@ export function createWhitelistApi() {
     > => {
       const response = await typedClient.raw.DELETE('/api/v1/scholarship-configurations/{id}/whitelist/batch', {
         params: { path: { id: configurationId } },
-        body: request,
+        body: request as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<{
+        success_count: number;
+        failed_items: Array<{ id: number; reason: string; }>;
+      }>(response as any);
     },
 
     /**
@@ -130,7 +132,10 @@ export function createWhitelistApi() {
         params: { path: { id: configurationId } },
         body: formData as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<{
+        success_count: number;
+        failed_items: Array<{ row: number; nycu_id: string; reason: string; }>;
+      }>(response as any);
     },
 
     /**

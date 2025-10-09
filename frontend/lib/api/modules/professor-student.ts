@@ -77,9 +77,9 @@ export function createProfessorStudentApi() {
       relationshipData: ProfessorStudentRelationshipCreate
     ): Promise<ApiResponse<ProfessorStudentRelationship>> => {
       const response = await typedClient.raw.POST('/api/v1/professor-student', {
-        body: relationshipData,
+        params: { query: relationshipData as any },
       });
-      return toApiResponse(response as any);
+      return toApiResponse<ProfessorStudentRelationship>(response as any);
     },
 
     /**
@@ -92,7 +92,7 @@ export function createProfessorStudentApi() {
     ): Promise<ApiResponse<ProfessorStudentRelationship>> => {
       const response = await typedClient.raw.PUT('/api/v1/professor-student/{id}', {
         params: { path: { id } },
-        body: relationshipData,
+        body: relationshipData as any,
       });
       return toApiResponse(response as any);
     },

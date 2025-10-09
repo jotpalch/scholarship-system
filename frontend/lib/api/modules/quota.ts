@@ -211,7 +211,7 @@ export function createQuotaApi() {
       academicYear: string,
       limit: number = 50
     ): Promise<ApiResponse<any[]>> => {
-      const response = await typedClient.raw.GET('/api/v1/scholarship-configurations/quota-history', {
+      const response = await (typedClient.raw.GET as any)('/api/v1/scholarship-configurations/quota-history', {
         params: {
           query: {
             academic_year: academicYear,
@@ -229,7 +229,7 @@ export function createQuotaApi() {
     validateQuotaChange: async (
       request: UpdateMatrixQuotaRequest
     ): Promise<ApiResponse<{ valid: boolean; warnings: string[] }>> => {
-      const response = await typedClient.raw.POST('/api/v1/scholarship-configurations/validate-quota', {
+      const response = await (typedClient.raw.POST as any)('/api/v1/scholarship-configurations/validate-quota', {
         body: request as any,
       });
       return toApiResponse<{ valid: boolean; warnings: string[] }>(response as any);

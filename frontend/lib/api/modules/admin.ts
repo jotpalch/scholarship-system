@@ -368,7 +368,7 @@ export function createAdminApi() {
       subType?: string,
       status?: string
     ): Promise<ApiResponse<any[]>> => {
-      const response = await typedClient.raw.GET('/api/v1/admin/scholarships/{scholarship_code}/applications', {
+      const response = await (typedClient.raw.GET as any)('/api/v1/admin/scholarships/{scholarship_code}/applications', {
         params: {
           path: { scholarship_code: scholarshipCode },
           query: {

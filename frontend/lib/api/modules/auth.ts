@@ -80,7 +80,7 @@ export function createAuthApi() {
       full_name: string;
     }): Promise<ApiResponse<User>> => {
       const response = await typedClient.raw.POST('/api/v1/auth/register', {
-        body: userData,
+        body: userData as any,
       });
 
       return toApiResponse<User>(response as any);

@@ -94,9 +94,9 @@ export function createEmailManagementApi() {
       params?: EmailHistoryParams
     ): Promise<ApiResponse<PaginatedEmailResponse>> => {
       const response = await typedClient.raw.GET('/api/v1/email-management/history', {
-        params: { query: params },
+        params: { query: params as any },
       });
-      return toApiResponse(response as any);
+      return toApiResponse<PaginatedEmailResponse>(response as any);
     },
 
     /**
@@ -107,9 +107,9 @@ export function createEmailManagementApi() {
       params?: ScheduledEmailParams
     ): Promise<ApiResponse<PaginatedEmailResponse>> => {
       const response = await typedClient.raw.GET('/api/v1/email-management/scheduled', {
-        params: { query: params },
+        params: { query: params as any },
       });
-      return toApiResponse(response as any);
+      return toApiResponse<PaginatedEmailResponse>(response as any);
     },
 
     /**

@@ -149,7 +149,7 @@ export function createUsersApi() {
       const response = await typedClient.raw.GET('/api/v1/users', {
         params: { query: params },
       });
-      return toApiResponse<PaginatedResponse<UserListResponse>>(response);
+      return toApiResponse<PaginatedResponse<UserListResponse>>(response as any);
     },
 
     /**

@@ -49,8 +49,8 @@ export function createScholarshipsApi() {
      * Type-safe: Response array inferred from OpenAPI
      */
     getCombined: async (): Promise<ApiResponse<ScholarshipType[]>> => {
-      const response = await typedClient.raw.GET('/api/v1/scholarships/combined/list');
-      return toApiResponse(response as any);
+      const response = await (typedClient.raw.GET as any)('/api/v1/scholarships/combined/list', {});
+      return toApiResponse<ScholarshipType[]>(response as any);
     },
 
     /**
@@ -77,10 +77,10 @@ export function createScholarshipsApi() {
         application_end_date?: string;
       }>;
     }): Promise<ApiResponse<ScholarshipType>> => {
-      const response = await typedClient.raw.POST('/api/v1/scholarships/combined/phd', {
-        body: data,
+      const response = await (typedClient.raw.POST as any)('/api/v1/scholarships/combined/phd', {
+        body: data as any,
       });
-      return toApiResponse(response as any);
+      return toApiResponse<ScholarshipType>(response as any);
     },
   };
 }

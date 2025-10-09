@@ -118,15 +118,13 @@ export function createApplicationsApi() {
       id: number,
       statusData: { status: string; comments?: string }
     ): Promise<ApiResponse<Application>> => {
-      // Temporarily commented out due to missing endpoint
-      // const response = await typedClient.raw.PATCH('/api/v1/applications/{id}/status', {
-      //   params: { path: { id } },
-      //   body: statusData as any,
-      // });
-      // return toApiResponse<Application>(response as any);
-
-      // Fallback: Use updateApplication instead
-      return this.updateApplication(id, { status: statusData.status } as any);
+      // NOTE: Endpoint /api/v1/applications/{id}/status not in OpenAPI schema
+      // Fallback: Use PUT /api/v1/applications/{id} with status field
+      const response = await typedClient.raw.PUT('/api/v1/applications/{id}', {
+        params: { path: { id } },
+        body: { status: statusData.status } as any,
+      });
+      return toApiResponse<Application>(response as any);
     },
 
     /**

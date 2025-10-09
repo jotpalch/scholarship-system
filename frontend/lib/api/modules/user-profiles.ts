@@ -133,11 +133,13 @@ export function createUserProfilesApi() {
       contentType: string
     ): Promise<ApiResponse<{ document_url: string }>> => {
       const response = await typedClient.raw.POST('/api/v1/user-profiles/me/bank-document', {
-        body: {
-          photo_data: photoData,
-          filename,
-          content_type: contentType,
-        } as any,
+        params: {
+          query: {
+            photo_data: photoData,
+            filename,
+            content_type: contentType,
+          },
+        },
       });
       return toApiResponse<{ document_url: string }>(response as any);
     },

@@ -38,7 +38,7 @@ export function createProfessorApi() {
         });
         console.log("📨 Professor applications raw response:", response);
 
-        const apiResponse = toApiResponse<PaginatedResponse<Application>>(response);
+        const apiResponse = toApiResponse<PaginatedResponse<Application>>(response as any);
 
         if (
           apiResponse.success &&

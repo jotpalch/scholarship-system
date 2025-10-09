@@ -34,10 +34,11 @@ export function createBankVerificationApi() {
      * Type-safe: Request body validated against OpenAPI
      */
     verifyBankAccount: async (
-      applicationId: number
+      applicationId: number,
+      forceRecheck: boolean = false
     ): Promise<ApiResponse<BankVerificationResult>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification', {
-        body: { application_id: applicationId },
+        body: { application_id: applicationId, force_recheck: forceRecheck } as any,
       });
       return toApiResponse<BankVerificationResult>(response as any);
     },
@@ -47,10 +48,11 @@ export function createBankVerificationApi() {
      * Type-safe: Request body validated against OpenAPI
      */
     verifyBankAccountsBatch: async (
-      applicationIds: number[]
+      applicationIds: number[],
+      forceRecheck: boolean = false
     ): Promise<ApiResponse<BankVerificationBatchResult>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification/batch', {
-        body: { application_ids: applicationIds },
+        body: { application_ids: applicationIds, force_recheck: forceRecheck } as any,
       });
       return toApiResponse<BankVerificationBatchResult>(response as any);
     },

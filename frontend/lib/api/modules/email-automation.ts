@@ -31,7 +31,7 @@ export function createEmailAutomationApi() {
           },
         },
       });
-      return toApiResponse(response);
+      return toApiResponse<any[]>(response as any);
     },
 
     /**
@@ -68,7 +68,7 @@ export function createEmailAutomationApi() {
       const response = await typedClient.raw.DELETE('/api/v1/email-automation/{rule_id}', {
         params: { path: { rule_id: ruleId } },
       });
-      return toApiResponse(response);
+      return toApiResponse<void>(response as any);
     },
 
     /**
@@ -88,7 +88,7 @@ export function createEmailAutomationApi() {
      */
     getTriggerEvents: async (): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.GET('/api/v1/email-automation/trigger-events');
-      return toApiResponse(response);
+      return toApiResponse<any[]>(response as any);
     },
   };
 }

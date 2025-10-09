@@ -25,7 +25,7 @@ export function createCollegeApi() {
       params?: string
     ): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.GET('/api/v1/college-review/applications');
-      return toApiResponse<any[]>(response);
+      return toApiResponse<any[]>(response as any);
     },
 
     /**
@@ -44,7 +44,7 @@ export function createCollegeApi() {
           },
         },
       });
-      return toApiResponse<any[]>(response);
+      return toApiResponse<any[]>(response as any);
     },
 
     /**
@@ -180,7 +180,7 @@ export function createCollegeApi() {
         }>;
         academic_years: number[];
         semesters: string[];
-      }>(response);
+      }>(response as any);
     },
   };
 }
