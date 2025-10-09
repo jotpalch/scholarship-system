@@ -157,8 +157,8 @@ export function createUsersApi() {
      * Type-safe: Path parameter validated against OpenAPI
      */
     getById: async (userId: number) => {
-      const response = await typedClient.raw.GET('/api/v1/users/{user_id}', {
-        params: { path: { user_id: userId } },
+      const response = await typedClient.raw.GET('/api/v1/users/{id}', {
+        params: { path: { id: userId } },
       });
       return toApiResponse<UserResponse>(response);
     },
@@ -179,8 +179,8 @@ export function createUsersApi() {
      * Type-safe: Request body and path parameter validated
      */
     update: async (userId: number, userData: UserUpdate) => {
-      const response = await typedClient.raw.PUT('/api/v1/users/{user_id}', {
-        params: { path: { user_id: userId } },
+      const response = await typedClient.raw.PUT('/api/v1/users/{id}', {
+        params: { path: { id: userId } },
         body: userData,
       });
       return toApiResponse<UserResponse>(response);
@@ -191,8 +191,8 @@ export function createUsersApi() {
      * Type-safe: Path parameter validated against OpenAPI
      */
     delete: async (userId: number) => {
-      const response = await typedClient.raw.DELETE('/api/v1/users/{user_id}', {
-        params: { path: { user_id: userId } },
+      const response = await typedClient.raw.DELETE('/api/v1/users/{id}', {
+        params: { path: { id: userId } },
       });
       return toApiResponse<{
         success: boolean;
@@ -206,8 +206,8 @@ export function createUsersApi() {
      * Type-safe: Path parameter validated against OpenAPI
      */
     resetPassword: async (userId: number) => {
-      const response = await typedClient.raw.POST('/api/v1/users/{user_id}/reset-password', {
-        params: { path: { user_id: userId } },
+      const response = await typedClient.raw.POST('/api/v1/users/{id}/reset-password', {
+        params: { path: { id: userId } },
       });
       return toApiResponse<{
         success: boolean;

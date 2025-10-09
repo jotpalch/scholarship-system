@@ -244,14 +244,14 @@ async def get_all_users(
     }
 
 
-@router.get("/{user_id}")
+@router.get("/{id}")
 async def get_user_by_id(
-    user_id: int,
+    id: int,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Get user by ID (admin only)"""
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(User).where(User.id == id))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -293,15 +293,15 @@ async def create_user(
     }
 
 
-@router.put("/{user_id}")
+@router.put("/{id}")
 async def update_user(
-    user_id: int,
+    id: int,
     update_data: UserUpdate,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Update user (admin only)"""
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(User).where(User.id == id))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -326,9 +326,9 @@ async def update_user(
     }
 
 
-@router.patch("/{user_id}/college")
+@router.patch("/{id}/college")
 async def update_user_college(
-    user_id: int,
+    id: int,
     college_code: str,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -341,7 +341,7 @@ async def update_user_college(
             detail="Only super admin can update college assignments",
         )
 
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(User).where(User.id == id))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -358,9 +358,9 @@ async def update_user_college(
     }
 
 
-@router.post("/{user_id}/scholarships/bulk")
+@router.post("/{id}/scholarships/bulk")
 async def bulk_assign_scholarships(
-    user_id: int,
+    id: int,
     request: BulkScholarshipAssignRequest,
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -377,7 +377,7 @@ async def bulk_assign_scholarships(
         )
 
     # Get user
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(User).where(User.id == id))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -388,7 +388,7 @@ async def bulk_assign_scholarships(
 
     if request.operation == "set":
         # Remove all existing assignments
-        delete_stmt = select(AdminScholarship).where(AdminScholarship.admin_id == user_id)
+        delete_stmt = select(AdminScholarship).where(AdminScholarship.admin_id == id)
         delete_result = await db.execute(delete_stmt)
         existing_assignments = delete_result.scalars().all()
 
@@ -403,7 +403,7 @@ async def bulk_assign_scholarships(
             if not scholarship:
                 raise HTTPException(status_code=404, detail=f"Scholarship {scholarship_id} not found")
 
-            assignment = AdminScholarship(admin_id=user_id, scholarship_id=scholarship_id)
+            assignment = AdminScholarship(admin_id=id, scholarship_id=scholarship_id)
             db.add(assignment)
             assigned_count += 1
 
@@ -417,11 +417,11 @@ async def bulk_assign_scholarships(
 
             # Check if already assigned
             check_stmt = select(AdminScholarship).where(
-                AdminScholarship.admin_id == user_id, AdminScholarship.scholarship_id == scholarship_id
+                AdminScholarship.admin_id == id, AdminScholarship.scholarship_id == scholarship_id
             )
             check_result = await db.execute(check_stmt)
             if not check_result.scalar_one_or_none():
-                assignment = AdminScholarship(admin_id=user_id, scholarship_id=scholarship_id)
+                assignment = AdminScholarship(admin_id=id, scholarship_id=scholarship_id)
                 db.add(assignment)
                 assigned_count += 1
 
@@ -434,13 +434,13 @@ async def bulk_assign_scholarships(
     final_stmt = (
         select(ScholarshipType)
         .join(AdminScholarship, AdminScholarship.scholarship_id == ScholarshipType.id)
-        .where(AdminScholarship.admin_id == user_id)
+        .where(AdminScholarship.admin_id == id)
     )
     final_result = await db.execute(final_stmt)
     scholarships = final_result.scalars().all()
 
     response_data = BulkScholarshipAssignResponse(
-        user_id=user_id,
+        user_id=id,
         assigned_count=assigned_count,
         removed_count=removed_count,
         total_scholarships=len(scholarships),

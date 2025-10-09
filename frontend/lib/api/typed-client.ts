@@ -45,11 +45,17 @@ class TypedApiClient {
 
     // Add authentication interceptor
     this.client.use({
-      onRequest: (req) => {
-        if (this.token) {
-          req.headers.set('Authorization', `Bearer ${this.token}`);
+      onRequest: ({ request }) => {
+        if (!this.token) {
+          return undefined; // No modification needed
         }
-        return req;
+
+        const headers = new Headers(request.headers);
+        headers.set('Authorization', `Bearer ${this.token}`);
+
+        return new Request(request, {
+          headers,
+        });
       },
     });
   }

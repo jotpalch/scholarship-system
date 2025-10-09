@@ -459,7 +459,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/users/{user_id}": {
+    "/api/v1/users/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -470,12 +470,12 @@ export interface paths {
          * Get User By Id
          * @description Get user by ID (admin only)
          */
-        get: operations["get_user_by_id_api_v1_users__user_id__get"];
+        get: operations["get_user_by_id_api_v1_users__id__get"];
         /**
          * Update User
          * @description Update user (admin only)
          */
-        put: operations["update_user_api_v1_users__user_id__put"];
+        put: operations["update_user_api_v1_users__id__put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -483,7 +483,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/users/{user_id}/college": {
+    "/api/v1/users/{id}/college": {
         parameters: {
             query?: never;
             header?: never;
@@ -500,10 +500,10 @@ export interface paths {
          * Update User College
          * @description Update user's college code (super admin only)
          */
-        patch: operations["update_user_college_api_v1_users__user_id__college_patch"];
+        patch: operations["update_user_college_api_v1_users__id__college_patch"];
         trace?: never;
     };
-    "/api/v1/users/{user_id}/scholarships/bulk": {
+    "/api/v1/users/{id}/scholarships/bulk": {
         parameters: {
             query?: never;
             header?: never;
@@ -516,7 +516,7 @@ export interface paths {
          * Bulk Assign Scholarships
          * @description Bulk assign/remove scholarships to/from user (super admin only)
          */
-        post: operations["bulk_assign_scholarships_api_v1_users__user_id__scholarships_bulk_post"];
+        post: operations["bulk_assign_scholarships_api_v1_users__id__scholarships_bulk_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1845,7 +1845,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/scholarships/{scholarship_id}": {
+    "/api/v1/scholarships/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1856,7 +1856,7 @@ export interface paths {
          * Get Scholarship Detail
          * @description Get scholarship details
          */
-        get: operations["get_scholarship_detail_api_v1_scholarships__scholarship_id__get"];
+        get: operations["get_scholarship_detail_api_v1_scholarships__id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1885,7 +1885,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/scholarships/dev/toggle-whitelist/{scholarship_id}": {
+    "/api/v1/scholarships/dev/toggle-whitelist/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1898,14 +1898,14 @@ export interface paths {
          * Dev Toggle Scholarship Whitelist
          * @description Toggle scholarship whitelist for testing (dev only)
          */
-        post: operations["dev_toggle_scholarship_whitelist_api_v1_scholarships_dev_toggle_whitelist__scholarship_id__post"];
+        post: operations["dev_toggle_scholarship_whitelist_api_v1_scholarships_dev_toggle_whitelist__id__post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/scholarships/dev/add-to-whitelist/{scholarship_id}": {
+    "/api/v1/scholarships/dev/add-to-whitelist/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1918,7 +1918,7 @@ export interface paths {
          * Add Student To Whitelist
          * @description Add student to scholarship whitelist (dev only)
          */
-        post: operations["add_student_to_whitelist_api_v1_scholarships_dev_add_to_whitelist__scholarship_id__post"];
+        post: operations["add_student_to_whitelist_api_v1_scholarships_dev_add_to_whitelist__id__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1982,7 +1982,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/scholarships/{scholarship_id}/whitelist": {
+    "/api/v1/scholarships/{id}/whitelist": {
         parameters: {
             query?: never;
             header?: never;
@@ -2000,7 +2000,7 @@ export interface paths {
          * @description Toggle scholarship whitelist enable/disable
          *
          *     Args:
-         *         scholarship_id: Scholarship type ID
+         *         id: Scholarship type ID
          *         request: Whitelist toggle request with enabled flag
          *         current_user: Current authenticated admin user
          *         db: Database session
@@ -2008,7 +2008,7 @@ export interface paths {
          *     Returns:
          *         Updated scholarship type with whitelist status
          */
-        patch: operations["toggle_scholarship_whitelist_api_v1_scholarships__scholarship_id__whitelist_patch"];
+        patch: operations["toggle_scholarship_whitelist_api_v1_scholarships__id__whitelist_patch"];
         trace?: never;
     };
     "/api/v1/scholarship-management/applications/create-comprehensive": {
@@ -9933,12 +9933,12 @@ export interface operations {
             };
         };
     };
-    get_user_by_id_api_v1_users__user_id__get: {
+    get_user_by_id_api_v1_users__id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                user_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -9964,12 +9964,12 @@ export interface operations {
             };
         };
     };
-    update_user_api_v1_users__user_id__put: {
+    update_user_api_v1_users__id__put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                user_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -9999,14 +9999,14 @@ export interface operations {
             };
         };
     };
-    update_user_college_api_v1_users__user_id__college_patch: {
+    update_user_college_api_v1_users__id__college_patch: {
         parameters: {
             query: {
                 college_code: string;
             };
             header?: never;
             path: {
-                user_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -10032,12 +10032,12 @@ export interface operations {
             };
         };
     };
-    bulk_assign_scholarships_api_v1_users__user_id__scholarships_bulk_post: {
+    bulk_assign_scholarships_api_v1_users__id__scholarships_bulk_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                user_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -12676,12 +12676,12 @@ export interface operations {
             };
         };
     };
-    get_scholarship_detail_api_v1_scholarships__scholarship_id__get: {
+    get_scholarship_detail_api_v1_scholarships__id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                scholarship_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -12727,14 +12727,14 @@ export interface operations {
             };
         };
     };
-    dev_toggle_scholarship_whitelist_api_v1_scholarships_dev_toggle_whitelist__scholarship_id__post: {
+    dev_toggle_scholarship_whitelist_api_v1_scholarships_dev_toggle_whitelist__id__post: {
         parameters: {
             query?: {
                 enable?: boolean;
             };
             header?: never;
             path: {
-                scholarship_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -12760,14 +12760,14 @@ export interface operations {
             };
         };
     };
-    add_student_to_whitelist_api_v1_scholarships_dev_add_to_whitelist__scholarship_id__post: {
+    add_student_to_whitelist_api_v1_scholarships_dev_add_to_whitelist__id__post: {
         parameters: {
             query: {
                 student_id: number;
             };
             header?: never;
             path: {
-                scholarship_id: number;
+                id: number;
             };
             cookie?: never;
         };
@@ -12859,12 +12859,12 @@ export interface operations {
             };
         };
     };
-    toggle_scholarship_whitelist_api_v1_scholarships__scholarship_id__whitelist_patch: {
+    toggle_scholarship_whitelist_api_v1_scholarships__id__whitelist_patch: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                scholarship_id: number;
+                id: number;
             };
             cookie?: never;
         };

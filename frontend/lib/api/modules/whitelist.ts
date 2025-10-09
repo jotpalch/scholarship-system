@@ -25,8 +25,8 @@ export function createWhitelistApi() {
       scholarshipId: number,
       enabled: boolean
     ): Promise<ApiResponse<{ success: boolean }>> => {
-      const response = await typedClient.raw.PATCH('/api/v1/scholarships/{scholarship_id}/whitelist', {
-        params: { path: { scholarship_id: scholarshipId } },
+      const response = await typedClient.raw.PATCH('/api/v1/scholarships/{id}/whitelist', {
+        params: { path: { id: scholarshipId } },
         body: { enabled },
       });
       return toApiResponse(response);
