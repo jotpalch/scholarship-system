@@ -1,17 +1,19 @@
 /**
- * Applications API Module
+ * Applications API Module (OpenAPI-typed)
  *
  * Handles scholarship application operations including:
  * - Application CRUD operations
  * - File uploads and document management
  * - Application status management
  * - Review and recommendation workflows
+ *
+ * Now using openapi-fetch for full type safety from backend OpenAPI schema
  */
 
-import type { ApiClient } from '../client';
-import type { ApiResponse, Application, ApplicationFile } from '../../api';
+import { typedClient } from '../typed-client';
+import { toApiResponse } from '../compat';
+import type { ApiResponse, Application, ApplicationFile } from '../../api.legacy';
 
-// Import types from main api.ts for now
 type ApplicationCreate = {
   scholarship_type: string;
   personal_statement?: string;
@@ -21,103 +23,110 @@ type ApplicationCreate = {
   [key: string]: any;
 };
 
-export function createApplicationsApi(client: ApiClient) {
+export function createApplicationsApi() {
   return {
     /**
      * Get current user's applications with optional status filter
+     * Type-safe: Query parameters validated against OpenAPI
      */
     getMyApplications: async (
       status?: string
     ): Promise<ApiResponse<Application[]>> => {
-      const params = status ? `?status=${encodeURIComponent(status)}` : "";
-      return client.request(`/applications${params}`);
+      const response = await typedClient.raw.GET('/api/v1/applications', {
+        params: { query: status ? { status } : undefined },
+      });
+      return toApiResponse(response);
     },
 
     /**
      * Get applications for college review
+     * Type-safe: Query parameters validated against OpenAPI
      */
     getCollegeReview: async (
       status?: string,
       scholarshipType?: string
     ): Promise<ApiResponse<Application[]>> => {
-      const params = new URLSearchParams();
-      if (status) params.append("status", status);
-      if (scholarshipType) params.append("scholarship_type", scholarshipType);
-
-      const queryString = params.toString();
-      return client.request(
-        `/applications/college/review${queryString ? `?${queryString}` : ""}`
-      );
+      const response = await typedClient.raw.GET('/api/v1/applications/college/review', {
+        params: { query: { status, scholarship_type: scholarshipType } },
+      });
+      return toApiResponse(response);
     },
 
     /**
      * Get applications by scholarship type
+     * Type-safe: Query parameters validated against OpenAPI
      */
     getByScholarshipType: async (
       scholarshipType: string,
       status?: string
     ): Promise<ApiResponse<Application[]>> => {
-      const params = new URLSearchParams();
-      params.append("scholarship_type", scholarshipType);
-      if (status) params.append("status", status);
-
-      const queryString = params.toString();
-      return client.request(
-        `/applications/review/list${queryString ? `?${queryString}` : ""}`
-      );
+      const response = await typedClient.raw.GET('/api/v1/applications/review/list', {
+        params: { query: { scholarship_type: scholarshipType, status } },
+      });
+      return toApiResponse(response);
     },
 
     /**
      * Create new application
+     * Type-safe: Request body and query params validated
      */
     createApplication: async (
       applicationData: ApplicationCreate,
       isDraft: boolean = false
     ): Promise<ApiResponse<Application>> => {
-      const url = isDraft ? "/applications?is_draft=true" : "/applications";
-      return client.request(url, {
-        method: "POST",
-        body: JSON.stringify(applicationData),
+      const response = await typedClient.raw.POST('/api/v1/applications', {
+        params: { query: isDraft ? { is_draft: true } : undefined },
+        body: applicationData,
       });
+      return toApiResponse(response);
     },
 
     /**
      * Get application by ID
+     * Type-safe: Path parameter validated against OpenAPI
      */
     getApplicationById: async (
       id: number
     ): Promise<ApiResponse<Application>> => {
-      return client.request(`/applications/${id}`);
+      const response = await typedClient.raw.GET('/api/v1/applications/{id}', {
+        params: { path: { id } },
+      });
+      return toApiResponse(response);
     },
 
     /**
      * Update application
+     * Type-safe: Path parameter and body validated
      */
     updateApplication: async (
       id: number,
       applicationData: Partial<ApplicationCreate>
     ): Promise<ApiResponse<Application>> => {
-      return client.request(`/applications/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(applicationData),
+      const response = await typedClient.raw.PUT('/api/v1/applications/{id}', {
+        params: { path: { id } },
+        body: applicationData,
       });
+      return toApiResponse(response);
     },
 
     /**
      * Update application status
+     * Type-safe: Path parameter and body validated
      */
     updateStatus: async (
       id: number,
       statusData: { status: string; comments?: string }
     ): Promise<ApiResponse<Application>> => {
-      return client.request(`/applications/${id}/status`, {
-        method: "PATCH",
-        body: JSON.stringify(statusData),
+      const response = await typedClient.raw.PATCH('/api/v1/applications/{id}/status', {
+        params: { path: { id } },
+        body: statusData,
       });
+      return toApiResponse(response);
     },
 
     /**
      * Upload file to application
+     * Type-safe: Path parameter validated, FormData supported
      */
     uploadFile: async (
       applicationId: number,
@@ -125,110 +134,119 @@ export function createApplicationsApi(client: ApiClient) {
       fileType: string
     ): Promise<ApiResponse<any>> => {
       const formData = new FormData();
-      formData.append("file", file);
-      formData.append("file_type", fileType);
+      formData.append('file', file);
+      formData.append('file_type', fileType);
 
-      return client.request(`/applications/${applicationId}/files`, {
-        method: "POST",
-        body: formData,
+      const response = await typedClient.raw.POST('/api/v1/applications/{application_id}/files', {
+        params: { path: { application_id: applicationId } },
+        body: formData as any,
       });
+      return toApiResponse(response);
     },
 
     /**
      * Submit application for review
+     * Type-safe: Path parameter validated against OpenAPI
      */
     submitApplication: async (
       applicationId: number
     ): Promise<ApiResponse<Application>> => {
-      return client.request(`/applications/${applicationId}/submit`, {
-        method: "POST",
+      const response = await typedClient.raw.POST('/api/v1/applications/{application_id}/submit', {
+        params: { path: { application_id: applicationId } },
       });
+      return toApiResponse(response);
     },
 
     /**
      * Delete application
+     * Type-safe: Path parameter validated against OpenAPI
      */
     deleteApplication: async (
       applicationId: number
     ): Promise<ApiResponse<{ success: boolean; message: string }>> => {
-      return client.request(`/applications/${applicationId}`, {
-        method: "DELETE",
+      const response = await typedClient.raw.DELETE('/api/v1/applications/{id}', {
+        params: { path: { id: applicationId } },
       });
+      return toApiResponse(response);
     },
 
     /**
      * Withdraw application
+     * Type-safe: Path parameter validated against OpenAPI
      */
     withdrawApplication: async (
       applicationId: number
     ): Promise<ApiResponse<Application>> => {
-      return client.request(`/applications/${applicationId}/withdraw`, {
-        method: "POST",
+      const response = await typedClient.raw.POST('/api/v1/applications/{application_id}/withdraw', {
+        params: { path: { application_id: applicationId } },
       });
+      return toApiResponse(response);
     },
 
     /**
      * Upload document to application
+     * Type-safe: Path and query parameters validated
      */
     uploadDocument: async (
       applicationId: number,
       file: File,
-      fileType: string = "other"
+      fileType: string = 'other'
     ): Promise<ApiResponse<any>> => {
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append('file', file);
 
-      return client.request(
-        `/applications/${applicationId}/files/upload?file_type=${encodeURIComponent(fileType)}`,
-        {
-          method: "POST",
-          body: formData,
-          headers: {}, // Remove Content-Type to let browser set it for FormData
-        }
-      );
+      const response = await typedClient.raw.POST('/api/v1/applications/{application_id}/files/upload', {
+        params: {
+          path: { application_id: applicationId },
+          query: { file_type: fileType },
+        },
+        body: formData as any,
+      });
+      return toApiResponse(response);
     },
 
     /**
      * Get application files
+     * Type-safe: Path parameter validated against OpenAPI
      */
     getApplicationFiles: async (
       applicationId: number
     ): Promise<ApiResponse<ApplicationFile[]>> => {
-      return client.request(`/applications/${applicationId}/files`);
+      const response = await typedClient.raw.GET('/api/v1/applications/{application_id}/files', {
+        params: { path: { application_id: applicationId } },
+      });
+      return toApiResponse(response);
     },
 
     /**
      * Save application as draft
+     * Type-safe: Query parameter and body validated
      */
     saveApplicationDraft: async (
       applicationData: ApplicationCreate
     ): Promise<ApiResponse<Application>> => {
-      const response = await client.request("/applications?is_draft=true", {
-        method: "POST",
-        body: JSON.stringify(applicationData),
+      const response = await typedClient.raw.POST('/api/v1/applications', {
+        params: { query: { is_draft: true } },
+        body: applicationData,
       });
 
-      // Handle direct Application response vs wrapped ApiResponse
-      if (
-        response &&
-        typeof response === "object" &&
-        "id" in response &&
-        !("success" in response)
-      ) {
-        // Direct Application object - wrap it in ApiResponse format
+      const apiResponse = toApiResponse<Application>(response);
+
+      // Normalize response format
+      if (apiResponse.data && typeof apiResponse.data === 'object' && 'id' in apiResponse.data) {
         return {
           success: true,
-          message: "Draft saved successfully",
-          data: response as unknown as Application,
+          message: apiResponse.message || 'Draft saved successfully',
+          data: apiResponse.data,
         };
       }
 
-      // Already in ApiResponse format
-      return response as ApiResponse<Application>;
+      return apiResponse;
     },
 
     /**
      * Submit recommendation for application
+     * Type-safe: Path parameter and body validated
      */
     submitRecommendation: async (
       applicationId: number,
@@ -236,15 +254,16 @@ export function createApplicationsApi(client: ApiClient) {
       recommendation: string,
       selectedAwards?: string[]
     ): Promise<ApiResponse<Application>> => {
-      return client.request(`/applications/${applicationId}/review`, {
-        method: "POST",
-        body: JSON.stringify({
+      const response = await typedClient.raw.POST('/api/v1/applications/{application_id}/review', {
+        params: { path: { application_id: applicationId } },
+        body: {
           application_id: applicationId,
           review_stage: reviewStage,
           recommendation,
           ...(selectedAwards ? { selected_awards: selectedAwards } : {}),
-        }),
+        },
       });
+      return toApiResponse(response);
     },
   };
 }

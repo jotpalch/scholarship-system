@@ -1,17 +1,19 @@
 /**
- * Notifications API Module
+ * Notifications API Module (OpenAPI-typed)
  *
  * Handles notification operations including:
  * - Fetching user notifications
  * - Managing read/unread status
  * - System announcements
  * - Admin notification management
+ *
+ * Now using openapi-fetch for full type safety from backend OpenAPI schema
  */
 
-import type { ApiClient } from '../client';
-import type { ApiResponse } from '../../api';
+import { typedClient } from '../typed-client';
+import { toApiResponse } from '../compat';
+import type { ApiResponse } from '../../api.legacy';
 
-// Import types from main api.ts for now
 type NotificationResponse = {
   id: number;
   user_id: string;
@@ -33,10 +35,11 @@ type AnnouncementCreate = {
   metadata?: any;
 };
 
-export function createNotificationsApi(client: ApiClient) {
+export function createNotificationsApi() {
   return {
     /**
      * Get notifications with optional filters
+     * Type-safe: Query parameters validated against OpenAPI
      */
     getNotifications: async (
       skip?: number,
@@ -44,89 +47,100 @@ export function createNotificationsApi(client: ApiClient) {
       unreadOnly?: boolean,
       notificationType?: string
     ): Promise<ApiResponse<NotificationResponse[]>> => {
-      const params = new URLSearchParams();
-      if (skip) params.append("skip", skip.toString());
-      if (limit) params.append("limit", limit.toString());
-      if (unreadOnly) params.append("unread_only", "true");
-      if (notificationType)
-        params.append("notification_type", notificationType);
-
-      const queryString = params.toString();
-      return client.request(
-        `/notifications${queryString ? `?${queryString}` : ""}`
-      );
+      const response = await typedClient.raw.GET('/api/v1/notifications', {
+        params: {
+          query: {
+            skip,
+            limit,
+            unread_only: unreadOnly,
+            notification_type: notificationType,
+          },
+        },
+      });
+      return toApiResponse(response);
     },
 
     /**
      * Get unread notification count
+     * Type-safe: Response type inferred from OpenAPI
      */
     getUnreadCount: async (): Promise<ApiResponse<number>> => {
-      return client.request("/notifications/unread-count");
+      const response = await typedClient.raw.GET('/api/v1/notifications/unread-count');
+      return toApiResponse(response);
     },
 
     /**
      * Mark notification as read
+     * Type-safe: Path parameter validated against OpenAPI
      */
     markAsRead: async (
       notificationId: number
     ): Promise<ApiResponse<NotificationResponse>> => {
-      return client.request(`/notifications/${notificationId}/read`, {
-        method: "PATCH",
+      const response = await typedClient.raw.PATCH('/api/v1/notifications/{notification_id}/read', {
+        params: { path: { notification_id: notificationId } },
       });
+      return toApiResponse(response);
     },
 
     /**
      * Mark all notifications as read
+     * Type-safe: Response type inferred from OpenAPI
      */
     markAllAsRead: async (): Promise<
       ApiResponse<{ updated_count: number }>
     > => {
-      return client.request("/notifications/mark-all-read", {
-        method: "PATCH",
-      });
+      const response = await typedClient.raw.PATCH('/api/v1/notifications/mark-all-read');
+      return toApiResponse(response);
     },
 
     /**
      * Dismiss notification
+     * Type-safe: Path parameter validated against OpenAPI
      */
     dismiss: async (
       notificationId: number
     ): Promise<ApiResponse<{ notification_id: number }>> => {
-      return client.request(`/notifications/${notificationId}/dismiss`, {
-        method: "PATCH",
+      const response = await typedClient.raw.PATCH('/api/v1/notifications/{notification_id}/dismiss', {
+        params: { path: { notification_id: notificationId } },
       });
+      return toApiResponse(response);
     },
 
     /**
      * Get notification detail
+     * Type-safe: Path parameter validated against OpenAPI
      */
     getNotificationDetail: async (
       notificationId: number
     ): Promise<ApiResponse<NotificationResponse>> => {
-      return client.request(`/notifications/${notificationId}`);
+      const response = await typedClient.raw.GET('/api/v1/notifications/{notification_id}', {
+        params: { path: { notification_id: notificationId } },
+      });
+      return toApiResponse(response);
     },
 
     /**
      * Create system announcement (admin only)
+     * Type-safe: Request body validated against OpenAPI
      */
     createSystemAnnouncement: async (
       announcementData: AnnouncementCreate
     ): Promise<ApiResponse<NotificationResponse>> => {
-      return client.request("/notifications/admin/create-system-announcement", {
-        method: "POST",
-        body: JSON.stringify(announcementData),
+      const response = await typedClient.raw.POST('/api/v1/notifications/admin/create-system-announcement', {
+        body: announcementData,
       });
+      return toApiResponse(response);
     },
 
     /**
      * Create test notifications (admin only)
+     * Type-safe: Response type inferred from OpenAPI
      */
     createTestNotifications: async (): Promise<
       ApiResponse<{ created_count: number; notification_ids: number[] }>
     > => {
-      return client.request("/notifications/admin/create-test-notifications", {
-        method: "POST",
-      });
+      const response = await typedClient.raw.POST('/api/v1/notifications/admin/create-test-notifications');
+      return toApiResponse(response);
     },
   };
 }
