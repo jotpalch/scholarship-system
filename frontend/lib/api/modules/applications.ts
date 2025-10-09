@@ -76,7 +76,7 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<Application>> => {
       const response = await typedClient.raw.POST('/api/v1/applications', {
         params: { query: isDraft ? { is_draft: true } : undefined },
-        body: applicationData,
+        body: applicationData as any,
       });
       return toApiResponse<Application>(response);
     },
@@ -104,7 +104,7 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<Application>> => {
       const response = await typedClient.raw.PUT('/api/v1/applications/{id}', {
         params: { path: { id } },
-        body: applicationData,
+        body: applicationData as any,
       });
       return toApiResponse<Application>(response);
     },
@@ -119,7 +119,7 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<Application>> => {
       const response = await typedClient.raw.PATCH('/api/v1/applications/{id}/status', {
         params: { path: { id } },
-        body: statusData,
+        body: statusData as any,
       });
       return toApiResponse<Application>(response);
     },
@@ -227,7 +227,7 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<Application>> => {
       const response = await typedClient.raw.POST('/api/v1/applications', {
         params: { query: { is_draft: true } },
-        body: applicationData,
+        body: applicationData as any,
       });
 
       const apiResponse = toApiResponse<Application>(response);
@@ -261,7 +261,7 @@ export function createApplicationsApi() {
           review_stage: reviewStage,
           recommendation,
           ...(selectedAwards ? { selected_awards: selectedAwards } : {}),
-        },
+        } as any,
       });
       return toApiResponse<Application>(response);
     },

@@ -256,6 +256,22 @@ async def delete_application(
         )
 
 
+@router.post("/{id}/withdraw")
+async def withdraw_application(
+    id: int = Path(..., description="Application ID"),
+    current_user: User = Depends(require_student),
+    db: AsyncSession = Depends(get_db),
+):
+    """Withdraw a submitted application"""
+    service = ApplicationService(db)
+    result = await service.withdraw_application(id, current_user)
+    return {
+        "success": True,
+        "message": "申請已撤回",
+        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+    }
+
+
 @router.get("/{id}/files")
 async def get_application_files(
     id: int = Path(..., description="Application ID"),
@@ -317,6 +333,18 @@ async def upload_file(
         if hasattr(result, "model_dump")
         else result,
     }
+
+
+@router.post("/{id}/files")
+async def upload_file_alias(
+    id: int = Path(..., description="Application ID"),
+    file: UploadFile = File(...),
+    file_type: str = Query("other", description="File type"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload file for application (alias for /files/upload)"""
+    return await upload_file(id, file, file_type, current_user, db)
 
 
 # Staff/Admin endpoints
