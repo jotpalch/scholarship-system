@@ -103,9 +103,9 @@ export function createSystemSettingsApi() {
       configData: SystemConfigurationCreate
     ): Promise<ApiResponse<SystemConfiguration>> => {
       const response = await typedClient.raw.POST('/api/v1/system-settings/', {
-        body: configData,
+        body: configData as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<SystemConfiguration>(response);
     },
 
     /**
@@ -118,9 +118,9 @@ export function createSystemSettingsApi() {
     ): Promise<ApiResponse<SystemConfiguration>> => {
       const response = await typedClient.raw.PUT('/api/v1/system-settings/{id}', {
         params: { path: { id: key } },
-        body: configData,
+        body: configData as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<SystemConfiguration>(response);
     },
 
     /**
@@ -131,9 +131,9 @@ export function createSystemSettingsApi() {
       configData: SystemConfigurationValidation
     ): Promise<ApiResponse<ConfigurationValidationResult>> => {
       const response = await typedClient.raw.POST('/api/v1/system-settings/validate', {
-        body: configData,
+        body: configData as any,
       });
-      return toApiResponse(response);
+      return toApiResponse<ConfigurationValidationResult>(response);
     },
 
     /**
@@ -146,7 +146,7 @@ export function createSystemSettingsApi() {
       const response = await typedClient.raw.DELETE('/api/v1/system-settings/{id}', {
         params: { path: { id: key } },
       });
-      return toApiResponse(response);
+      return toApiResponse<{ message: string }>(response);
     },
 
     /**
@@ -155,7 +155,7 @@ export function createSystemSettingsApi() {
      */
     getCategories: async (): Promise<ApiResponse<string[]>> => {
       const response = await typedClient.raw.GET('/api/v1/system-settings/categories');
-      return toApiResponse(response);
+      return toApiResponse<string[]>(response);
     },
 
     /**
@@ -164,7 +164,7 @@ export function createSystemSettingsApi() {
      */
     getDataTypes: async (): Promise<ApiResponse<string[]>> => {
       const response = await typedClient.raw.GET('/api/v1/system-settings/data-types');
-      return toApiResponse(response);
+      return toApiResponse<string[]>(response);
     },
 
     /**
@@ -181,7 +181,7 @@ export function createSystemSettingsApi() {
           query: { limit },
         },
       });
-      return toApiResponse(response);
+      return toApiResponse<any[]>(response);
     },
   };
 }

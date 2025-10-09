@@ -427,7 +427,14 @@ export interface paths {
          * @description Get student information including all semester data
          */
         get: operations["get_student_info_api_v1_users_student_info_get"];
-        put?: never;
+        /**
+         * Update Student Info
+         * @description Update student information
+         *
+         *     Note: This endpoint currently only updates the User model.
+         *     Student detailed info is read-only from external system.
+         */
+        put: operations["update_student_info_api_v1_users_student_info_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -477,6 +484,35 @@ export interface paths {
          */
         put: operations["update_user_api_v1_users__id__put"];
         post?: never;
+        /**
+         * Delete User
+         * @description Delete user (admin only)
+         *
+         *     This is a hard delete. Use with caution.
+         */
+        delete: operations["delete_user_api_v1_users__id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset User Password
+         * @description Reset user password (admin only)
+         *
+         *     Note: This endpoint is not supported in SSO-only authentication mode.
+         *     Passwords are managed by the SSO provider (NYCU Portal).
+         */
+        post: operations["reset_user_password_api_v1_users__id__reset_password_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -635,6 +671,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/applications/{id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Withdraw Application
+         * @description Withdraw a submitted application
+         */
+        post: operations["withdraw_application_api_v1_applications__id__withdraw_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/applications/{id}/files": {
         parameters: {
             query?: never;
@@ -648,7 +704,11 @@ export interface paths {
          */
         get: operations["get_application_files_api_v1_applications__id__files_get"];
         put?: never;
-        post?: never;
+        /**
+         * Upload File Alias
+         * @description Upload file for application (alias for /files/upload)
+         */
+        post: operations["upload_file_alias_api_v1_applications__id__files_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3841,6 +3901,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/professor-student": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Professor Student Relationships
+         * @description Get professor-student relationships with optional filtering
+         *
+         *     Professors can only view their own relationships.
+         *     Admins can view all relationships.
+         */
+        get: operations["get_professor_student_relationships_api_v1_professor_student_get"];
+        put?: never;
+        /**
+         * Create Professor Student Relationship
+         * @description Create a new professor-student relationship
+         *
+         *     Only admins can create relationships.
+         */
+        post: operations["create_professor_student_relationship_api_v1_professor_student_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/professor-student/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Professor Student Relationship
+         * @description Update an existing professor-student relationship
+         *
+         *     Only admins can update relationships.
+         */
+        put: operations["update_professor_student_relationship_api_v1_professor_student__id__put"];
+        post?: never;
+        /**
+         * Delete Professor Student Relationship
+         * @description Delete a professor-student relationship
+         *
+         *     Only admins can delete relationships.
+         */
+        delete: operations["delete_professor_student_relationship_api_v1_professor_student__id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/college-review/applications": {
         parameters: {
             query?: never;
@@ -5439,7 +5556,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/system-settings/audit-logs/{id}": {
+    "/api/v1/system-settings/audit-logs/{config_key}": {
         parameters: {
             query?: never;
             header?: never;
@@ -5450,7 +5567,7 @@ export interface paths {
          * Get Configuration Audit Logs
          * @description 獲取配置變更審計日誌
          */
-        get: operations["get_configuration_audit_logs_api_v1_system_settings_audit_logs__id__get"];
+        get: operations["get_configuration_audit_logs_api_v1_system_settings_audit_logs__config_key__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6704,6 +6821,14 @@ export interface components {
         };
         /** Body_upload_document_example_api_v1_application_fields_documents__document_id__upload_example_post */
         Body_upload_document_example_api_v1_application_fields_documents__document_id__upload_example_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
+        /** Body_upload_file_alias_api_v1_applications__id__files_post */
+        Body_upload_file_alias_api_v1_applications__id__files_post: {
             /**
              * File
              * Format: binary
@@ -9801,6 +9926,39 @@ export interface operations {
             };
         };
     };
+    update_student_info_api_v1_users_student_info_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_all_users_api_v1_users_get: {
         parameters: {
             query?: {
@@ -9921,6 +10079,68 @@ export interface operations {
                 "application/json": components["schemas"]["UserUpdate"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_user_api_v1_users__id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_user_password_api_v1_users__id__reset_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -10250,6 +10470,38 @@ export interface operations {
             };
         };
     };
+    withdraw_application_api_v1_applications__id__withdraw_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Application ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_application_files_api_v1_applications__id__files_get: {
         parameters: {
             query?: never;
@@ -10261,6 +10513,45 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_file_alias_api_v1_applications__id__files_post: {
+        parameters: {
+            query?: {
+                /** @description File type */
+                file_type?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Application ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_file_alias_api_v1_applications__id__files_post"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -16012,6 +16303,153 @@ export interface operations {
             };
         };
     };
+    get_professor_student_relationships_api_v1_professor_student_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by professor ID */
+                professor_id?: number | null;
+                /** @description Filter by student ID */
+                student_id?: number | null;
+                /** @description Filter by relationship type */
+                relationship_type?: string | null;
+                /** @description Filter by active status (active/inactive) */
+                status?: string | null;
+                /** @description Page number */
+                page?: number;
+                /** @description Items per page */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_professor_student_relationship_api_v1_professor_student_post: {
+        parameters: {
+            query: {
+                professor_id: number;
+                student_id: number;
+                relationship_type: string;
+                status?: string | null;
+                start_date?: string | null;
+                notes?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_professor_student_relationship_api_v1_professor_student__id__put: {
+        parameters: {
+            query?: {
+                relationship_type?: string | null;
+                status?: string | null;
+                end_date?: string | null;
+                notes?: string | null;
+            };
+            header?: never;
+            path: {
+                /** @description Relationship ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_professor_student_relationship_api_v1_professor_student__id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Relationship ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_applications_for_review_api_v1_college_review_applications_get: {
         parameters: {
             query?: {
@@ -18525,14 +18963,14 @@ export interface operations {
             };
         };
     };
-    get_configuration_audit_logs_api_v1_system_settings_audit_logs__id__get: {
+    get_configuration_audit_logs_api_v1_system_settings_audit_logs__config_key__get: {
         parameters: {
             query?: {
                 limit?: number;
             };
             header?: never;
             path: {
-                id: string;
+                config_key: string;
             };
             cookie?: never;
         };

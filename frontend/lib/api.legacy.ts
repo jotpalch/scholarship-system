@@ -477,6 +477,8 @@ export interface ScholarshipType {
     priority: number;
     is_warning: boolean;
     is_hard_rule: boolean;
+    status?: 'data_unavailable' | 'passed' | 'failed';
+    system_message?: string;
   }>;
   warnings?: Array<{
     rule_id: number;
@@ -489,6 +491,8 @@ export interface ScholarshipType {
     priority: number;
     is_warning: boolean;
     is_hard_rule: boolean;
+    status?: 'data_unavailable' | 'passed' | 'failed';
+    system_message?: string;
   }>;
   errors?: Array<{
     rule_id: number;
@@ -501,6 +505,8 @@ export interface ScholarshipType {
     priority: number;
     is_warning: boolean;
     is_hard_rule: boolean;
+    status?: 'data_unavailable' | 'passed' | 'failed';
+    system_message?: string;
   }>;
   created_at?: string;
 }

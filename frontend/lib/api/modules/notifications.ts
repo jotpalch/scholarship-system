@@ -16,15 +16,23 @@ import type { ApiResponse } from '../../api.legacy';
 
 type NotificationResponse = {
   id: number;
-  user_id: string;
+  user_id?: string;
   title: string;
+  title_en?: string;
   message: string;
+  message_en?: string;
   notification_type: string;
+  priority?: string | number;
+  related_resource_type?: string;
+  related_resource_id?: number;
+  action_url?: string;
   is_read: boolean;
   is_dismissed: boolean;
-  created_at: string;
+  scheduled_at?: string;
+  expires_at?: string;
   read_at?: string;
-  metadata?: any;
+  created_at: string;
+  metadata?: Record<string, any>;
 };
 
 type AnnouncementCreate = {
