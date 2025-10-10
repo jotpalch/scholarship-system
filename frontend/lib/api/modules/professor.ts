@@ -24,11 +24,6 @@ export function createProfessorApi() {
       statusFilter?: string
     ): Promise<ApiResponse<Application[]>> => {
       try {
-        console.log(
-          "🔍 Requesting professor applications with status filter:",
-          statusFilter
-        );
-
         const response = await typedClient.raw.GET('/api/v1/professor/applications', {
           params: {
             query: {
@@ -36,7 +31,6 @@ export function createProfessorApi() {
             },
           },
         });
-        console.log("📨 Professor applications raw response:", response);
 
         const apiResponse = toApiResponse<PaginatedResponse<Application>>(response);
 
@@ -45,10 +39,6 @@ export function createProfessorApi() {
           apiResponse.data &&
           Array.isArray(apiResponse.data.items)
         ) {
-          console.log(
-            "✅ Loaded professor applications:",
-            apiResponse.data.items.length
-          );
           return {
             success: true,
             message: apiResponse.message || "Applications loaded successfully",
@@ -56,7 +46,6 @@ export function createProfessorApi() {
           };
         }
 
-        console.warn("⚠️ Unexpected response format:", apiResponse);
         return {
           success: false,
           message:
@@ -65,7 +54,6 @@ export function createProfessorApi() {
           data: [],
         };
       } catch (error: any) {
-        console.error("❌ Error in professor.getApplications:", error);
         return {
           success: false,
           message: error.message || "Failed to load applications",
