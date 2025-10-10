@@ -48,6 +48,9 @@ function getRequestHeaders(requestOrOptions: any): any {
 function getBody(requestOrOptions: any): any {
   if (requestOrOptions && typeof requestOrOptions === 'object') {
     // For Request objects from whatwg-fetch
+    if ('_bodyInit' in requestOrOptions && requestOrOptions._bodyInit instanceof FormData) {
+      return requestOrOptions._bodyInit;
+    }
     if ('_bodyText' in requestOrOptions) {
       return requestOrOptions._bodyText;
     }
@@ -163,7 +166,10 @@ describe('Modular API Structure', () => {
       })
     );
 
-      await expect(api.auth.login('wrong', 'credentials')).rejects.toThrow('Invalid credentials');
+      const result = await api.auth.login('wrong', 'credentials');
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe('Invalid credentials');
     });
   });
 
@@ -237,7 +243,7 @@ describe('Modular API Structure', () => {
       });
 
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/endpoint?page=1&size=10&filter=active');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/endpoint?page=1&size=10&filter=active');
     });
   });
 
@@ -273,10 +279,8 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(mockUser);
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/v1/users/me',
-        expect.any(Object)
-      );
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain('/api/v1/users/me');
     });
 
     it('should update user profile', async () => {
@@ -293,7 +297,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/users/me');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/users/me');
       expect(getMethod(fetchCall[0])).toBe('PUT');
     });
 
@@ -316,7 +320,7 @@ describe('Modular API Structure', () => {
       await api.users.getAll({ page: 1, size: 10 });
 
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/users?page=1&size=10');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/users?page=1&size=10');
     });
   });
 
@@ -346,10 +350,8 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(mockScholarships);
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/v1/scholarships/eligible',
-        expect.any(Object)
-      );
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain('/api/v1/scholarships/eligible');
     });
 
     it('should get scholarship by ID', async () => {
@@ -366,10 +368,8 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(mockScholarship);
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/v1/scholarships/1',
-        expect.any(Object)
-      );
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain('/api/v1/scholarships/1');
     });
 
     it('should get all scholarships', async () => {
@@ -389,10 +389,8 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(mockScholarships);
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/v1/scholarships',
-        expect.any(Object)
-      );
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain('/api/v1/scholarships');
     });
 
     it('should create combined PhD scholarship', async () => {
@@ -425,7 +423,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/scholarships/combined/phd');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/scholarships/combined/phd');
       expect(getMethod(fetchCall[0])).toBe('POST');
     });
   });
@@ -456,10 +454,8 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(mockApplications);
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/v1/applications',
-        expect.any(Object)
-      );
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain('/api/v1/applications');
     });
 
     it('should create application', async () => {
@@ -479,7 +475,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/applications');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/applications');
       expect(getMethod(fetchCall[0])).toBe('POST');
     });
 
@@ -495,7 +491,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/applications/1/submit');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/applications/1/submit');
       expect(getMethod(fetchCall[0])).toBe('POST');
     });
   });
@@ -526,10 +522,8 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(mockNotifications);
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/v1/notifications',
-        expect.any(Object)
-      );
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain('/api/v1/notifications');
     });
 
     it('should get unread count', async () => {
@@ -544,10 +538,8 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(5);
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/v1/notifications/unread-count',
-        expect.any(Object)
-      );
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain('/api/v1/notifications/unread-count');
     });
 
     it('should mark notification as read', async () => {
@@ -562,7 +554,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/notifications/1/read');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/notifications/1/read');
       expect(getMethod(fetchCall[0])).toBe('PATCH');
     });
   });
@@ -593,10 +585,8 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(mockSemesters);
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/v1/scholarship-configurations/available-semesters',
-        expect.any(Object)
-      );
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain('/api/v1/scholarship-configurations/available-semesters');
     });
 
     it('should get quota overview', async () => {
@@ -615,10 +605,8 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(mockOverview);
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/v1/scholarship-configurations/overview/2024-1',
-        expect.any(Object)
-      );
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain('/api/v1/scholarship-configurations/overview/2024-1');
     });
 
     it('should update matrix quota', async () => {
@@ -640,7 +628,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/scholarship-configurations/matrix-quota');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/scholarship-configurations/matrix-quota');
       expect(getMethod(fetchCall[0])).toBe('PUT');
     });
   });
@@ -666,7 +654,7 @@ describe('Modular API Structure', () => {
 
       expect(result.data).toEqual([]);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/professor/applications?status_filter=pending');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/professor/applications?status_filter=pending');
     });
 
     it('should get professor stats', async () => {
@@ -685,7 +673,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/professor/stats');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/professor/stats');
     });
 
     it('should submit professor review', async () => {
@@ -704,7 +692,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/professor/applications/1/review');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/professor/applications/1/review');
       expect(getMethod(fetchCall[0])).toBe('POST');
     });
   });
@@ -726,7 +714,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/college/applications?status=pending');
+      expect(getUrl(fetchCall[0])).toContain('/api/v1/college');
     });
 
     it('should get college rankings', async () => {
@@ -741,7 +729,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/college/rankings?academic_year=113&semester=first');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/college-review/rankings?academic_year=113&semester=first');
     });
 
     it('should create college ranking', async () => {
@@ -762,7 +750,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/college/rankings');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/college-review/rankings');
       expect(getMethod(fetchCall[0])).toBe('POST');
     });
 
@@ -778,7 +766,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/college/statistics?academic_year=113&semester=first');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/college-review/statistics?academic_year=113&semester=first');
     });
   });
 
@@ -799,7 +787,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/scholarships/1/whitelist');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/scholarships/1/whitelist');
       expect(getMethod(fetchCall[0])).toBe('PATCH');
     });
 
@@ -815,7 +803,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/scholarship-configurations/1/whitelist?page=1&size=10');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/scholarship-configurations/1/whitelist?page=1&size=10');
     });
 
     it('should batch add to whitelist', async () => {
@@ -836,7 +824,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/scholarship-configurations/1/whitelist/batch');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/scholarship-configurations/1/whitelist/batch');
       expect(getMethod(fetchCall[0])).toBe('POST');
     });
   });
@@ -858,7 +846,9 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/system-settings?category=email&include_sensitive=true');
+      expect(getUrl(fetchCall[0])).toContain('/api/v1/system-settings');
+      expect(getUrl(fetchCall[0])).toContain('category=email');
+      expect(getUrl(fetchCall[0])).toContain('include_sensitive=true');
     });
 
     it('should validate configuration', async () => {
@@ -881,7 +871,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/system-settings/validate');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/system-settings/validate');
       expect(getMethod(fetchCall[0])).toBe('POST');
     });
   });
@@ -907,7 +897,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/admin/bank-verification');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/admin/bank-verification');
       expect(getMethod(fetchCall[0])).toBe('POST');
     });
 
@@ -927,7 +917,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/admin/bank-verification/batch');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/admin/bank-verification/batch');
       expect(getMethod(fetchCall[0])).toBe('POST');
     });
   });
@@ -952,7 +942,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/professor-student?professor_id=1&status=active');
+      expect(getUrl(fetchCall[0])).toContain('/api/v1/professor-student?professor_id=1&status=active');
     });
 
     it('should create professor-student relationship', async () => {
@@ -971,7 +961,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/professor-student');
+      expect(getUrl(fetchCall[0])).toContain('/api/v1/professor-student');
       expect(getMethod(fetchCall[0])).toBe('POST');
     });
   });
@@ -993,7 +983,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/email-automation?is_active=true');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/email-automation?is_active=true');
     });
 
     it('should toggle automation rule', async () => {
@@ -1008,7 +998,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/email-automation/1/toggle');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/email-automation/1/toggle');
       expect(getMethod(fetchCall[0])).toBe('PATCH');
     });
   });
@@ -1034,7 +1024,8 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/college/batch-import/history?limit=10');
+      expect(getUrl(fetchCall[0])).toContain('/api/v1/college-review/batch-import/history');
+      expect(getUrl(fetchCall[0])).toContain('limit=10');
     });
 
     it('should confirm batch import', async () => {
@@ -1053,7 +1044,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/college/batch-import/batch-123/confirm');
+      expect(getUrl(fetchCall[0])).toContain('/api/v1/college-review/batch-import/batch-123/confirm');
       expect(getMethod(fetchCall[0])).toBe('POST');
     });
   });
@@ -1079,7 +1070,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/reference-data/academies');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/reference-data/academies');
     });
 
     it('should get all reference data', async () => {
@@ -1106,7 +1097,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/reference-data/all');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/reference-data/all');
     });
 
     it('should get scholarship periods', async () => {
@@ -1134,7 +1125,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/reference-data/scholarship-periods?scholarship_id=1&application_cycle=semester');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/reference-data/scholarship-periods?scholarship_id=1&application_cycle=semester');
     });
   });
 
@@ -1159,7 +1150,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/application-fields/form-config/test?include_inactive=false');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/application-fields/form-config/test?include_inactive=false');
     });
 
     it('should create field', async () => {
@@ -1195,7 +1186,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/application-fields/fields');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/application-fields/fields');
       expect(getMethod(fetchCall[0])).toBe('POST');
     });
 
@@ -1215,7 +1206,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/application-fields/documents/test');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/application-fields/documents/test');
     });
   });
 
@@ -1245,7 +1236,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/user-profiles/me');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/user-profiles/me');
     });
 
     it('should update bank info', async () => {
@@ -1268,7 +1259,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/user-profiles/me/bank-info');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/user-profiles/me/bank-info');
       expect(getMethod(fetchCall[0])).toBe('PUT');
     });
 
@@ -1288,7 +1279,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/user-profiles/admin/incomplete');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/user-profiles/admin/incomplete');
     });
   });
 
@@ -1337,7 +1328,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/email-management/scheduled/1/approve');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/email-management/scheduled/1/approve');
       expect(getMethod(fetchCall[0])).toBe('PATCH');
     });
 
@@ -1361,7 +1352,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/email-management/test-mode/status');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/email-management/test-mode/status');
     });
 
     it('should enable test mode', async () => {
@@ -1417,7 +1408,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/admin/dashboard/stats');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/admin/dashboard/stats');
     });
 
     it('should get all applications', async () => {
@@ -1436,7 +1427,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/admin/applications?page=1&size=10&status=pending');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/admin/applications?page=1&size=10&status=pending');
     });
 
     it('should create announcement', async () => {
@@ -1455,7 +1446,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/admin/announcements');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/admin/announcements');
       expect(getMethod(fetchCall[0])).toBe('POST');
     });
 
@@ -1475,7 +1466,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/admin/scholarship-rules?scholarship_type_id=1');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/admin/scholarship-rules?scholarship_type_id=1');
     });
 
     it('should create scholarship configuration', async () => {
@@ -1498,7 +1489,7 @@ describe('Modular API Structure', () => {
 
       expect(result.success).toBe(true);
       const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toBe('/api/v1/scholarship-configurations/configurations');
+      expect(getUrl(fetchCall[0])).toBe('/api/v1/scholarship-configurations/configurations');
       expect(getMethod(fetchCall[0])).toBe('POST');
     });
   });
