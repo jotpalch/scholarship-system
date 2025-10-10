@@ -76,7 +76,7 @@ describe("API Client", () => {
       await apiClient.scholarships.getAll();
 
       const fetchCall = (fetch as jest.Mock).mock.calls[0];
-      const headers = fetchCall[1]?.headers;
+      const headers = getRequestHeaders(fetchCall[0]) || fetchCall[1]?.headers;
 
       expect(fetch).toHaveBeenCalled();
       expect(headers).toBeDefined();
@@ -97,7 +97,7 @@ describe("API Client", () => {
       await apiClient.scholarships.getAll();
 
       const fetchCall = (fetch as jest.Mock).mock.calls[0];
-      const headers = fetchCall[1]?.headers;
+      const headers = getRequestHeaders(fetchCall[0]) || fetchCall[1]?.headers;
 
       let authHeader;
       if (headers instanceof Headers) {
@@ -134,7 +134,7 @@ describe("API Client", () => {
 
       try {
         await apiClient.scholarships.getAll();
-        fail("Should have thrown an error");
+        expect(true).toBe(false); // Should have thrown
       } catch (error: any) {
         expect(error.message).toBe("Network error");
       }
@@ -151,7 +151,7 @@ describe("API Client", () => {
 
       try {
         await apiClient.scholarships.getAll();
-        fail("Should have thrown an error");
+        expect(true).toBe(false); // Should have thrown
       } catch (error: any) {
         expect(error.message).toBe("Server error");
       }
@@ -189,28 +189,22 @@ describe("API Client", () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual(mockScholarships);
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/scholarships"),
-        expect.any(Object)
-      );
+      const fetchCall = (fetch as jest.Mock).mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain("/scholarships");
     });
 
     it("should get eligible scholarships", async () => {
       await apiClient.scholarships.getEligible();
 
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/scholarships/eligible"),
-        expect.any(Object)
-      );
+      const fetchCall = (fetch as jest.Mock).mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain("/scholarships/eligible");
     });
 
     it("should get scholarship by ID", async () => {
       await apiClient.scholarships.getById(1);
 
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/scholarships/1"),
-        expect.any(Object)
-      );
+      const fetchCall = (fetch as jest.Mock).mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain("/scholarships/1");
     });
   });
 
@@ -225,16 +219,16 @@ describe("API Client", () => {
       await apiClient.applications.createApplication(applicationData);
 
       const fetchCall = (fetch as jest.Mock).mock.calls[0];
-      expect(fetchCall[0]).toContain("/applications");
-      expect(fetchCall[1].method).toBe("POST");
-      expect(fetchCall[1].body).toBe(JSON.stringify(applicationData));
+      expect(getUrl(fetchCall[0])).toContain("/applications");
+      expect(getMethod(fetchCall[0])).toBe("POST");
+      expect(getBody(fetchCall[0])).toBe(JSON.stringify(applicationData));
     });
 
     it("should get user applications", async () => {
       await apiClient.applications.getMyApplications();
 
       const fetchCall = (fetch as jest.Mock).mock.calls[0];
-      expect(fetchCall[0]).toContain("/applications");
+      expect(getUrl(fetchCall[0])).toContain("/applications");
     });
 
     it("should update application", async () => {
@@ -242,24 +236,18 @@ describe("API Client", () => {
 
       await apiClient.applications.updateApplication(1, updateData);
 
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/applications/1"),
-        expect.objectContaining({
-          method: "PUT",
-          body: JSON.stringify(updateData),
-        })
-      );
+      const fetchCall = (fetch as jest.Mock).mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain("/applications/1");
+      expect(getMethod(fetchCall[0])).toBe("PUT");
+      expect(getBody(fetchCall[0])).toBe(JSON.stringify(updateData));
     });
 
     it("should delete application", async () => {
       await apiClient.applications.deleteApplication(1);
 
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/applications/1"),
-        expect.objectContaining({
-          method: "DELETE",
-        })
-      );
+      const fetchCall = (fetch as jest.Mock).mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain("/applications/1");
+      expect(getMethod(fetchCall[0])).toBe("DELETE");
     });
   });
 
@@ -267,21 +255,18 @@ describe("API Client", () => {
     it("should get dashboard stats", async () => {
       await apiClient.admin.getDashboardStats();
 
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/admin/dashboard/stats"),
-        expect.any(Object)
-      );
+      const fetchCall = (fetch as jest.Mock).mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain("/admin/dashboard/stats");
     });
 
     it("should get all applications with filters", async () => {
       await apiClient.admin.getAllApplications(1, 10, "submitted");
 
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining(
-          "/admin/applications?page=1&size=10&status=submitted"
-        ),
-        expect.any(Object)
-      );
+      const fetchCall = (fetch as jest.Mock).mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain("/admin/applications");
+      expect(getUrl(fetchCall[0])).toContain("page=1");
+      expect(getUrl(fetchCall[0])).toContain("size=10");
+      expect(getUrl(fetchCall[0])).toContain("status=submitted");
     });
 
     it("should update application status", async () => {
@@ -291,16 +276,13 @@ describe("API Client", () => {
         "Looks good"
       );
 
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/admin/applications/1/status"),
-        expect.objectContaining({
-          method: "PATCH",
-          body: JSON.stringify({
-            status: "approved",
-            review_notes: "Looks good",
-          }),
-        })
-      );
+      const fetchCall = (fetch as jest.Mock).mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain("/admin/applications/1/status");
+      expect(getMethod(fetchCall[0])).toBe("PATCH");
+      expect(getBody(fetchCall[0])).toBe(JSON.stringify({
+        status: "approved",
+        review_notes: "Looks good",
+      }));
     });
   });
 
@@ -311,19 +293,17 @@ describe("API Client", () => {
       await apiClient.applications.uploadDocument(1, file, "transcript");
 
       const fetchCall = (fetch as jest.Mock).mock.calls[0];
-      expect(fetchCall[0]).toContain("/applications/1/files/upload");
-      expect(fetchCall[0]).toContain("file_type=transcript");
-      expect(fetchCall[1].method).toBe("POST");
-      expect(fetchCall[1].body).toBeInstanceOf(FormData);
+      expect(getUrl(fetchCall[0])).toContain("/applications/1/files/upload");
+      expect(getUrl(fetchCall[0])).toContain("file_type=transcript");
+      expect(getMethod(fetchCall[0])).toBe("POST");
+      expect(getBody(fetchCall[0]) || fetchCall[1]?.body).toBeInstanceOf(FormData);
     });
 
     it("should get files by application ID", async () => {
       await apiClient.applications.getApplicationFiles(1);
 
-      expect(fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/applications/1/files"),
-        expect.any(Object)
-      );
+      const fetchCall = (fetch as jest.Mock).mock.calls[0];
+      expect(getUrl(fetchCall[0])).toContain("/applications/1/files");
     });
   });
 
@@ -335,7 +315,7 @@ describe("API Client", () => {
       });
 
       const fetchCall = (fetch as jest.Mock).mock.calls[0];
-      const headers = fetchCall[1]?.headers;
+      const headers = getRequestHeaders(fetchCall[0]) || fetchCall[1]?.headers;
 
       let contentType;
       if (headers instanceof Headers) {
@@ -352,7 +332,7 @@ describe("API Client", () => {
       await apiClient.applications.uploadDocument(1, file, "document");
 
       const fetchCall = (fetch as jest.Mock).mock.calls[0];
-      const headers = fetchCall[1]?.headers;
+      const headers = getRequestHeaders(fetchCall[0]) || fetchCall[1]?.headers;
 
       let contentType;
       if (headers instanceof Headers) {
@@ -361,14 +341,14 @@ describe("API Client", () => {
         contentType = headers["Content-Type"] || headers["content-type"];
       }
 
-      expect(fetchCall[1].body).toBeInstanceOf(FormData);
+      expect(getBody(fetchCall[0]) || fetchCall[1]?.body).toBeInstanceOf(FormData);
     });
 
     it("should include Accept header", async () => {
       await apiClient.scholarships.getAll();
 
       const fetchCall = (fetch as jest.Mock).mock.calls[0];
-      const headers = fetchCall[1]?.headers;
+      const headers = getRequestHeaders(fetchCall[0]) || fetchCall[1]?.headers;
 
       let acceptHeader;
       if (headers instanceof Headers) {

@@ -13,6 +13,7 @@
  */
 
 import { ApiClient } from './client';
+import { typedClient } from './typed-client';
 import { createAuthApi } from './modules/auth';
 import { createUsersApi } from './modules/users';
 import { createScholarshipsApi } from './modules/scholarships';
@@ -158,6 +159,38 @@ class ExtendedApiClient extends ApiClient {
 
     // Initialize backward compatibility alias
     this.system = this.systemSettings;
+  }
+
+  /**
+   * Override setToken to synchronize with typedClient
+   * This ensures modules using typedClient also have the token
+   */
+  setToken(token: string): void {
+    super.setToken(token);
+    typedClient.setToken(token);
+  }
+
+  /**
+   * Override clearToken to synchronize with typedClient
+   */
+  clearToken(): void {
+    super.clearToken();
+    typedClient.clearToken();
+  }
+
+  /**
+   * Override getToken to delegate to typedClient
+   * This ensures we always get the current state, even if typedClient clears the token
+   */
+  getToken(): string | null {
+    return typedClient.getToken();
+  }
+
+  /**
+   * Override hasToken to delegate to typedClient
+   */
+  hasToken(): boolean {
+    return typedClient.hasToken();
   }
 }
 

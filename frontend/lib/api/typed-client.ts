@@ -57,6 +57,14 @@ class TypedApiClient {
           headers,
         });
       },
+      onResponse: ({ response }) => {
+        // Clear token on 401 Unauthorized
+        if (response.status === 401) {
+          console.error('Authentication failed - clearing token');
+          this.clearToken();
+        }
+        return undefined; // No modification needed
+      },
     });
   }
 
