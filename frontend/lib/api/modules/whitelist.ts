@@ -13,6 +13,7 @@
 
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
+import { createFileUploadFormData, type MultipartFormData } from '../form-data-helpers';
 import type { ApiResponse, WhitelistResponse } from '../../api.legacy';
 
 export function createWhitelistApi() {
@@ -110,7 +111,7 @@ export function createWhitelistApi() {
 
     /**
      * Import whitelist from Excel
-     * Type-safe: Path parameter and FormData body validated
+     * Type-safe: Path parameter and FormData properly typed
      */
     importWhitelistExcel: async (
       configurationId: number,
@@ -125,12 +126,11 @@ export function createWhitelistApi() {
         }>;
       }>
     > => {
-      const formData = new FormData();
-      formData.append("file", file);
+      const formData = createFileUploadFormData({ file });
 
       const response = await typedClient.raw.POST('/api/v1/scholarship-configurations/{id}/whitelist/import', {
         params: { path: { id: configurationId } },
-        body: formData as any, // TODO: Fix OpenAPI schema - FormData not recognized
+        body: formData as MultipartFormData<{ file: string }>,
       });
       return toApiResponse<{
         success_count: number;

@@ -12,6 +12,7 @@
 
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
+import { createFileUploadFormData, type MultipartFormData } from '../form-data-helpers';
 import type { ApiResponse, Application, ApplicationFile } from '../../api.legacy';
 
 type ApplicationCreate = {
@@ -129,20 +130,18 @@ export function createApplicationsApi() {
 
     /**
      * Upload file to application
-     * Type-safe: Path parameter validated, FormData supported
+     * Type-safe: Path parameter validated, FormData properly typed
      */
     uploadFile: async (
       applicationId: number,
       file: File,
       fileType: string
     ): Promise<ApiResponse<any>> => {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('file_type', fileType);
+      const formData = createFileUploadFormData({ file, file_type: fileType });
 
       const response = await typedClient.raw.POST('/api/v1/applications/{id}/files', {
         params: { path: { id: applicationId } },
-        body: formData as any, // TODO: Fix OpenAPI schema - FormData not recognized
+        body: formData as MultipartFormData<{ file: string }>,
       });
       return toApiResponse<any>(response);
     },
@@ -188,22 +187,21 @@ export function createApplicationsApi() {
 
     /**
      * Upload document to application
-     * Type-safe: Path and query parameters validated
+     * Type-safe: Path and query parameters validated, FormData properly typed
      */
     uploadDocument: async (
       applicationId: number,
       file: File,
       fileType: string = 'other'
     ): Promise<ApiResponse<any>> => {
-      const formData = new FormData();
-      formData.append('file', file);
+      const formData = createFileUploadFormData({ file });
 
       const response = await typedClient.raw.POST('/api/v1/applications/{id}/files/upload', {
         params: {
           path: { id: applicationId },
           query: { file_type: fileType },
         },
-        body: formData as any, // TODO: Fix OpenAPI schema - FormData not recognized
+        body: formData as MultipartFormData<{ file: string }>,
       });
       return toApiResponse<any>(response);
     },

@@ -13,6 +13,7 @@
 
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
+import { createFileUploadFormData, type MultipartFormData } from '../form-data-helpers';
 import type { ApiResponse } from '../../api.legacy';
 
 type BatchUploadResult = {
@@ -134,8 +135,7 @@ export function createBatchImportApi() {
       academicYear: number,
       semester: string
     ): Promise<ApiResponse<BatchUploadResult>> => {
-      const formData = new FormData();
-      formData.append("file", file);
+      const formData = createFileUploadFormData({ file });
 
       const response = await typedClient.raw.POST('/api/v1/college-review/batch-import/upload-data', {
         params: {
@@ -145,7 +145,7 @@ export function createBatchImportApi() {
             semester: semester,
           },
         },
-        body: formData as any, // TODO: Fix OpenAPI schema - FormData not recognized
+        body: formData as MultipartFormData<{ file: string }>,
       });
       return toApiResponse<BatchUploadResult>(response);
     },
@@ -210,18 +210,17 @@ export function createBatchImportApi() {
 
     /**
      * Upload documents in bulk for batch import (ZIP file)
-     * Type-safe: Path parameter and FormData body validated
+     * Type-safe: Path parameter and FormData body properly typed
      */
     uploadDocuments: async (
       batchId: number,
       zipFile: File
     ): Promise<ApiResponse<BatchDocumentUploadResponse>> => {
-      const formData = new FormData();
-      formData.append("file", zipFile);
+      const formData = createFileUploadFormData({ file: zipFile });
 
       const response = await typedClient.raw.POST('/api/v1/college-review/batch-import/{batch_id}/documents', {
         params: { path: { batch_id: batchId } },
-        body: formData as any, // TODO: Fix OpenAPI schema - FormData not recognized
+        body: formData as MultipartFormData<{ file: string }>,
       });
       return toApiResponse<BatchDocumentUploadResponse>(response);
     },

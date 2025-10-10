@@ -13,6 +13,7 @@
 
 import { typedClient } from '../typed-client';
 import { toApiResponse } from '../compat';
+import { createFileUploadFormData, type MultipartFormData } from '../form-data-helpers';
 import type { ApiResponse } from '../../api.legacy';
 
 type CompleteUserProfile = {
@@ -146,16 +147,15 @@ export function createUserProfilesApi() {
 
     /**
      * Upload bank document (file)
-     * Type-safe: FormData upload
+     * Type-safe: FormData properly typed
      */
     uploadBankDocumentFile: async (
       file: File
     ): Promise<ApiResponse<{ document_url: string }>> => {
-      const formData = new FormData();
-      formData.append("file", file);
+      const formData = createFileUploadFormData({ file });
 
       const response = await typedClient.raw.POST('/api/v1/user-profiles/me/bank-document/file', {
-        body: formData as any, // TODO: Fix OpenAPI schema - FormData not recognized
+        body: formData as MultipartFormData<{ file: string }>,
       });
       return toApiResponse<{ document_url: string }>(response);
     },
