@@ -4,6 +4,14 @@ import React from "react";
 // Make React available globally
 global.React = React;
 
+// Add Web API constructors for openapi-fetch compatibility
+// Use require to avoid TypeScript module resolution issues
+require("whatwg-fetch");
+const { Request, Response, Headers } = require("whatwg-fetch");
+global.Request = Request;
+global.Response = Response;
+global.Headers = Headers;
+
 // Set up environment variables
 // @ts-ignore - Allow NODE_ENV assignment in test environment
 process.env.NODE_ENV = "test";
