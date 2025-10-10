@@ -21,7 +21,7 @@ export function createScholarshipsApi() {
      */
     getEligible: async (): Promise<ApiResponse<ScholarshipType[]>> => {
       const response = await typedClient.raw.GET('/api/v1/scholarships/eligible');
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -32,7 +32,7 @@ export function createScholarshipsApi() {
       const response = await typedClient.raw.GET('/api/v1/scholarships/{id}', {
         params: { path: { id } },
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -41,7 +41,7 @@ export function createScholarshipsApi() {
      */
     getAll: async (): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.GET('/api/v1/scholarships');
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -50,7 +50,7 @@ export function createScholarshipsApi() {
      */
     getCombined: async (): Promise<ApiResponse<ScholarshipType[]>> => {
       const response = await (typedClient.raw.GET as any)('/api/v1/scholarships/combined/list', {});
-      return toApiResponse<ScholarshipType[]>(response as any);
+      return toApiResponse<ScholarshipType[]>(response);
     },
 
     /**
@@ -78,9 +78,9 @@ export function createScholarshipsApi() {
       }>;
     }): Promise<ApiResponse<ScholarshipType>> => {
       const response = await (typedClient.raw.POST as any)('/api/v1/scholarships/combined/phd', {
-        body: data as any,
+        body: data,
       });
-      return toApiResponse<ScholarshipType>(response as any);
+      return toApiResponse<ScholarshipType>(response);
     },
   };
 }

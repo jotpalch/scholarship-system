@@ -68,7 +68,7 @@ export function createUserProfilesApi() {
      */
     getMyProfile: async (): Promise<ApiResponse<CompleteUserProfile>> => {
       const response = await typedClient.raw.GET('/api/v1/user-profiles/me');
-      return toApiResponse<CompleteUserProfile>(response as any);
+      return toApiResponse<CompleteUserProfile>(response);
     },
 
     /**
@@ -79,9 +79,9 @@ export function createUserProfilesApi() {
       profileData: UserProfileUpdate
     ): Promise<ApiResponse<UserProfile>> => {
       const response = await typedClient.raw.POST('/api/v1/user-profiles/me', {
-        body: profileData as any,
+        body: profileData as any, // TODO: Fix OpenAPI schema - UserProfileUpdate type mismatch
       });
-      return toApiResponse<UserProfile>(response as any);
+      return toApiResponse<UserProfile>(response);
     },
 
     /**
@@ -92,9 +92,9 @@ export function createUserProfilesApi() {
       profileData: UserProfileUpdate
     ): Promise<ApiResponse<UserProfile>> => {
       const response = await typedClient.raw.PUT('/api/v1/user-profiles/me', {
-        body: profileData as any,
+        body: profileData as any, // TODO: Fix OpenAPI schema - UserProfileUpdate type mismatch
       });
-      return toApiResponse<UserProfile>(response as any);
+      return toApiResponse<UserProfile>(response);
     },
 
     /**
@@ -105,9 +105,9 @@ export function createUserProfilesApi() {
       bankData: BankInfoUpdate
     ): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.PUT('/api/v1/user-profiles/me/bank-info', {
-        body: bankData as any,
+        body: bankData as any, // TODO: Fix OpenAPI schema - BankInfoUpdate type mismatch
       });
-      return toApiResponse<any>(response as any);
+      return toApiResponse<any>(response);
     },
 
     /**
@@ -120,7 +120,7 @@ export function createUserProfilesApi() {
       const response = await typedClient.raw.PUT('/api/v1/user-profiles/me/advisor-info', {
         body: advisorData,
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -141,7 +141,7 @@ export function createUserProfilesApi() {
           },
         },
       });
-      return toApiResponse<{ document_url: string }>(response as any);
+      return toApiResponse<{ document_url: string }>(response);
     },
 
     /**
@@ -155,9 +155,9 @@ export function createUserProfilesApi() {
       formData.append("file", file);
 
       const response = await typedClient.raw.POST('/api/v1/user-profiles/me/bank-document/file', {
-        body: formData as any,
+        body: formData as any, // TODO: Fix OpenAPI schema - FormData not recognized
       });
-      return toApiResponse<{ document_url: string }>(response as any);
+      return toApiResponse<{ document_url: string }>(response);
     },
 
     /**
@@ -166,7 +166,7 @@ export function createUserProfilesApi() {
      */
     deleteBankDocument: async (): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.DELETE('/api/v1/user-profiles/me/bank-document');
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -175,7 +175,7 @@ export function createUserProfilesApi() {
      */
     getHistory: async (): Promise<ApiResponse<ProfileHistory[]>> => {
       const response = await typedClient.raw.GET('/api/v1/user-profiles/me/history');
-      return toApiResponse<ProfileHistory[]>(response as any);
+      return toApiResponse<ProfileHistory[]>(response);
     },
 
     /**
@@ -184,7 +184,7 @@ export function createUserProfilesApi() {
      */
     deleteProfile: async (): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.DELETE('/api/v1/user-profiles/me');
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -197,7 +197,7 @@ export function createUserProfilesApi() {
        */
       getIncompleteProfiles: async (): Promise<ApiResponse<any>> => {
         const response = await typedClient.raw.GET('/api/v1/user-profiles/admin/incomplete');
-        return toApiResponse(response as any);
+        return toApiResponse(response);
       },
 
       /**
@@ -210,7 +210,7 @@ export function createUserProfilesApi() {
         const response = await typedClient.raw.GET('/api/v1/user-profiles/admin/{user_id}', {
           params: { path: { user_id: userId } },
         });
-        return toApiResponse<CompleteUserProfile>(response as any);
+        return toApiResponse<CompleteUserProfile>(response);
       },
 
       /**
@@ -223,7 +223,7 @@ export function createUserProfilesApi() {
         const response = await typedClient.raw.GET('/api/v1/user-profiles/admin/{user_id}/history', {
           params: { path: { user_id: userId } },
         });
-        return toApiResponse<ProfileHistory[]>(response as any);
+        return toApiResponse<ProfileHistory[]>(response);
       },
     },
   };

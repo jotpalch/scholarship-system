@@ -71,7 +71,7 @@ export function createApplicationFieldsApi() {
           query: { include_inactive: includeInactive },
         },
       });
-      return toApiResponse<ScholarshipFormConfig>(response as any);
+      return toApiResponse<ScholarshipFormConfig>(response);
     },
 
     /**
@@ -84,9 +84,9 @@ export function createApplicationFieldsApi() {
     ): Promise<ApiResponse<ScholarshipFormConfig>> => {
       const response = await typedClient.raw.POST('/api/v1/application-fields/form-config/{scholarship_type}', {
         params: { path: { scholarship_type: scholarshipType } },
-        body: config as any,
+        body: config,
       });
-      return toApiResponse<ScholarshipFormConfig>(response as any);
+      return toApiResponse<ScholarshipFormConfig>(response);
     },
 
     /**
@@ -99,7 +99,7 @@ export function createApplicationFieldsApi() {
       const response = await typedClient.raw.GET('/api/v1/application-fields/fields/{scholarship_type}', {
         params: { path: { scholarship_type: scholarshipType } },
       });
-      return toApiResponse<ApplicationField[]>(response as any);
+      return toApiResponse<ApplicationField[]>(response);
     },
 
     /**
@@ -110,9 +110,9 @@ export function createApplicationFieldsApi() {
       fieldData: ApplicationFieldCreate
     ): Promise<ApiResponse<ApplicationField>> => {
       const response = await typedClient.raw.POST('/api/v1/application-fields/fields', {
-        body: fieldData as any,
+        body: fieldData as any, // TODO: Fix OpenAPI schema - missing optional fields
       });
-      return toApiResponse<ApplicationField>(response as any);
+      return toApiResponse<ApplicationField>(response);
     },
 
     /**
@@ -125,9 +125,9 @@ export function createApplicationFieldsApi() {
     ): Promise<ApiResponse<ApplicationField>> => {
       const response = await typedClient.raw.PUT('/api/v1/application-fields/fields/{field_id}', {
         params: { path: { field_id: fieldId } },
-        body: fieldData as any,
+        body: fieldData,
       });
-      return toApiResponse<ApplicationField>(response as any);
+      return toApiResponse<ApplicationField>(response);
     },
 
     /**
@@ -138,7 +138,7 @@ export function createApplicationFieldsApi() {
       const response = await typedClient.raw.DELETE('/api/v1/application-fields/fields/{field_id}', {
         params: { path: { field_id: fieldId } },
       });
-      return toApiResponse<boolean>(response as any);
+      return toApiResponse<boolean>(response);
     },
 
     /**
@@ -151,7 +151,7 @@ export function createApplicationFieldsApi() {
       const response = await typedClient.raw.GET('/api/v1/application-fields/documents/{scholarship_type}', {
         params: { path: { scholarship_type: scholarshipType } },
       });
-      return toApiResponse<ApplicationDocument[]>(response as any);
+      return toApiResponse<ApplicationDocument[]>(response);
     },
 
     /**
@@ -162,9 +162,9 @@ export function createApplicationFieldsApi() {
       documentData: ApplicationDocumentCreate
     ): Promise<ApiResponse<ApplicationDocument>> => {
       const response = await typedClient.raw.POST('/api/v1/application-fields/documents', {
-        body: documentData as any,
+        body: documentData as any, // TODO: Fix OpenAPI schema - missing optional fields
       });
-      return toApiResponse<ApplicationDocument>(response as any);
+      return toApiResponse<ApplicationDocument>(response);
     },
 
     /**
@@ -177,9 +177,9 @@ export function createApplicationFieldsApi() {
     ): Promise<ApiResponse<ApplicationDocument>> => {
       const response = await typedClient.raw.PUT('/api/v1/application-fields/documents/{document_id}', {
         params: { path: { document_id: documentId } },
-        body: documentData as any,
+        body: documentData,
       });
-      return toApiResponse<ApplicationDocument>(response as any);
+      return toApiResponse<ApplicationDocument>(response);
     },
 
     /**
@@ -190,7 +190,7 @@ export function createApplicationFieldsApi() {
       const response = await typedClient.raw.DELETE('/api/v1/application-fields/documents/{document_id}', {
         params: { path: { document_id: documentId } },
       });
-      return toApiResponse<boolean>(response as any);
+      return toApiResponse<boolean>(response);
     },
 
     /**
@@ -240,7 +240,7 @@ export function createApplicationFieldsApi() {
       const response = await typedClient.raw.DELETE('/api/v1/application-fields/documents/{document_id}/example', {
         params: { path: { document_id: documentId } },
       });
-      return toApiResponse<boolean>(response as any);
+      return toApiResponse<boolean>(response);
     },
   };
 }

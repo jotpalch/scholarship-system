@@ -145,9 +145,9 @@ export function createBatchImportApi() {
             semester: semester,
           },
         },
-        body: formData as any,
+        body: formData as any, // TODO: Fix OpenAPI schema - FormData not recognized
       });
-      return toApiResponse<BatchUploadResult>(response as any);
+      return toApiResponse<BatchUploadResult>(response);
     },
 
     /**
@@ -162,7 +162,7 @@ export function createBatchImportApi() {
         params: { path: { batch_id: batchId } },
         body: { batch_id: batchId, confirm },
       });
-      return toApiResponse<BatchConfirmResult>(response as any);
+      return toApiResponse<BatchConfirmResult>(response);
     },
 
     /**
@@ -178,7 +178,7 @@ export function createBatchImportApi() {
         params: { path: { batch_id: batchId } },
         body: { record_index: recordIndex, updates } as any,
       });
-      return toApiResponse<BatchUpdateRecordResult>(response as any);
+      return toApiResponse<BatchUpdateRecordResult>(response);
     },
 
     /**
@@ -191,7 +191,7 @@ export function createBatchImportApi() {
       const response = await typedClient.raw.POST('/api/v1/college-review/batch-import/{batch_id}/validate', {
         params: { path: { batch_id: batchId } },
       });
-      return toApiResponse<BatchRevalidateResult>(response as any);
+      return toApiResponse<BatchRevalidateResult>(response);
     },
 
     /**
@@ -205,7 +205,7 @@ export function createBatchImportApi() {
       const response = await typedClient.raw.DELETE('/api/v1/college-review/batch-import/{batch_id}/records/{record_index}', {
         params: { path: { batch_id: batchId, record_index: recordIndex } },
       });
-      return toApiResponse<BatchDeleteRecordResult>(response as any);
+      return toApiResponse<BatchDeleteRecordResult>(response);
     },
 
     /**
@@ -221,9 +221,9 @@ export function createBatchImportApi() {
 
       const response = await typedClient.raw.POST('/api/v1/college-review/batch-import/{batch_id}/documents', {
         params: { path: { batch_id: batchId } },
-        body: formData as any,
+        body: formData as any, // TODO: Fix OpenAPI schema - FormData not recognized
       });
-      return toApiResponse<BatchDocumentUploadResponse>(response as any);
+      return toApiResponse<BatchDocumentUploadResponse>(response);
     },
 
     /**
@@ -244,7 +244,7 @@ export function createBatchImportApi() {
           },
         },
       });
-      return toApiResponse<BatchHistoryResponse>(response as any);
+      return toApiResponse<BatchHistoryResponse>(response);
     },
 
     /**
@@ -257,7 +257,7 @@ export function createBatchImportApi() {
       const response = await typedClient.raw.GET('/api/v1/college-review/batch-import/{batch_id}/details', {
         params: { path: { batch_id: batchId } },
       });
-      return toApiResponse<BatchDetails>(response as any);
+      return toApiResponse<BatchDetails>(response);
     },
 
     /**
@@ -313,7 +313,7 @@ export function createBatchImportApi() {
       const response = await typedClient.raw.DELETE('/api/v1/college-review/batch-import/{batch_id}', {
         params: { path: { batch_id: batchId } },
       });
-      return toApiResponse<{ batch_id: number; deleted_applications: number }>(response as any);
+      return toApiResponse<{ batch_id: number; deleted_applications: number }>(response);
     },
 
     /**

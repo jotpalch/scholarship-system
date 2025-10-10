@@ -70,7 +70,7 @@ export function createReferenceDataApi() {
      */
     getAcademies: async (): Promise<ApiResponse<Academy[]>> => {
       const response = await typedClient.raw.GET('/api/v1/reference-data/academies');
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -79,7 +79,7 @@ export function createReferenceDataApi() {
      */
     getDepartments: async (): Promise<ApiResponse<Department[]>> => {
       const response = await typedClient.raw.GET('/api/v1/reference-data/departments');
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -88,7 +88,7 @@ export function createReferenceDataApi() {
      */
     getAll: async (): Promise<ApiResponse<ReferenceDataAll>> => {
       const response = await typedClient.raw.GET('/api/v1/reference-data/all');
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -109,7 +109,7 @@ export function createReferenceDataApi() {
           },
         },
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
   };
 }

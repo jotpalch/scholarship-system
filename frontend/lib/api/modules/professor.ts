@@ -38,7 +38,7 @@ export function createProfessorApi() {
         });
         console.log("📨 Professor applications raw response:", response);
 
-        const apiResponse = toApiResponse<PaginatedResponse<Application>>(response as any);
+        const apiResponse = toApiResponse<PaginatedResponse<Application>>(response);
 
         if (
           apiResponse.success &&
@@ -82,7 +82,7 @@ export function createProfessorApi() {
       const response = await typedClient.raw.GET('/api/v1/professor/applications/{application_id}/review', {
         params: { path: { application_id: applicationId } },
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -104,7 +104,7 @@ export function createProfessorApi() {
         params: { path: { application_id: applicationId } },
         body: reviewData,
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -127,7 +127,7 @@ export function createProfessorApi() {
         params: { path: { application_id: applicationId, review_id: reviewId } },
         body: reviewData,
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -149,7 +149,7 @@ export function createProfessorApi() {
       const response = await typedClient.raw.GET('/api/v1/professor/applications/{application_id}/sub-types', {
         params: { path: { application_id: applicationId } },
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -164,7 +164,7 @@ export function createProfessorApi() {
       }>
     > => {
       const response = await typedClient.raw.GET('/api/v1/professor/stats');
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
   };
 }

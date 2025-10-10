@@ -98,7 +98,7 @@ export function createUsersApi() {
      */
     getProfile: async (): Promise<ApiResponse<User>> => {
       const response = await typedClient.raw.GET('/api/v1/users/me');
-      return toApiResponse<User>(response as any);
+      return toApiResponse<User>(response);
     },
 
     /**
@@ -109,9 +109,9 @@ export function createUsersApi() {
       userData: Partial<User>
     ): Promise<ApiResponse<User>> => {
       const response = await typedClient.raw.PUT('/api/v1/users/me', {
-        body: userData as any,
+        body: userData,
       });
-      return toApiResponse<User>(response as any);
+      return toApiResponse<User>(response);
     },
 
     /**
@@ -120,7 +120,7 @@ export function createUsersApi() {
      */
     getStudentInfo: async (): Promise<ApiResponse<StudentInfoResponse>> => {
       const response = await typedClient.raw.GET('/api/v1/users/student-info');
-      return toApiResponse<StudentInfoResponse>(response as any);
+      return toApiResponse<StudentInfoResponse>(response);
     },
 
     /**
@@ -131,9 +131,9 @@ export function createUsersApi() {
       studentData: Partial<Student>
     ): Promise<ApiResponse<Student>> => {
       const response = await typedClient.raw.PUT('/api/v1/users/student-info', {
-        body: studentData as any,
+        body: studentData as any, // TODO: Fix OpenAPI schema - Partial<Student> type mismatch
       });
-      return toApiResponse<Student>(response as any);
+      return toApiResponse<Student>(response);
     },
 
     /**
@@ -149,7 +149,7 @@ export function createUsersApi() {
       const response = await typedClient.raw.GET('/api/v1/users', {
         params: { query: params },
       });
-      return toApiResponse<PaginatedResponse<UserListResponse>>(response as any);
+      return toApiResponse<PaginatedResponse<UserListResponse>>(response);
     },
 
     /**
@@ -160,7 +160,7 @@ export function createUsersApi() {
       const response = await typedClient.raw.GET('/api/v1/users/{id}', {
         params: { path: { id: userId } },
       });
-      return toApiResponse<UserResponse>(response as any);
+      return toApiResponse<UserResponse>(response);
     },
 
     /**
@@ -169,9 +169,9 @@ export function createUsersApi() {
      */
     create: async (userData: UserCreate) => {
       const response = await typedClient.raw.POST('/api/v1/users', {
-        body: userData as any,
+        body: userData as any, // TODO: Fix OpenAPI schema - undefined vs null type mismatch
       });
-      return toApiResponse<UserResponse>(response as any);
+      return toApiResponse<UserResponse>(response);
     },
 
     /**
@@ -181,9 +181,9 @@ export function createUsersApi() {
     update: async (userId: number, userData: UserUpdate) => {
       const response = await typedClient.raw.PUT('/api/v1/users/{id}', {
         params: { path: { id: userId } },
-        body: userData as any,
+        body: userData,
       });
-      return toApiResponse<UserResponse>(response as any);
+      return toApiResponse<UserResponse>(response);
     },
 
     /**
@@ -198,7 +198,7 @@ export function createUsersApi() {
         success: boolean;
         message: string;
         data: { user_id: number };
-      }>(response as any);
+      }>(response);
     },
 
     /**
@@ -213,7 +213,7 @@ export function createUsersApi() {
         success: boolean;
         message: string;
         data: { user_id: number };
-      }>(response as any);
+      }>(response);
     },
 
     /**
@@ -222,7 +222,7 @@ export function createUsersApi() {
      */
     getStats: async () => {
       const response = await typedClient.raw.GET('/api/v1/users/stats/overview');
-      return toApiResponse<UserStats>(response as any);
+      return toApiResponse<UserStats>(response);
     },
   };
 }

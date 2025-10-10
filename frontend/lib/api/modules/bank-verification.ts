@@ -40,7 +40,7 @@ export function createBankVerificationApi() {
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification', {
         body: { application_id: applicationId, force_recheck: forceRecheck } as any,
       });
-      return toApiResponse<BankVerificationResult>(response as any);
+      return toApiResponse<BankVerificationResult>(response);
     },
 
     /**
@@ -54,7 +54,7 @@ export function createBankVerificationApi() {
       const response = await typedClient.raw.POST('/api/v1/admin/bank-verification/batch', {
         body: { application_ids: applicationIds, force_recheck: forceRecheck } as any,
       });
-      return toApiResponse<BankVerificationBatchResult>(response as any);
+      return toApiResponse<BankVerificationBatchResult>(response);
     },
   };
 }

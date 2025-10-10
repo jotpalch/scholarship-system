@@ -96,7 +96,7 @@ export function createEmailManagementApi() {
       const response = await typedClient.raw.GET('/api/v1/email-management/history', {
         params: { query: params as any },
       });
-      return toApiResponse<PaginatedEmailResponse>(response as any);
+      return toApiResponse<PaginatedEmailResponse>(response);
     },
 
     /**
@@ -109,7 +109,7 @@ export function createEmailManagementApi() {
       const response = await typedClient.raw.GET('/api/v1/email-management/scheduled', {
         params: { query: params as any },
       });
-      return toApiResponse<PaginatedEmailResponse>(response as any);
+      return toApiResponse<PaginatedEmailResponse>(response);
     },
 
     /**
@@ -122,7 +122,7 @@ export function createEmailManagementApi() {
       const response = await typedClient.raw.GET('/api/v1/email-management/scheduled/due', {
         params: { query: { limit } },
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -139,7 +139,7 @@ export function createEmailManagementApi() {
           approval_notes: approvalNotes,
         },
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -152,7 +152,7 @@ export function createEmailManagementApi() {
       const response = await typedClient.raw.PATCH('/api/v1/email-management/scheduled/{email_id}/cancel', {
         params: { path: { email_id: emailId } },
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -167,7 +167,7 @@ export function createEmailManagementApi() {
         params: { path: { email_id: emailId } },
         body: data,
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -180,7 +180,7 @@ export function createEmailManagementApi() {
       const response = await typedClient.raw.POST('/api/v1/email-management/scheduled/process', {
         params: { query: { batch_size: batchSize } },
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -189,7 +189,7 @@ export function createEmailManagementApi() {
      */
     getEmailCategories: async (): Promise<ApiResponse<string[]>> => {
       const response = await typedClient.raw.GET('/api/v1/email-management/categories');
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -203,7 +203,7 @@ export function createEmailManagementApi() {
       }>
     > => {
       const response = await typedClient.raw.GET('/api/v1/email-management/statuses');
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -212,7 +212,7 @@ export function createEmailManagementApi() {
      */
     getTestModeStatus: async (): Promise<ApiResponse<TestModeStatus>> => {
       const response = await typedClient.raw.GET('/api/v1/email-management/test-mode/status');
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -235,7 +235,7 @@ export function createEmailManagementApi() {
           },
         },
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -246,7 +246,7 @@ export function createEmailManagementApi() {
       ApiResponse<TestModeStatus & { disabled_by: number; disabled_at: string }>
     > => {
       const response = await typedClient.raw.POST('/api/v1/email-management/test-mode/disable');
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -265,7 +265,7 @@ export function createEmailManagementApi() {
       const response = await typedClient.raw.GET('/api/v1/email-management/test-mode/audit', {
         params: { query: params },
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -285,7 +285,7 @@ export function createEmailManagementApi() {
       const response = await typedClient.raw.POST('/api/v1/email-management/send-simple-test', {
         body: params,
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
   };
 }

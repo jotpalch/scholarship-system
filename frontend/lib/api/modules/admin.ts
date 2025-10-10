@@ -142,7 +142,7 @@ export function createAdminApi() {
      */
     updateEmailTemplate: async (template: any): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.PUT('/api/v1/admin/email-template', {
-        body: template as any,
+        body: template,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -192,7 +192,7 @@ export function createAdminApi() {
      */
     createScholarshipEmailTemplate: async (templateData: any): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-email-templates', {
-        body: templateData as any,
+        body: templateData,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -208,7 +208,7 @@ export function createAdminApi() {
     ): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.PUT('/api/v1/admin/scholarship-email-templates/{scholarship_type_id}/{template_key}', {
         params: { path: { scholarship_type_id: scholarshipTypeId, template_key: templateKey } },
-        body: templateData as any,
+        body: templateData,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -273,7 +273,7 @@ export function createAdminApi() {
      */
     updateSystemSetting: async (setting: any): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.PUT('/api/v1/admin/system-setting', {
-        body: setting as any,
+        body: setting,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -320,7 +320,7 @@ export function createAdminApi() {
      */
     createAnnouncement: async (announcementData: any): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/announcements', {
-        body: announcementData as any,
+        body: announcementData,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -332,7 +332,7 @@ export function createAdminApi() {
     updateAnnouncement: async (id: number, announcementData: any): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.PUT('/api/v1/admin/announcements/{id}', {
         params: { path: { id } },
-        body: announcementData as any,
+        body: announcementData,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -461,7 +461,7 @@ export function createAdminApi() {
      */
     createScholarshipRule: async (rule: any): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-rules', {
-        body: rule as any,
+        body: rule,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -473,7 +473,7 @@ export function createAdminApi() {
     updateScholarshipRule: async (id: number, rule: any): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.PUT('/api/v1/admin/scholarship-rules/{id}', {
         params: { path: { id } },
-        body: rule as any,
+        body: rule,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -495,7 +495,7 @@ export function createAdminApi() {
      */
     copyRulesBetweenPeriods: async (copyRequest: any): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-rules/copy', {
-        body: copyRequest as any,
+        body: copyRequest,
       });
       return toApiResponse(response) as ApiResponse<any[]>;
     },
@@ -506,7 +506,7 @@ export function createAdminApi() {
      */
     bulkRuleOperation: async (operation: any): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-rules/bulk-operation', {
-        body: operation as any,
+        body: operation,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -528,7 +528,7 @@ export function createAdminApi() {
      */
     createRuleTemplate: async (templateRequest: any): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-rules/create-template', {
-        body: templateRequest as any,
+        body: templateRequest,
       });
       return toApiResponse(response) as ApiResponse<any[]>;
     },
@@ -539,7 +539,7 @@ export function createAdminApi() {
      */
     applyRuleTemplate: async (templateRequest: any): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-rules/apply-template', {
-        body: templateRequest as any,
+        body: templateRequest,
       });
       return toApiResponse(response) as ApiResponse<any[]>;
     },
@@ -600,7 +600,7 @@ export function createAdminApi() {
      */
     createScholarshipPermission: async (permission: any): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/scholarship-permissions', {
-        body: permission as any,
+        body: permission,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -612,7 +612,7 @@ export function createAdminApi() {
     updateScholarshipPermission: async (id: number, permission: any): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.PUT('/api/v1/admin/scholarship-permissions/{id}', {
         params: { path: { id } },
-        body: permission as any,
+        body: permission,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -712,7 +712,7 @@ export function createAdminApi() {
      */
     createScholarshipConfiguration: async (configData: any): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.POST('/api/v1/scholarship-configurations/configurations', {
-        body: configData as any,
+        body: configData,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -724,7 +724,7 @@ export function createAdminApi() {
     updateScholarshipConfiguration: async (id: number, configData: any): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.PUT('/api/v1/scholarship-configurations/configurations/{id}', {
         params: { path: { id } },
-        body: configData as any,
+        body: configData,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -750,7 +750,7 @@ export function createAdminApi() {
     ): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.POST('/api/v1/scholarship-configurations/configurations/{id}/duplicate', {
         params: { path: { id } },
-        body: targetData as any,
+        body: targetData,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -808,7 +808,7 @@ export function createAdminApi() {
      */
     createConfiguration: async (configData: any): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/configurations', {
-        body: configData as any,
+        body: configData,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },
@@ -819,7 +819,7 @@ export function createAdminApi() {
      */
     updateConfigurationsBulk: async (configurations: any[]): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.PUT('/api/v1/admin/configurations/bulk', {
-        body: configurations as any,
+        body: configurations as any, // TODO: Fix OpenAPI schema - expects {updates: []} not array
       });
       return toApiResponse(response) as ApiResponse<any[]>;
     },
@@ -830,7 +830,7 @@ export function createAdminApi() {
      */
     validateConfiguration: async (configData: any): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.POST('/api/v1/admin/configurations/validate', {
-        body: configData as any,
+        body: configData,
       });
       return toApiResponse(response) as ApiResponse<any>;
     },

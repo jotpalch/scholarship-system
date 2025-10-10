@@ -66,7 +66,7 @@ export function createProfessorStudentApi() {
           },
         },
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -79,7 +79,7 @@ export function createProfessorStudentApi() {
       const response = await typedClient.raw.POST('/api/v1/professor-student', {
         params: { query: relationshipData as any },
       });
-      return toApiResponse<ProfessorStudentRelationship>(response as any);
+      return toApiResponse<ProfessorStudentRelationship>(response);
     },
 
     /**
@@ -92,9 +92,9 @@ export function createProfessorStudentApi() {
     ): Promise<ApiResponse<ProfessorStudentRelationship>> => {
       const response = await typedClient.raw.PUT('/api/v1/professor-student/{id}', {
         params: { path: { id } },
-        body: relationshipData as any,
+        body: relationshipData as any, // TODO: Fix OpenAPI schema - ProfessorStudentRelationshipUpdate type mismatch
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
 
     /**
@@ -107,7 +107,7 @@ export function createProfessorStudentApi() {
       const response = await typedClient.raw.DELETE('/api/v1/professor-student/{id}', {
         params: { path: { id } },
       });
-      return toApiResponse(response as any);
+      return toApiResponse(response);
     },
   };
 }

@@ -35,7 +35,7 @@ export function createApplicationsApi() {
       const response = await typedClient.raw.GET('/api/v1/applications', {
         params: { query: status ? { status } : undefined },
       });
-      return toApiResponse<Application[]>(response as any);
+      return toApiResponse<Application[]>(response);
     },
 
     /**
@@ -49,7 +49,7 @@ export function createApplicationsApi() {
       const response = await typedClient.raw.GET('/api/v1/applications/college/review', {
         params: { query: { status, scholarship_type: scholarshipType } },
       });
-      return toApiResponse<Application[]>(response as any);
+      return toApiResponse<Application[]>(response);
     },
 
     /**
@@ -63,7 +63,7 @@ export function createApplicationsApi() {
       const response = await typedClient.raw.GET('/api/v1/applications/review/list', {
         params: { query: { scholarship_type: scholarshipType, status } },
       });
-      return toApiResponse<Application[]>(response as any);
+      return toApiResponse<Application[]>(response);
     },
 
     /**
@@ -76,9 +76,9 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<Application>> => {
       const response = await typedClient.raw.POST('/api/v1/applications', {
         params: { query: isDraft ? { is_draft: true } : undefined },
-        body: applicationData as any,
+        body: applicationData as any, // TODO: Fix OpenAPI schema - type mismatch
       });
-      return toApiResponse<Application>(response as any);
+      return toApiResponse<Application>(response);
     },
 
     /**
@@ -91,7 +91,7 @@ export function createApplicationsApi() {
       const response = await typedClient.raw.GET('/api/v1/applications/{id}', {
         params: { path: { id } },
       });
-      return toApiResponse<Application>(response as any);
+      return toApiResponse<Application>(response);
     },
 
     /**
@@ -104,9 +104,9 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<Application>> => {
       const response = await typedClient.raw.PUT('/api/v1/applications/{id}', {
         params: { path: { id } },
-        body: applicationData as any,
+        body: applicationData as any, // TODO: Fix OpenAPI schema - Partial type mismatch
       });
-      return toApiResponse<Application>(response as any);
+      return toApiResponse<Application>(response);
     },
 
     /**
@@ -124,7 +124,7 @@ export function createApplicationsApi() {
         params: { path: { id } },
         body: { status: statusData.status } as any,
       });
-      return toApiResponse<Application>(response as any);
+      return toApiResponse<Application>(response);
     },
 
     /**
@@ -142,7 +142,7 @@ export function createApplicationsApi() {
 
       const response = await typedClient.raw.POST('/api/v1/applications/{id}/files', {
         params: { path: { id: applicationId } },
-        body: formData as any,
+        body: formData as any, // TODO: Fix OpenAPI schema - FormData not recognized
       });
       return toApiResponse<any>(response);
     },
@@ -157,7 +157,7 @@ export function createApplicationsApi() {
       const response = await typedClient.raw.POST('/api/v1/applications/{id}/submit', {
         params: { path: { id: applicationId } },
       });
-      return toApiResponse<Application>(response as any);
+      return toApiResponse<Application>(response);
     },
 
     /**
@@ -170,7 +170,7 @@ export function createApplicationsApi() {
       const response = await typedClient.raw.DELETE('/api/v1/applications/{id}', {
         params: { path: { id: applicationId } },
       });
-      return toApiResponse<{ success: boolean; message: string }>(response as any);
+      return toApiResponse<{ success: boolean; message: string }>(response);
     },
 
     /**
@@ -183,7 +183,7 @@ export function createApplicationsApi() {
       const response = await typedClient.raw.POST('/api/v1/applications/{id}/withdraw', {
         params: { path: { id: applicationId } },
       });
-      return toApiResponse<Application>(response as any);
+      return toApiResponse<Application>(response);
     },
 
     /**
@@ -203,7 +203,7 @@ export function createApplicationsApi() {
           path: { id: applicationId },
           query: { file_type: fileType },
         },
-        body: formData as any,
+        body: formData as any, // TODO: Fix OpenAPI schema - FormData not recognized
       });
       return toApiResponse<any>(response);
     },
@@ -218,7 +218,7 @@ export function createApplicationsApi() {
       const response = await typedClient.raw.GET('/api/v1/applications/{id}/files', {
         params: { path: { id: applicationId } },
       });
-      return toApiResponse<ApplicationFile[]>(response as any);
+      return toApiResponse<ApplicationFile[]>(response);
     },
 
     /**
@@ -230,10 +230,10 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<Application>> => {
       const response = await typedClient.raw.POST('/api/v1/applications', {
         params: { query: { is_draft: true } },
-        body: applicationData as any,
+        body: applicationData as any, // TODO: Fix OpenAPI schema - type mismatch
       });
 
-      const apiResponse = toApiResponse<Application>(response as any);
+      const apiResponse = toApiResponse<Application>(response);
 
       // Normalize response format
       if (apiResponse.data && typeof apiResponse.data === 'object' && 'id' in apiResponse.data) {
@@ -266,7 +266,7 @@ export function createApplicationsApi() {
           ...(selectedAwards ? { selected_awards: selectedAwards } : {}),
         } as any,
       });
-      return toApiResponse<Application>(response as any);
+      return toApiResponse<Application>(response);
     },
   };
 }

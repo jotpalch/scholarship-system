@@ -29,7 +29,7 @@ export function createWhitelistApi() {
         params: { path: { id: scholarshipId } },
         body: { enabled },
       });
-      return toApiResponse<{ success: boolean }>(response as any);
+      return toApiResponse<{ success: boolean }>(response);
     },
 
     /**
@@ -50,7 +50,7 @@ export function createWhitelistApi() {
           ...(params && { query: params }),
         } as any,
       });
-      return toApiResponse<WhitelistResponse[]>(response as any);
+      return toApiResponse<WhitelistResponse[]>(response);
     },
 
     /**
@@ -71,12 +71,12 @@ export function createWhitelistApi() {
     > => {
       const response = await typedClient.raw.POST('/api/v1/scholarship-configurations/{id}/whitelist/batch', {
         params: { path: { id: configurationId } },
-        body: request as any,
+        body: request as any, // TODO: Fix OpenAPI schema - students array structure mismatch
       });
       return toApiResponse<{
         success_count: number;
         failed_items: Array<{ nycu_id: string; reason: string; }>;
-      }>(response as any);
+      }>(response);
     },
 
     /**
@@ -100,12 +100,12 @@ export function createWhitelistApi() {
     > => {
       const response = await typedClient.raw.DELETE('/api/v1/scholarship-configurations/{id}/whitelist/batch', {
         params: { path: { id: configurationId } },
-        body: request as any,
+        body: request,
       });
       return toApiResponse<{
         success_count: number;
         failed_items: Array<{ id: number; reason: string; }>;
-      }>(response as any);
+      }>(response);
     },
 
     /**
@@ -130,12 +130,12 @@ export function createWhitelistApi() {
 
       const response = await typedClient.raw.POST('/api/v1/scholarship-configurations/{id}/whitelist/import', {
         params: { path: { id: configurationId } },
-        body: formData as any,
+        body: formData as any, // TODO: Fix OpenAPI schema - FormData not recognized
       });
       return toApiResponse<{
         success_count: number;
         failed_items: Array<{ row: number; nycu_id: string; reason: string; }>;
-      }>(response as any);
+      }>(response);
     },
 
     /**
