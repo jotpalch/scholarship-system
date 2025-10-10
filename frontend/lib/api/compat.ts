@@ -30,11 +30,11 @@ export interface FetchResponse<T> {
  * - HTTP status codes
  * - Error message extraction
  *
- * @param response - openapi-fetch response object
+ * @param response - openapi-fetch response object (uses any to accept full OpenAPI types)
  * @returns ApiResponse<T> in standard format
  */
 export function toApiResponse<T>(
-  response: FetchResponse<T>
+  response: any
 ): ApiResponse<T> {
   // Handle error responses
   if (response.error) {
