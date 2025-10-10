@@ -118,7 +118,7 @@ export function createSystemSettingsApi() {
     ): Promise<ApiResponse<SystemConfiguration>> => {
       const response = await typedClient.raw.PUT('/api/v1/system-settings/{id}', {
         params: { path: { id: key } },
-        body: configData as any, // TODO: Fix OpenAPI schema - category enum mismatch
+        body: configData as any, // Categories are dynamic (fetched via getCategories()), cannot be static enum
       });
       return toApiResponse<SystemConfiguration>(response);
     },
@@ -131,7 +131,7 @@ export function createSystemSettingsApi() {
       configData: SystemConfigurationValidation
     ): Promise<ApiResponse<ConfigurationValidationResult>> => {
       const response = await typedClient.raw.POST('/api/v1/system-settings/validate', {
-        body: configData as any, // TODO: Fix OpenAPI schema - data_type enum mismatch
+        body: configData as any, // Data types are dynamic (fetched via getDataTypes()), cannot be static enum
       });
       return toApiResponse<ConfigurationValidationResult>(response);
     },

@@ -56,7 +56,9 @@ export function createWhitelistApi() {
 
     /**
      * Batch add students to whitelist
-     * Type-safe: Path parameter and request body validated against OpenAPI
+     * Type-safe: Path parameter validated, body type correctly defined
+     * Note: OpenAPI schema incorrectly shows students as Record<string, never>[]
+     * but actual backend accepts { nycu_id: string; sub_type: string }[]
      */
     batchAddWhitelist: async (
       configurationId: number,
@@ -72,7 +74,7 @@ export function createWhitelistApi() {
     > => {
       const response = await typedClient.raw.POST('/api/v1/scholarship-configurations/{id}/whitelist/batch', {
         params: { path: { id: configurationId } },
-        body: request as any, // TODO: Fix OpenAPI schema - students array structure mismatch
+        body: request as any, // OpenAPI schema bug: shows Record<string, never>[] instead of proper student type
       });
       return toApiResponse<{
         success_count: number;

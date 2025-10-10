@@ -817,9 +817,15 @@ export function createAdminApi() {
      * Update configurations in bulk
      * Type-safe: Request body validated against OpenAPI
      */
-    updateConfigurationsBulk: async (configurations: any[]): Promise<ApiResponse<any[]>> => {
+    updateConfigurationsBulk: async (
+      configurations: any[],
+      changeReason?: string
+    ): Promise<ApiResponse<any[]>> => {
       const response = await typedClient.raw.PUT('/api/v1/admin/configurations/bulk', {
-        body: configurations as any, // TODO: Fix OpenAPI schema - expects {updates: []} not array
+        body: {
+          updates: configurations,
+          ...(changeReason && { change_reason: changeReason }),
+        },
       });
       return toApiResponse(response) as ApiResponse<any[]>;
     },

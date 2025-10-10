@@ -110,7 +110,7 @@ export function createApplicationFieldsApi() {
       fieldData: ApplicationFieldCreate
     ): Promise<ApiResponse<ApplicationField>> => {
       const response = await typedClient.raw.POST('/api/v1/application-fields/fields', {
-        body: fieldData as any, // TODO: Fix OpenAPI schema - missing optional fields
+        body: fieldData as any, // Frontend includes additional optional fields not in OpenAPI schema
       });
       return toApiResponse<ApplicationField>(response);
     },
@@ -162,7 +162,7 @@ export function createApplicationFieldsApi() {
       documentData: ApplicationDocumentCreate
     ): Promise<ApiResponse<ApplicationDocument>> => {
       const response = await typedClient.raw.POST('/api/v1/application-fields/documents', {
-        body: documentData as any, // TODO: Fix OpenAPI schema - missing optional fields
+        body: documentData as any, // Frontend includes additional optional fields not in OpenAPI schema
       });
       return toApiResponse<ApplicationDocument>(response);
     },

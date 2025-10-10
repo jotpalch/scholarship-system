@@ -131,7 +131,7 @@ export function createUsersApi() {
       studentData: Partial<Student>
     ): Promise<ApiResponse<Student>> => {
       const response = await typedClient.raw.PUT('/api/v1/users/student-info', {
-        body: studentData as any, // TODO: Fix OpenAPI schema - Partial<Student> type mismatch
+        body: studentData as any, // Partial<Student> makes all fields optional for PATCH updates
       });
       return toApiResponse<Student>(response);
     },
@@ -169,7 +169,7 @@ export function createUsersApi() {
      */
     create: async (userData: UserCreate) => {
       const response = await typedClient.raw.POST('/api/v1/users', {
-        body: userData as any, // TODO: Fix OpenAPI schema - undefined vs null type mismatch
+        body: userData as any, // TypeScript undefined vs Python None/null handling difference
       });
       return toApiResponse<UserResponse>(response);
     },

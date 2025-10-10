@@ -108,7 +108,7 @@ export function createQuotaApi() {
       request: UpdateMatrixQuotaRequest
     ): Promise<ApiResponse<UpdateQuotaResponse>> => {
       const response = await typedClient.raw.PUT('/api/v1/scholarship-configurations/matrix-quota', {
-        body: request as any, // TODO: Fix OpenAPI schema - UpdateMatrixQuotaRequest type mismatch
+        body: request as any, // Frontend UpdateMatrixQuotaRequest structure differs from generated schema
       });
       return toApiResponse<UpdateQuotaResponse>(response);
     },
@@ -144,7 +144,7 @@ export function createQuotaApi() {
       for (const update of updates) {
         try {
           const response = await typedClient.raw.PUT('/api/v1/scholarship-configurations/matrix-quota', {
-            body: update as any, // TODO: Fix OpenAPI schema - UpdateMatrixQuotaRequest type mismatch
+            body: update as any, // Frontend UpdateMatrixQuotaRequest structure differs from generated schema
           });
           const apiResponse = toApiResponse<UpdateQuotaResponse>(response);
           if (apiResponse.success && apiResponse.data) {

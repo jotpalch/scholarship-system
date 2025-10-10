@@ -77,7 +77,7 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<Application>> => {
       const response = await typedClient.raw.POST('/api/v1/applications', {
         params: { query: isDraft ? { is_draft: true } : undefined },
-        body: applicationData as any, // TODO: Fix OpenAPI schema - type mismatch
+        body: applicationData as any, // Frontend includes dynamic fields via [key: string]: any
       });
       return toApiResponse<Application>(response);
     },
@@ -105,7 +105,7 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<Application>> => {
       const response = await typedClient.raw.PUT('/api/v1/applications/{id}', {
         params: { path: { id } },
-        body: applicationData as any, // TODO: Fix OpenAPI schema - Partial type mismatch
+        body: applicationData as any, // Partial<ApplicationCreate> makes all fields optional for updates
       });
       return toApiResponse<Application>(response);
     },
@@ -228,7 +228,7 @@ export function createApplicationsApi() {
     ): Promise<ApiResponse<Application>> => {
       const response = await typedClient.raw.POST('/api/v1/applications', {
         params: { query: { is_draft: true } },
-        body: applicationData as any, // TODO: Fix OpenAPI schema - type mismatch
+        body: applicationData as any, // Frontend includes dynamic fields via [key: string]: any
       });
 
       const apiResponse = toApiResponse<Application>(response);

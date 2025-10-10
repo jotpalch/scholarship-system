@@ -92,7 +92,7 @@ export function createProfessorStudentApi() {
     ): Promise<ApiResponse<ProfessorStudentRelationship>> => {
       const response = await typedClient.raw.PUT('/api/v1/professor-student/{id}', {
         params: { path: { id } },
-        body: relationshipData as any, // TODO: Fix OpenAPI schema - ProfessorStudentRelationshipUpdate type mismatch
+        body: relationshipData as any, // Update type allows optional fields not matching exact schema structure
       });
       return toApiResponse(response);
     },

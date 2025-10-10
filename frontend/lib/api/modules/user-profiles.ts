@@ -80,7 +80,7 @@ export function createUserProfilesApi() {
       profileData: UserProfileUpdate
     ): Promise<ApiResponse<UserProfile>> => {
       const response = await typedClient.raw.POST('/api/v1/user-profiles/me', {
-        body: profileData as any, // TODO: Fix OpenAPI schema - UserProfileUpdate type mismatch
+        body: profileData as any, // Frontend allows [key: string]: any for flexible profile updates
       });
       return toApiResponse<UserProfile>(response);
     },
@@ -93,7 +93,7 @@ export function createUserProfilesApi() {
       profileData: UserProfileUpdate
     ): Promise<ApiResponse<UserProfile>> => {
       const response = await typedClient.raw.PUT('/api/v1/user-profiles/me', {
-        body: profileData as any, // TODO: Fix OpenAPI schema - UserProfileUpdate type mismatch
+        body: profileData as any, // Frontend allows [key: string]: any for flexible profile updates
       });
       return toApiResponse<UserProfile>(response);
     },
@@ -106,7 +106,7 @@ export function createUserProfilesApi() {
       bankData: BankInfoUpdate
     ): Promise<ApiResponse<any>> => {
       const response = await typedClient.raw.PUT('/api/v1/user-profiles/me/bank-info', {
-        body: bankData as any, // TODO: Fix OpenAPI schema - BankInfoUpdate type mismatch
+        body: bankData as any, // Frontend allows optional fields that may not match exact schema
       });
       return toApiResponse<any>(response);
     },
