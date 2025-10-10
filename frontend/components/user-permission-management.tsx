@@ -130,7 +130,7 @@ export function UserPermissionManagement() {
       }
       rolesParam = rolesParam
         .split(",")
-        .map((role) => role.trim().toUpperCase())
+        .map((role) => role.trim())
         .join(",");
 
       const params: any = {
