@@ -7,9 +7,8 @@
 
 import { api, apiClient } from '../index';
 
-// Mock fetch
-const mockFetch = jest.fn();
-global.fetch = mockFetch;
+// Mock fetch - use jest.fn() that's already on global.fetch from jest.setup.ts
+const mockFetch = global.fetch as jest.Mock;
 
 // Mock localStorage
 const mockLocalStorage = {
@@ -20,6 +19,45 @@ const mockLocalStorage = {
 Object.defineProperty(window, 'localStorage', {
   value: mockLocalStorage,
 });
+
+
+function getUrl(requestOrUrl: any): string {
+  if (typeof requestOrUrl === 'string') {
+    return requestOrUrl;
+  }
+  if (requestOrUrl && typeof requestOrUrl === 'object' && 'url' in requestOrUrl) {
+    return requestOrUrl.url;
+  }
+  return String(requestOrUrl);
+}
+
+function getMethod(requestOrOptions: any): string | undefined {
+  if (requestOrOptions && typeof requestOrOptions === 'object' && 'method' in requestOrOptions) {
+    return requestOrOptions.method;
+  }
+  return undefined;
+}
+
+function getRequestHeaders(requestOrOptions: any): any {
+  if (requestOrOptions && typeof requestOrOptions === 'object' && 'headers' in requestOrOptions) {
+    return requestOrOptions.headers;
+  }
+  return null;
+}
+
+function getBody(requestOrOptions: any): any {
+  if (requestOrOptions && typeof requestOrOptions === 'object') {
+    // For Request objects from whatwg-fetch
+    if ('_bodyText' in requestOrOptions) {
+      return requestOrOptions._bodyText;
+    }
+    // For plain options objects
+    if ('body' in requestOrOptions) {
+      return requestOrOptions.body;
+    }
+  }
+  return undefined;
+}
 
 describe('Modular API Structure', () => {
   beforeEach(() => {
@@ -99,11 +137,12 @@ describe('Modular API Structure', () => {
         },
       };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve(mockResponse),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify(mockResponse), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.auth.login('testuser', 'password123');
 
@@ -119,13 +158,13 @@ describe('Modular API Structure', () => {
     });
 
     it('should handle login failure', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ detail: 'Invalid credentials' }), {
         status: 401,
         statusText: 'Unauthorized',
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ detail: 'Invalid credentials' }),
-      });
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       await expect(api.auth.login('wrong', 'credentials')).rejects.toThrow('Invalid credentials');
     });
@@ -173,11 +212,12 @@ describe('Modular API Structure', () => {
         data: { id: 1, name: 'Test' },
       };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve(mockResponse),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify(mockResponse), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await apiClient.request('/test-endpoint');
 
@@ -188,11 +228,12 @@ describe('Modular API Structure', () => {
     });
 
     it('should handle query parameters', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'OK', data: {} }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'OK', data: {} }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       await apiClient.request('/endpoint', {
         params: { page: 1, size: 10, filter: 'active' },
@@ -224,11 +265,12 @@ describe('Modular API Structure', () => {
         updated_at: '2025-01-01',
       };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'OK', data: mockUser }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'OK', data: mockUser }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.users.getProfile();
 
@@ -243,11 +285,12 @@ describe('Modular API Structure', () => {
     it('should update user profile', async () => {
       const updateData = { name: 'Updated Name' };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Updated', data: updateData }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Updated', data: updateData }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.users.updateProfile(updateData);
 
@@ -266,11 +309,12 @@ describe('Modular API Structure', () => {
         pages: 0,
       };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'OK', data: mockResponse }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'OK', data: mockResponse }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       await api.users.getAll({ page: 1, size: 10 });
 
@@ -294,11 +338,12 @@ describe('Modular API Structure', () => {
         { id: 1, name: 'Test Scholarship' },
       ];
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'OK', data: mockScholarships }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'OK', data: mockScholarships }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.scholarships.getEligible();
 
@@ -313,11 +358,12 @@ describe('Modular API Structure', () => {
     it('should get scholarship by ID', async () => {
       const mockScholarship = { id: 1, name: 'Test Scholarship' };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'OK', data: mockScholarship }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'OK', data: mockScholarship }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.scholarships.getById(1);
 
@@ -335,11 +381,12 @@ describe('Modular API Structure', () => {
         { id: 2, name: 'Scholarship 2' },
       ];
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'OK', data: mockScholarships }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'OK', data: mockScholarships }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.scholarships.getAll();
 
@@ -370,11 +417,12 @@ describe('Modular API Structure', () => {
         ],
       };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Created', data: phdData }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Created', data: phdData }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.scholarships.createCombinedPhd(phdData);
 
@@ -400,11 +448,12 @@ describe('Modular API Structure', () => {
         { id: 1, scholarship_type: 'academic_excellence', status: 'submitted' },
       ];
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'OK', data: mockApplications }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'OK', data: mockApplications }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.applications.getMyApplications();
 
@@ -422,11 +471,12 @@ describe('Modular API Structure', () => {
         personal_statement: 'Test statement',
       };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Created', data: { id: 1, ...appData } }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Created', data: { id: 1, ...appData } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.applications.createApplication(appData);
 
@@ -437,11 +487,12 @@ describe('Modular API Structure', () => {
     });
 
     it('should submit application', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Submitted', data: { id: 1, status: 'submitted' } }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Submitted', data: { id: 1, status: 'submitted' } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.applications.submitApplication(1);
 
@@ -467,11 +518,12 @@ describe('Modular API Structure', () => {
         { id: 1, title: 'Test', message: 'Test notification', is_read: false },
       ];
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'OK', data: mockNotifications }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'OK', data: mockNotifications }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.notifications.getNotifications();
 
@@ -484,11 +536,12 @@ describe('Modular API Structure', () => {
     });
 
     it('should get unread count', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'OK', data: 5 }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'OK', data: 5 }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.notifications.getUnreadCount();
 
@@ -501,11 +554,12 @@ describe('Modular API Structure', () => {
     });
 
     it('should mark notification as read', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Marked as read', data: { id: 1, is_read: true } }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Marked as read', data: { id: 1, is_read: true } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.notifications.markAsRead(1);
 
@@ -531,11 +585,12 @@ describe('Modular API Structure', () => {
         { period: '2024-1', display_name: '2024 第一學期', quota_management_mode: 'matrix_based' },
       ];
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'OK', data: mockSemesters }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'OK', data: mockSemesters }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.quota.getAvailableSemesters();
 
@@ -552,11 +607,12 @@ describe('Modular API Structure', () => {
         { scholarship_type: 'phd', total_quota: 100, used_quota: 50, remaining_quota: 50 },
       ];
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'OK', data: mockOverview }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'OK', data: mockOverview }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.quota.getQuotaOverview('2024-1');
 
@@ -576,11 +632,12 @@ describe('Modular API Structure', () => {
         total_quota: 50,
       };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Updated', data: updateRequest }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Updated', data: updateRequest }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.quota.updateMatrixQuota(updateRequest);
 
@@ -597,15 +654,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should get applications for review', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Applications retrieved',
           data: { items: [], total: 0, page: 1, size: 10 }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.professor.getApplications('pending');
 
@@ -615,15 +673,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should get professor stats', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Stats retrieved',
           data: { pending_reviews: 5, completed_reviews: 10, overdue_reviews: 2 }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.professor.getStats();
 
@@ -633,11 +692,12 @@ describe('Modular API Structure', () => {
     });
 
     it('should submit professor review', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Review submitted', data: {} }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Review submitted', data: {} }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const reviewData = {
         recommendation: 'Approved',
@@ -658,11 +718,12 @@ describe('Modular API Structure', () => {
     });
 
     it('should get applications for college review', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Applications retrieved', data: [] }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Applications retrieved', data: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.college.getApplicationsForReview('status=pending');
 
@@ -672,11 +733,12 @@ describe('Modular API Structure', () => {
     });
 
     it('should get college rankings', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Rankings retrieved', data: [] }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Rankings retrieved', data: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.college.getRankings(113, 'first');
 
@@ -686,11 +748,12 @@ describe('Modular API Structure', () => {
     });
 
     it('should create college ranking', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Ranking created', data: { id: 1 } }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Ranking created', data: { id: 1 } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const rankingData = {
         scholarship_type_id: 1,
@@ -707,11 +770,12 @@ describe('Modular API Structure', () => {
     });
 
     it('should get college statistics', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Stats retrieved', data: {} }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Stats retrieved', data: {} }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.college.getStatistics(113, 'first');
 
@@ -727,11 +791,12 @@ describe('Modular API Structure', () => {
     });
 
     it('should toggle scholarship whitelist', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Whitelist toggled', data: { success: true } }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Whitelist toggled', data: { success: true } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.whitelist.toggleScholarshipWhitelist(1, true);
 
@@ -742,11 +807,12 @@ describe('Modular API Structure', () => {
     });
 
     it('should get configuration whitelist', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Whitelist retrieved', data: [] }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Whitelist retrieved', data: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.whitelist.getConfigurationWhitelist(1, { page: 1, size: 10 });
 
@@ -756,15 +822,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should batch add to whitelist', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Students added',
           data: { success_count: 2, failed_items: [] }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.whitelist.batchAddWhitelist(1, {
         students: [{ nycu_id: '001', sub_type: 'A' }]
@@ -783,11 +850,12 @@ describe('Modular API Structure', () => {
     });
 
     it('should get all configurations', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Configurations retrieved', data: [] }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Configurations retrieved', data: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.systemSettings.getConfigurations('email', true);
 
@@ -797,15 +865,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should validate configuration', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Validation result',
           data: { valid: true, errors: [], warnings: [] }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.systemSettings.validateConfiguration({
         key: 'test_key',
@@ -826,15 +895,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should verify single bank account', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Verified',
           data: { application_id: 1, verified: true }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.bankVerification.verifyBankAccount(1);
 
@@ -845,15 +915,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should verify batch bank accounts', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Batch verified',
           data: { total: 3, verified: 2, failed: 1, results: [] }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.bankVerification.verifyBankAccountsBatch([1, 2, 3]);
 
@@ -870,11 +941,12 @@ describe('Modular API Structure', () => {
     });
 
     it('should get professor-student relationships', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Relationships retrieved', data: [] }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Relationships retrieved', data: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.professorStudent.getProfessorStudentRelationships({
         professor_id: 1,
@@ -887,11 +959,12 @@ describe('Modular API Structure', () => {
     });
 
     it('should create professor-student relationship', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Relationship created', data: { id: 1 } }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Relationship created', data: { id: 1 } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.professorStudent.createProfessorStudentRelationship({
         professor_id: 1,
@@ -912,11 +985,12 @@ describe('Modular API Structure', () => {
     });
 
     it('should get automation rules', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Rules retrieved', data: [] }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Rules retrieved', data: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.emailAutomation.getRules({ is_active: true });
 
@@ -926,11 +1000,12 @@ describe('Modular API Structure', () => {
     });
 
     it('should toggle automation rule', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({ success: true, message: 'Rule toggled', data: {} }),
-      });
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ success: true, message: 'Rule toggled', data: {} }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.emailAutomation.toggleRule(1);
 
@@ -947,15 +1022,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should get batch import history', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'History retrieved',
           data: { items: [], total: 0 }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.batchImport.getHistory({ limit: 10 });
 
@@ -965,15 +1041,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should confirm batch import', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Batch confirmed',
           data: { success_count: 10, failed_count: 0, errors: [], created_application_ids: [] }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.batchImport.confirm('batch-123', true);
 
@@ -990,15 +1067,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should get all academies', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Academies retrieved',
           data: [{ id: 1, code: 'CS', name: 'Computer Science' }]
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.referenceData.getAcademies();
 
@@ -1008,10 +1086,8 @@ describe('Modular API Structure', () => {
     });
 
     it('should get all reference data', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Reference data retrieved',
           data: {
@@ -1023,8 +1099,11 @@ describe('Modular API Structure', () => {
             school_identities: [],
             enroll_types: []
           }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.referenceData.getAll();
 
@@ -1034,10 +1113,8 @@ describe('Modular API Structure', () => {
     });
 
     it('should get scholarship periods', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Periods retrieved',
           data: {
@@ -1047,8 +1124,11 @@ describe('Modular API Structure', () => {
             current_period: '113-1',
             total_periods: 2
           }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.referenceData.getScholarshipPeriods({
         scholarship_id: 1,
@@ -1067,15 +1147,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should get form config', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Form config retrieved',
           data: { scholarship_type: 'test', fields: [], documents: [] }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.applicationFields.getFormConfig('test', false);
 
@@ -1085,10 +1166,8 @@ describe('Modular API Structure', () => {
     });
 
     it('should create field', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Field created',
           data: {
@@ -1101,8 +1180,11 @@ describe('Modular API Structure', () => {
             display_order: 1,
             is_active: true
           }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.applicationFields.createField({
         scholarship_type: 'test',
@@ -1121,15 +1203,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should get documents', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Documents retrieved',
           data: []
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.applicationFields.getDocuments('test');
 
@@ -1145,10 +1228,8 @@ describe('Modular API Structure', () => {
     });
 
     it('should get my profile', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Profile retrieved',
           data: {
@@ -1157,8 +1238,11 @@ describe('Modular API Structure', () => {
             full_name: 'Test User',
             email: 'test@example.com'
           }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.userProfiles.getMyProfile();
 
@@ -1168,15 +1252,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should update bank info', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Bank info updated',
           data: {}
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.userProfiles.updateBankInfo({
         bank_account: '1234567890',
@@ -1191,15 +1276,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should get incomplete profiles (admin)', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Incomplete profiles retrieved',
           data: []
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.userProfiles.admin.getIncompleteProfiles();
 
@@ -1215,10 +1301,8 @@ describe('Modular API Structure', () => {
     });
 
     it('should get email history', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Email history retrieved',
           data: {
@@ -1227,8 +1311,11 @@ describe('Modular API Structure', () => {
             skip: 0,
             limit: 10
           }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.emailManagement.getEmailHistory({ limit: 10, status: 'sent' });
 
@@ -1238,15 +1325,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should approve scheduled email', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Email approved',
           data: {}
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.emailManagement.approveScheduledEmail(1, 'Looks good');
 
@@ -1257,10 +1345,8 @@ describe('Modular API Structure', () => {
     });
 
     it('should get test mode status', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Test mode status retrieved',
           data: {
@@ -1268,8 +1354,11 @@ describe('Modular API Structure', () => {
             redirect_emails: [],
             expires_at: null
           }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.emailManagement.getTestModeStatus();
 
@@ -1279,10 +1368,8 @@ describe('Modular API Structure', () => {
     });
 
     it('should enable test mode', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Test mode enabled',
           data: {
@@ -1292,8 +1379,11 @@ describe('Modular API Structure', () => {
             enabled_by: 1,
             enabled_at: '2025-10-08T00:00:00Z'
           }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.emailManagement.enableTestMode({
         redirect_emails: ['test@example.com'],
@@ -1315,15 +1405,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should get dashboard stats', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Dashboard stats retrieved',
           data: { total_applications: 100, total_scholarships: 10 }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.admin.getDashboardStats();
 
@@ -1333,15 +1424,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should get all applications', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Applications retrieved',
           data: { items: [], total: 0, page: 1, size: 10 }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.admin.getAllApplications(1, 10, 'pending');
 
@@ -1351,15 +1443,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should create announcement', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Announcement created',
           data: { id: 1, title: 'Test Announcement' }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.admin.createAnnouncement({ title: 'Test', content: 'Test content' });
 
@@ -1370,15 +1463,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should get scholarship rules', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Rules retrieved',
           data: []
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.admin.getScholarshipRules({ scholarship_type_id: 1 });
 
@@ -1388,15 +1482,16 @@ describe('Modular API Structure', () => {
     });
 
     it('should create scholarship configuration', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        headers: new Headers({ 'content-type': 'application/json' }),
-        json: () => Promise.resolve({
+      mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
           success: true,
           message: 'Configuration created',
           data: { id: 1, config_code: 'TEST-113-1' }
-        }),
-      });
+        }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
 
       const result = await api.admin.createScholarshipConfiguration({
         scholarship_type_id: 1,

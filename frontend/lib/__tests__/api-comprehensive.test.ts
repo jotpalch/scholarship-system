@@ -1,7 +1,7 @@
 import apiClient from "../api";
 
-// Mock fetch globally
-global.fetch = jest.fn();
+// Mock fetch - jest.fn() is already set up in jest.setup.ts
+// We just cast it for type safety
 
 // Mock localStorage
 const localStorageMock = {
@@ -15,6 +15,45 @@ Object.defineProperty(window, "localStorage", {
   value: localStorageMock,
 });
 
+
+function getUrl(requestOrUrl: any): string {
+  if (typeof requestOrUrl === 'string') {
+    return requestOrUrl;
+  }
+  if (requestOrUrl && typeof requestOrUrl === 'object' && 'url' in requestOrUrl) {
+    return requestOrUrl.url;
+  }
+  return String(requestOrUrl);
+}
+
+function getMethod(requestOrOptions: any): string | undefined {
+  if (requestOrOptions && typeof requestOrOptions === 'object' && 'method' in requestOrOptions) {
+    return requestOrOptions.method;
+  }
+  return undefined;
+}
+
+function getRequestHeaders(requestOrOptions: any): any {
+  if (requestOrOptions && typeof requestOrOptions === 'object' && 'headers' in requestOrOptions) {
+    return requestOrOptions.headers;
+  }
+  return null;
+}
+
+function getBody(requestOrOptions: any): any {
+  if (requestOrOptions && typeof requestOrOptions === 'object') {
+    // For Request objects from whatwg-fetch
+    if ('_bodyText' in requestOrOptions) {
+      return requestOrOptions._bodyText;
+    }
+    // For plain options objects
+    if ('body' in requestOrOptions) {
+      return requestOrOptions.body;
+    }
+  }
+  return undefined;
+}
+
 describe("API Client", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -22,12 +61,12 @@ describe("API Client", () => {
     localStorageMock.getItem.mockImplementation((key: string) =>
       key === "auth_token" ? "mock-token" : null
     );
-    (fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: () => Promise.resolve({ success: true, data: [] }),
-      text: () => Promise.resolve("success"),
-    });
+    (fetch as jest.Mock).mockResolvedValue(
+      new Response(JSON.stringify({ success: true, data: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    );
   });
 
   describe("Authentication", () => {
@@ -72,12 +111,12 @@ describe("API Client", () => {
 
     it("should clear token on 401 response", async () => {
       apiClient.setToken("mock-token");
-      (fetch as jest.Mock).mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        headers: new Headers({ "content-type": "application/json" }),
-        json: () => Promise.resolve({ error: "Unauthorized" }),
-      });
+      (fetch as jest.Mock).mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        })
+      );
 
       try {
         await apiClient.scholarships.getAll();
@@ -102,13 +141,13 @@ describe("API Client", () => {
     });
 
     it("should handle HTTP error responses", async () => {
-      (fetch as jest.Mock).mockResolvedValue({
-        ok: false,
-        status: 500,
-        statusText: "Internal Server Error",
-        headers: new Headers({ "content-type": "application/json" }),
-        json: () => Promise.resolve({ error: "Server error" }),
-      });
+      (fetch as jest.Mock).mockResolvedValue(
+        new Response(JSON.stringify({ error: "Server error" }), {
+          status: 500,
+          statusText: "Internal Server Error",
+          headers: { "content-type": "application/json" },
+        })
+      );
 
       try {
         await apiClient.scholarships.getAll();
@@ -119,13 +158,12 @@ describe("API Client", () => {
     });
 
     it("should handle malformed JSON responses", async () => {
-      (fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        status: 200,
-        headers: new Headers({ "content-type": "application/json" }),
-        json: () => Promise.reject(new Error("Invalid JSON")),
-        text: () => Promise.resolve(""),
-      });
+      (fetch as jest.Mock).mockResolvedValue(
+        new Response("", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      );
 
       const result = await apiClient.scholarships.getAll();
 
@@ -140,11 +178,12 @@ describe("API Client", () => {
         { id: 2, code: "research_grant", name: "Research Grant" },
       ];
 
-      (fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve({ success: true, data: mockScholarships }),
-      });
+      (fetch as jest.Mock).mockResolvedValue(
+        new Response(JSON.stringify({ success: true, data: mockScholarships }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      );
 
       const result = await apiClient.scholarships.getAll();
 
@@ -345,11 +384,12 @@ describe("API Client", () => {
   describe("Response Processing", () => {
     it("should parse successful JSON responses", async () => {
       const mockData = { id: 1, name: "Test" };
-      (fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve({ success: true, data: mockData }),
-      });
+      (fetch as jest.Mock).mockResolvedValue(
+        new Response(JSON.stringify({ success: true, data: mockData }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      );
 
       const result = await apiClient.scholarships.getById(1);
 
@@ -358,13 +398,12 @@ describe("API Client", () => {
     });
 
     it("should handle empty responses", async () => {
-      (fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        status: 204,
-        headers: new Headers({ "content-type": "application/json" }),
-        json: () =>
-          Promise.resolve({ success: true, message: "OK", data: null }),
-      });
+      (fetch as jest.Mock).mockResolvedValue(
+        new Response(JSON.stringify({ success: true, message: "OK", data: null }), {
+          status: 204,
+          headers: { "content-type": "application/json" },
+        })
+      );
 
       const result = await apiClient.applications.updateStatus(1, {
         status: "withdrawn",
@@ -374,16 +413,12 @@ describe("API Client", () => {
     });
 
     it("should handle text responses", async () => {
-      (fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        status: 200,
-        headers: new Headers({ "content-type": "text/plain" }),
-        json: () => Promise.reject(new Error("Not JSON")),
-        text: () =>
-          Promise.resolve(
-            JSON.stringify({ success: true, message: "OK", data: [] })
-          ),
-      });
+      (fetch as jest.Mock).mockResolvedValue(
+        new Response(JSON.stringify({ success: true, message: "OK", data: [] }), {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        })
+      );
 
       const result = await apiClient.scholarships.getAll();
 

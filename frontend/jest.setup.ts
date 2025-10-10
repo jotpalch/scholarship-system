@@ -5,12 +5,8 @@ import React from "react";
 global.React = React;
 
 // Add Web API constructors for openapi-fetch compatibility
-// Use require to avoid TypeScript module resolution issues
-require("whatwg-fetch");
-const { Request, Response, Headers } = require("whatwg-fetch");
-global.Request = Request;
-global.Response = Response;
-global.Headers = Headers;
+// whatwg-fetch v3.x is a polyfill that auto-populates global.fetch, Request, Response, Headers
+import "whatwg-fetch";
 
 // Set up environment variables
 // @ts-ignore - Allow NODE_ENV assignment in test environment
@@ -180,20 +176,12 @@ Object.defineProperty(window, "localStorage", {
 });
 
 // Minimal default fetch mock; tests can override per-case
+// Returns proper Response objects for openapi-fetch compatibility
 global.fetch = jest.fn(async () => {
-  const body = JSON.stringify([]);
-  const headers = new Map([["content-type", "application/json"]]);
-  return Promise.resolve({
-    ok: true,
+  const body = JSON.stringify({ success: true, message: "Request completed successfully", data: [] });
+  return new Response(body, {
     status: 200,
     statusText: "OK",
-    headers: {
-      get: (key: string) => headers.get(key.toLowerCase()) ?? null,
-      has: (key: string) => headers.has(key.toLowerCase()),
-      forEach: (callback: (value: string, key: string) => void) =>
-        headers.forEach(callback),
-    },
-    json: async () => JSON.parse(body),
-    text: async () => body,
+    headers: { "content-type": "application/json" },
   });
 }) as jest.Mock;
