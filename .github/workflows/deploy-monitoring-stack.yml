@@ -66,8 +66,8 @@ jobs:
           # Check if all services are running
           docker ps --filter "name=monitoring_" --format "table {{.Names}}\t{{.Status}}"
 
-          # Test Grafana
-          if curl -f http://localhost:3000/api/health > /dev/null 2>&1; then
+          # Test Grafana (using docker exec since port 3000 is not exposed to host)
+          if docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health; then
             echo "✅ Grafana is healthy"
           else
             echo "❌ Grafana health check failed"
@@ -180,10 +180,11 @@ jobs:
           echo "========================================="
           echo ""
           echo "Access monitoring:"
-          echo "  Grafana:      http://localhost:3000"
+          echo "  Grafana:      https://ss.test.nycu.edu.tw/monitoring/ (via nginx)"
           echo "  Prometheus:   http://localhost:9090"
           echo "  Loki:         http://localhost:3100"
           echo "  AlertManager: http://localhost:9093"
           echo ""
+          echo "Note: Grafana is only accessible via HTTPS reverse proxy"
           echo "Staging environment monitoring is active"
           echo ""
