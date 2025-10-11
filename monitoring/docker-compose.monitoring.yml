@@ -14,9 +14,10 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # Security - Can be overridden via GitHub secrets
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme}
+      # Security - REQUIRED: Set via GitHub secrets or environment variables
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_SECURITY_SECRET_KEY: ${GRAFANA_SECRET_KEY}
       GF_USERS_ALLOW_SIGN_UP: "false"
 
       # Server

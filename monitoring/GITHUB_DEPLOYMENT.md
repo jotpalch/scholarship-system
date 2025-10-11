@@ -67,11 +67,18 @@ Configure these in GitHub repository settings → Secrets and variables → Acti
 
 ### Core Monitoring Secrets (Required)
 
-| Secret Name | Description | Example |
-|-------------|-------------|---------|
-| `GRAFANA_ADMIN_USER` | Grafana admin username | `admin` |
-| `GRAFANA_ADMIN_PASSWORD` | Grafana admin password | `SuperSecurePassword123!` |
-| `GRAFANA_ROOT_URL` | Grafana public URL (via nginx reverse proxy) | `https://ss.test.nycu.edu.tw/monitoring/` |
+| Secret Name | Description | Example | Security Notes |
+|-------------|-------------|---------|----------------|
+| `GRAFANA_ADMIN_USER` | Grafana admin username | `admin` | Avoid using "admin" in production |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana admin password | `SuperSecurePassword123!` | Min 16 chars, mixed case, numbers, symbols |
+| `GRAFANA_SECRET_KEY` | Grafana signing key for cookies | `openssl rand -hex 32` | **REQUIRED**: Generate unique key, never reuse |
+| `GRAFANA_ROOT_URL` | Grafana public URL (via nginx reverse proxy) | `https://ss.test.nycu.edu.tw/monitoring/` | Must match nginx proxy path |
+
+**⚠️ Security Alert**:
+- `GRAFANA_SECRET_KEY` is **REQUIRED** and must be unique
+- Generate with: `openssl rand -hex 32`
+- Never commit secret keys to repository
+- Rotate credentials every 90 days
 
 ### Database VM Secrets (Required)
 
@@ -96,7 +103,7 @@ Configure these in GitHub repository settings → Secrets and variables → Acti
 
 ### Secrets Summary
 
-**Total Required Secrets**: 6 (3 core + 3 DB-VM)
+**Total Required Secrets**: 7 (4 core + 3 DB-VM)
 
 **Removed from Previous Design**:
 - ❌ `MONITORING_SERVER_*` secrets (no longer needed - monitoring server is localhost)
@@ -228,9 +235,11 @@ cp -r ./monitoring/* /opt/scholarship/monitoring/
 # Create .env file
 cd /opt/scholarship/monitoring
 cat > .env.monitoring << EOF
+# Required Grafana security settings
 GRAFANA_ADMIN_USER=admin
-GRAFANA_ADMIN_PASSWORD=YourSecurePassword
-GRAFANA_ROOT_URL=https://staging-monitoring.example.com
+GRAFANA_ADMIN_PASSWORD=YourSecurePassword123!
+GRAFANA_SECRET_KEY=$(openssl rand -hex 32)
+GRAFANA_ROOT_URL=https://ss.test.nycu.edu.tw/monitoring/
 GF_LOG_LEVEL=info
 EOF
 
@@ -505,14 +514,28 @@ docker-compose -f docker-compose.monitoring.yml ps
 
 ## Security Best Practices
 
+### Credentials & Secrets
 1. **Rotate SSH Keys Regularly**: Update GitHub secrets with new DB-VM SSH key every 90 days
 2. **Use Strong Passwords**: Grafana admin password should be at least 16 characters with mixed case, numbers, and symbols
-3. **Limit SSH Key Access**: Use a dedicated SSH key for DB-VM deployment (not your personal key)
-4. **Monitor Secret Usage**: Review GitHub Actions logs to ensure no secrets are accidentally exposed
-5. **Enable Branch Protection**: Require reviews for changes to monitoring configs before merging to main
-6. **Use Environment Protection**: Enable required reviewers for staging deployments in repository settings
-7. **Runner Security**: Keep self-hosted runner updated and isolated from production services
-8. **Firewall Rules**: Only allow necessary ports between AP-VM and DB-VM
+3. **Generate Unique Secret Keys**: Always generate `GRAFANA_SECRET_KEY` with `openssl rand -hex 32`
+4. **Limit SSH Key Access**: Use a dedicated SSH key for DB-VM deployment (not your personal key)
+5. **Monitor Secret Usage**: Review GitHub Actions logs to ensure no secrets are accidentally exposed
+
+### HTTPS & SSL Configuration
+6. **Secure Cookies**: Cookie security is enabled (`cookie_secure = true`) for HTTPS deployments
+7. **Modern SSL Ciphers**: Nginx uses Mozilla's modern cipher suite (ECDHE-ECDSA/RSA-AES128/256-GCM)
+8. **TLS 1.2+**: Only TLSv1.2 and TLSv1.3 are enabled for secure communication
+
+### Access Control
+9. **Enable Branch Protection**: Require reviews for changes to monitoring configs before merging to main
+10. **Use Environment Protection**: Enable required reviewers for staging deployments in repository settings
+11. **Runner Security**: Keep self-hosted runner updated and isolated from production services
+12. **Firewall Rules**: Only allow necessary ports between AP-VM and DB-VM
+
+### Configuration Management
+13. **Never Commit Secrets**: Always use GitHub secrets or environment variables
+14. **Validate Configurations**: Review Grafana and Prometheus configs before deployment
+15. **Audit Access**: Regularly review who has access to monitoring dashboards
 
 ## Production Deployment
 

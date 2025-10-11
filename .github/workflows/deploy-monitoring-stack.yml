@@ -37,6 +37,7 @@ jobs:
           cat > .env.monitoring << 'ENVEOF'
           GRAFANA_ADMIN_USER=${{ secrets.GRAFANA_ADMIN_USER }}
           GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          GRAFANA_SECRET_KEY=${{ secrets.GRAFANA_SECRET_KEY }}
           GRAFANA_ROOT_URL=${{ secrets.GRAFANA_ROOT_URL }}
           GF_LOG_LEVEL=info
 
@@ -61,6 +62,7 @@ jobs:
           # Export environment variables for docker-compose
           export GRAFANA_ADMIN_USER="${{ secrets.GRAFANA_ADMIN_USER }}"
           export GRAFANA_ADMIN_PASSWORD="${{ secrets.GRAFANA_ADMIN_PASSWORD }}"
+          export GRAFANA_SECRET_KEY="${{ secrets.GRAFANA_SECRET_KEY }}"
           export GRAFANA_ROOT_URL="${{ secrets.GRAFANA_ROOT_URL }}"
 
           # Start/restart monitoring stack
