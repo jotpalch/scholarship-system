@@ -1,0 +1,87 @@
+# Grafana Datasource Provisioning Configuration
+# Automatically provisions Prometheus and Loki datasources on startup
+
+apiVersion: 1
+
+datasources:
+  # =========================================================================
+  # PROMETHEUS - Metrics Database
+  # =========================================================================
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s
+      queryTimeout: 60s
+      # Enable exemplars for tracing (if used in future)
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo  # For future Tempo integration
+    version: 1
+
+  # =========================================================================
+  # LOKI - STAGING TENANT
+  # =========================================================================
+  - name: Loki (Staging)
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      maxLines: 1000
+      timeout: 60
+      # Multi-tenant configuration for staging
+      httpHeaderName1: 'X-Scope-OrgID'
+    secureJsonData:
+      httpHeaderValue1: 'staging'
+    version: 1
+
+  # =========================================================================
+  # LOKI - PRODUCTION TENANT
+  # =========================================================================
+  - name: Loki (Production)
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      maxLines: 1000
+      timeout: 60
+      # Multi-tenant configuration for production
+      httpHeaderName1: 'X-Scope-OrgID'
+    secureJsonData:
+      httpHeaderValue1: 'prod'
+    version: 1
+
+  # =========================================================================
+  # LOKI - DEV TENANT (Optional, for future use)
+  # =========================================================================
+  - name: Loki (Dev)
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      maxLines: 1000
+      timeout: 60
+      # Multi-tenant configuration for dev
+      httpHeaderName1: 'X-Scope-OrgID'
+    secureJsonData:
+      httpHeaderValue1: 'dev'
+    version: 1
+
+  # =========================================================================
+  # ALERTMANAGER
+  # =========================================================================
+  - name: AlertManager
+    type: alertmanager
+    access: proxy
+    url: http://alertmanager:9093
+    editable: false
+    jsonData:
+      implementation: prometheus
+    version: 1
