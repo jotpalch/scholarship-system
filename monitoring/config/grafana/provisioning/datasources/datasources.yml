@@ -9,6 +9,8 @@ datasources:
   # =========================================================================
   - name: Prometheus
     type: prometheus
+    uid: prometheus-uid
+    orgId: 1
     access: proxy
     url: http://prometheus:9090
     isDefault: true
@@ -17,6 +19,10 @@ datasources:
       httpMethod: POST
       timeInterval: 15s
       queryTimeout: 60s
+      # Cache settings for better performance
+      cacheLevel: High
+      incrementalQuerying: true
+      incrementalQueryOverlapWindow: 10m
       # Enable exemplars for tracing (if used in future)
       exemplarTraceIdDestinations:
         - name: trace_id
@@ -28,6 +34,8 @@ datasources:
   # =========================================================================
   - name: Loki (Staging)
     type: loki
+    uid: loki-staging-uid
+    orgId: 1
     access: proxy
     url: http://loki:3100
     editable: false
@@ -36,6 +44,12 @@ datasources:
       timeout: 60
       # Multi-tenant configuration for staging
       httpHeaderName1: 'X-Scope-OrgID'
+      # Derived fields for linking logs to traces (future use)
+      derivedFields:
+        - name: TraceID
+          matcherRegex: "trace_id=(\\w+)"
+          url: "$${__value.raw}"
+          datasourceUid: tempo
     secureJsonData:
       httpHeaderValue1: 'staging'
     version: 1
@@ -45,6 +59,8 @@ datasources:
   # =========================================================================
   - name: Loki (Production)
     type: loki
+    uid: loki-prod-uid
+    orgId: 1
     access: proxy
     url: http://loki:3100
     editable: false
@@ -53,6 +69,12 @@ datasources:
       timeout: 60
       # Multi-tenant configuration for production
       httpHeaderName1: 'X-Scope-OrgID'
+      # Derived fields for linking logs to traces (future use)
+      derivedFields:
+        - name: TraceID
+          matcherRegex: "trace_id=(\\w+)"
+          url: "$${__value.raw}"
+          datasourceUid: tempo
     secureJsonData:
       httpHeaderValue1: 'prod'
     version: 1
@@ -62,6 +84,8 @@ datasources:
   # =========================================================================
   - name: Loki (Dev)
     type: loki
+    uid: loki-dev-uid
+    orgId: 1
     access: proxy
     url: http://loki:3100
     editable: false
@@ -70,6 +94,12 @@ datasources:
       timeout: 60
       # Multi-tenant configuration for dev
       httpHeaderName1: 'X-Scope-OrgID'
+      # Derived fields for linking logs to traces (future use)
+      derivedFields:
+        - name: TraceID
+          matcherRegex: "trace_id=(\\w+)"
+          url: "$${__value.raw}"
+          datasourceUid: tempo
     secureJsonData:
       httpHeaderValue1: 'dev'
     version: 1
@@ -79,9 +109,12 @@ datasources:
   # =========================================================================
   - name: AlertManager
     type: alertmanager
+    uid: alertmanager-uid
+    orgId: 1
     access: proxy
     url: http://alertmanager:9093
     editable: false
     jsonData:
       implementation: prometheus
+      handleGrafanaManagedAlerts: true
     version: 1
