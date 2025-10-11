@@ -1207,7 +1207,7 @@ export function AdminScholarshipManagementInterface({
         <TabsContent value="documents" className="space-y-4">
           {/* Fixed Documents Card */}
           <Card className="border-2 border-green-100 shadow-sm">
-            <CardHeader className="pb-4 bg-green-50">
+            <CardHeader className="pb-4 bg-gradient-to-b from-green-50 to-white">
               <div>
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <FileText className="h-5 w-5 text-green-600" />

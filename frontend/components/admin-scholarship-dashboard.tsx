@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -1417,11 +1418,70 @@ export function AdminScholarshipDashboard({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="flex items-center gap-3">
-          <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-600 border-t-transparent"></div>
-          <span className="text-gray-600">載入獎學金資料中...</span>
+      <div className="space-y-6">
+        {/* Header 區塊（立即顯示） */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">獎學金申請管理</h2>
+            <p className="text-muted-foreground">
+              載入獎學金資料中...
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-28" /> {/* 操作紀錄按鈕 */}
+            <Skeleton className="h-10 w-28" /> {/* 重新整理按鈕 */}
+          </div>
         </div>
+
+        {/* Tabs 區塊（skeleton） */}
+        <Skeleton className="h-12 w-full rounded-lg" />
+
+        {/* 學期篩選卡片（skeleton） */}
+        <Card className="bg-gradient-to-r from-green-50 to-blue-50 border-green-200">
+          <CardHeader>
+            <div className="space-y-3">
+              <Skeleton className="h-6 w-32" />
+              <Skeleton className="h-4 w-64" />
+            </div>
+          </CardHeader>
+        </Card>
+
+        {/* 統計卡片（skeleton，保持 4 欄網格） */}
+        <div className="grid gap-4 md:grid-cols-4">
+          {[1, 2, 3, 4].map(i => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16 mb-1" />
+                <Skeleton className="h-3 w-24" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* 申請列表表格（skeleton） */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-32 mb-2" />
+            <Skeleton className="h-4 w-48" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* 搜尋列 */}
+            <div className="flex gap-4">
+              <Skeleton className="h-10 flex-1" />
+              <Skeleton className="h-10 w-32" />
+            </div>
+            {/* 表格列（8 個 skeleton 行） */}
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
