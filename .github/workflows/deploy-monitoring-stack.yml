@@ -135,15 +135,14 @@ jobs:
           mkdir -p /tmp/monitoring-images
 
           # Export required monitoring images to tar files
+          # Note: Redis is on AP-VM, so redis-exporter is NOT needed on DB-VM
           docker pull grafana/alloy:latest
           docker pull prom/node-exporter:latest
           docker pull prometheuscommunity/postgres-exporter:latest
-          docker pull oliver006/redis_exporter:latest
 
           docker save grafana/alloy:latest -o /tmp/monitoring-images/alloy.tar
           docker save prom/node-exporter:latest -o /tmp/monitoring-images/node-exporter.tar
           docker save prometheuscommunity/postgres-exporter:latest -o /tmp/monitoring-images/postgres-exporter.tar
-          docker save oliver006/redis_exporter:latest -o /tmp/monitoring-images/redis-exporter.tar
 
           echo "✅ Images exported successfully"
           ls -lh /tmp/monitoring-images/
@@ -174,11 +173,10 @@ jobs:
             docker load -i alloy.tar
             docker load -i node-exporter.tar
             docker load -i postgres-exporter.tar
-            docker load -i redis-exporter.tar
 
             # Verify images are loaded
             echo "Imported images:"
-            docker images | grep -E "grafana/alloy|prom/node-exporter|postgres-exporter|redis_exporter"
+            docker images | grep -E "grafana/alloy|prom/node-exporter|postgres-exporter"
 
             # Clean up tar files to save space
             rm -rf /tmp/monitoring-images
