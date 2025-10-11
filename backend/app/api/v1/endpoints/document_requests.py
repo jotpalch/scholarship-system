@@ -4,15 +4,14 @@ Document Request API endpoints
 
 import logging
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.core.exceptions import AuthorizationError, NotFoundError, ValidationError
-from app.core.security import get_current_user, require_staff, require_student
+from app.core.security import require_staff, require_student
 from app.db.deps import get_db
 from app.models.application import Application
 from app.models.document_request import DocumentRequest, DocumentRequestStatus
@@ -81,9 +80,9 @@ async def create_document_request(
         request=request,
     )
 
-    # Send email notification to student
+    # 觸發補件要求事件（會觸發自動化郵件規則）
     try:
-        from app.services.email_service import EmailService
+        from app.services.email_automation_service import email_automation_service
 
         # Get student email from application
         stmt_student = select(Application).options(joinedload(Application.user)).where(Application.id == application_id)
@@ -93,30 +92,29 @@ async def create_document_request(
         if app_with_user and app_with_user.user:
             student_data = app_with_user.student_data or {}
             student_email = student_data.get("email") or app_with_user.user.email
+            student_name = student_data.get("name") or app_with_user.user.name
 
-            email_service = EmailService(db)
-            await email_service.send_document_request_notification(
+            await email_automation_service.trigger_supplement_requested(
                 db=db,
-                application_data={
-                    "id": application.id,
+                application_id=application.id,
+                request_data={
                     "app_id": application.app_id,
-                    "student_name": student_data.get("name", ""),
-                    "scholarship_type": application.scholarship_name,
-                    "scholarship_type_id": application.scholarship_type_id,
+                    "student_name": student_name,
                     "student_email": student_email,
-                },
-                document_request_data={
                     "requested_documents": request_data.requested_documents,
                     "reason": request_data.reason,
-                    "notes": request_data.notes,
-                    "requested_by_id": current_user.id,
-                    "requested_by_name": current_user.username,
+                    "notes": request_data.notes or "",
+                    "requester_name": current_user.name or current_user.username,
+                    "deadline": "",  # Add if deadline field exists in DocumentRequest model
+                    "scholarship_type": application.scholarship_name,
+                    "scholarship_type_id": application.scholarship_type_id,
+                    "request_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                 },
             )
-            logger.info(f"Document request notification sent to {student_email}")
+            logger.info(f"Document request automation triggered for {student_email}")
     except Exception as e:
         # Log error but don't fail the request creation
-        logger.error(f"Failed to send document request email notification: {e}")
+        logger.error(f"Failed to trigger supplement request automation: {e}")
 
     # Build response
     response_data = DocumentRequestResponse.model_validate(document_request)
@@ -355,7 +353,6 @@ async def cancel_document_request(
 
     # Log audit trail
     audit_service = ApplicationAuditService(db)
-    description = f"Document request cancelled by {current_user.username}: {cancel_data.cancellation_reason}"
     # Create a custom audit log for cancellation
     await audit_service.log_status_update(
         application_id=document_request.application_id,

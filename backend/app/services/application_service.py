@@ -1326,11 +1326,40 @@ class ApplicationService:
 
         await self.db.commit()
 
-        # 自動寄信通知學院審查人員
+        # 觸發教授審查提交事件（會觸發自動化郵件規則）
         try:
-            await self.emailService.send_to_college_reviewers(application, db=self.db)
+            from app.services.email_automation_service import email_automation_service
+
+            # Fetch student and scholarship info for email context
+            stmt_student = select(User).where(User.id == application.user_id)
+            result_student = await self.db.execute(stmt_student)
+            student = result_student.scalar_one_or_none()
+
+            stmt_scholarship = select(ScholarshipType).where(ScholarshipType.id == application.scholarship_type_id)
+            result_scholarship = await self.db.execute(stmt_scholarship)
+            scholarship = result_scholarship.scalar_one_or_none()
+
+            await email_automation_service.trigger_professor_review_submitted(
+                db=self.db,
+                application_id=application.id,
+                review_data={
+                    "app_id": application.app_id,
+                    "student_name": student.name if student else "Unknown",
+                    "professor_name": user.name,
+                    "professor_email": user.email,
+                    "scholarship_type": scholarship.name if scholarship else "Unknown",
+                    "scholarship_type_id": application.scholarship_type_id,
+                    "review_result": review.review_status,
+                    "review_date": review.reviewed_at.strftime("%Y-%m-%d")
+                    if review.reviewed_at
+                    else datetime.utcnow().strftime("%Y-%m-%d"),
+                    "professor_recommendation": review.recommendation,
+                    "college_name": application.college_name if hasattr(application, "college_name") else "",
+                    "review_deadline": "",  # Add if available from scholarship config
+                },
+            )
         except Exception as e:
-            logger.error(f"Failed to send college reviewer notification email: {e}")
+            logger.error(f"Failed to trigger professor review automation: {e}")
 
         # Return fresh copy with all relationships loaded
         return await self.get_application_by_id(application_id)
