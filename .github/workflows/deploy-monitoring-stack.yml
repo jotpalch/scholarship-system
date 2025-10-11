@@ -138,17 +138,17 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.STAGING_DB_SSH_KEY }}" > ~/.ssh/staging_db
           chmod 600 ~/.ssh/staging_db
-          ssh-keyscan -H ${{ secrets.STAGING_DB_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -p 8822 -H ${{ secrets.STAGING_DB_HOST }} >> ~/.ssh/known_hosts
 
       - name: Deploy Alloy to Staging DB-VM
         run: |
-          # Copy Alloy config to DB-VM
-          scp -i ~/.ssh/staging_db \
+          # Copy Alloy config to DB-VM (using SSH port 8822)
+          scp -P 8822 -i ~/.ssh/staging_db \
             ./monitoring/config/alloy/staging-db-vm.alloy \
             ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/monitoring/config/alloy/
 
-          # Restart Alloy service on DB-VM
-          ssh -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
+          # Restart Alloy service on DB-VM (using SSH port 8822)
+          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
             cd /opt/scholarship
             docker-compose -f docker-compose.staging-db.yml restart alloy || true
           EOF

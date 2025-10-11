@@ -23,6 +23,8 @@ The monitoring stack is deployed using GitHub Actions workflows that:
 
 **Workflow File**: `.github/workflows/deploy-monitoring-stack.yml`
 
+**Grafana Access**: After deployment, access Grafana at `https://ss.test.nycu.edu.tw/monitoring/` (via nginx reverse proxy on staging AP-VM)
+
 ## Architecture
 
 ### Deployment Model
@@ -69,7 +71,7 @@ Configure these in GitHub repository settings → Secrets and variables → Acti
 |-------------|-------------|---------|
 | `GRAFANA_ADMIN_USER` | Grafana admin username | `admin` |
 | `GRAFANA_ADMIN_PASSWORD` | Grafana admin password | `SuperSecurePassword123!` |
-| `GRAFANA_ROOT_URL` | Grafana public URL | `https://staging-monitoring.example.com` |
+| `GRAFANA_ROOT_URL` | Grafana public URL (via nginx reverse proxy) | `https://ss.test.nycu.edu.tw/monitoring/` |
 
 ### Database VM Secrets (Required)
 
@@ -78,6 +80,8 @@ Configure these in GitHub repository settings → Secrets and variables → Acti
 | `STAGING_DB_HOST` | Staging database VM hostname or IP | `10.0.2.5` or `staging-db.example.com` |
 | `STAGING_DB_USER` | SSH username for staging DB-VM | `ubuntu` |
 | `STAGING_DB_SSH_KEY` | Private SSH key for staging DB-VM | `-----BEGIN RSA PRIVATE KEY-----...` |
+
+**Note**: The workflow is configured to use SSH port **8822** for DB-VM connections (not the default port 22).
 
 ### Alert Configuration Secrets (Optional)
 
@@ -260,12 +264,12 @@ docker-compose -f docker-compose.staging.yml restart alloy
 ### Step 3: Deploy Alloy on Staging DB-VM (remote)
 
 ```bash
-# From Staging AP-VM, deploy to DB-VM
-scp ./monitoring/config/alloy/staging-db-vm.alloy \
+# From Staging AP-VM, deploy to DB-VM (using SSH port 8822)
+scp -P 8822 ./monitoring/config/alloy/staging-db-vm.alloy \
   user@staging-db-vm:/opt/scholarship/monitoring/config/alloy/
 
-# Restart Alloy on DB-VM
-ssh user@staging-db-vm "cd /opt/scholarship && docker-compose -f docker-compose.staging-db.yml restart alloy"
+# Restart Alloy on DB-VM (using SSH port 8822)
+ssh -p 8822 user@staging-db-vm "cd /opt/scholarship && docker-compose -f docker-compose.staging-db.yml restart alloy"
 ```
 
 ### Step 4: Verify Deployment
