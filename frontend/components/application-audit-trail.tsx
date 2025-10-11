@@ -45,7 +45,7 @@ export function ApplicationAuditTrail({
       setError(null);
       const response = await apiClient.applications.getAuditTrail(applicationId);
       if (response.success) {
-        setAuditLogs(response.data);
+        setAuditLogs(response.data ?? []);
       } else {
         setError(response.message || "Failed to load audit trail");
       }

@@ -65,6 +65,7 @@ import {
   Plus,
   RefreshCw,
   Trash2,
+  FileText,
 } from "lucide-react";
 import { useCollegeApplications } from "@/hooks/use-admin";
 import { User } from "@/types/user";

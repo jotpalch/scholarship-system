@@ -659,7 +659,7 @@ export function ScholarshipApplicationStep({
                 <Checkbox
                   id="agree-terms"
                   checked={agreedToTerms}
-                  onCheckedChange={(checked) => setAgreedToTerms(checked as boolean)}
+                  onCheckedChange={(checked) => setAgreedToTerms(checked === true)}
                   className="h-5 w-5"
                 />
                 <Label
@@ -702,7 +702,7 @@ export function ScholarshipApplicationStep({
                 disabled={
                   submitting ||
                   formProgress < 100 ||
-                  (selectedScholarship?.terms_document_url && !agreedToTerms)
+                  Boolean(selectedScholarship?.terms_document_url && !agreedToTerms)
                 }
                 size="lg"
                 className="nycu-gradient text-white px-8"
