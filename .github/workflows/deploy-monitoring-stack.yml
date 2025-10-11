@@ -29,44 +29,31 @@ jobs:
           # Copy monitoring directory to /opt/scholarship/monitoring
           cp -r ./monitoring/* /opt/scholarship/monitoring/
 
-      - name: Set environment variables
-        run: |
-          cd /opt/scholarship/monitoring
-
-          # Create .env file from GitHub secrets
-          cat > .env.monitoring << 'ENVEOF'
-          GRAFANA_ADMIN_USER=${{ secrets.GRAFANA_ADMIN_USER }}
-          GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-          GRAFANA_SECRET_KEY=${{ secrets.GRAFANA_SECRET_KEY }}
-          GRAFANA_ROOT_URL=${{ secrets.GRAFANA_ROOT_URL }}
-          GF_LOG_LEVEL=info
-
-          # Optional alert configuration
-          ALERT_EMAIL_FROM=${{ secrets.ALERT_EMAIL_FROM }}
-          ALERT_SMTP_HOST=${{ secrets.ALERT_SMTP_HOST }}
-          ALERT_SMTP_PORT=${{ secrets.ALERT_SMTP_PORT }}
-          ALERT_SMTP_USER=${{ secrets.ALERT_SMTP_USER }}
-          ALERT_SMTP_PASSWORD=${{ secrets.ALERT_SMTP_PASSWORD }}
-          ALERT_SLACK_WEBHOOK=${{ secrets.ALERT_SLACK_WEBHOOK }}
-          ENVEOF
-
       - name: Pull latest monitoring images
         run: |
           cd /opt/scholarship/monitoring
-          docker-compose -f docker-compose.monitoring.yml pull
+          docker compose -f docker-compose.monitoring.yml pull
 
       - name: Deploy monitoring stack
         run: |
           cd /opt/scholarship/monitoring
 
-          # Export environment variables for docker-compose
+          # Export required environment variables from GitHub secrets
           export GRAFANA_ADMIN_USER="${{ secrets.GRAFANA_ADMIN_USER }}"
           export GRAFANA_ADMIN_PASSWORD="${{ secrets.GRAFANA_ADMIN_PASSWORD }}"
           export GRAFANA_SECRET_KEY="${{ secrets.GRAFANA_SECRET_KEY }}"
           export GRAFANA_ROOT_URL="${{ secrets.GRAFANA_ROOT_URL }}"
 
+          # Optional alert configuration
+          export ALERT_EMAIL_FROM="${{ secrets.ALERT_EMAIL_FROM }}"
+          export ALERT_SMTP_HOST="${{ secrets.ALERT_SMTP_HOST }}"
+          export ALERT_SMTP_PORT="${{ secrets.ALERT_SMTP_PORT }}"
+          export ALERT_SMTP_USER="${{ secrets.ALERT_SMTP_USER }}"
+          export ALERT_SMTP_PASSWORD="${{ secrets.ALERT_SMTP_PASSWORD }}"
+          export ALERT_SLACK_WEBHOOK="${{ secrets.ALERT_SLACK_WEBHOOK }}"
+
           # Start/restart monitoring stack
-          docker-compose -f docker-compose.monitoring.yml up -d
+          docker compose -f docker-compose.monitoring.yml up -d
 
           # Wait for services to be healthy
           echo "Waiting for services to start..."
@@ -122,7 +109,7 @@ jobs:
           # Restart Alloy service if it's running
           cd /opt/scholarship
           if docker ps -q -f name=alloy > /dev/null 2>&1; then
-            docker-compose -f docker-compose.staging.yml restart alloy || true
+            docker compose -f docker-compose.staging.yml restart alloy || true
           fi
 
   deploy-staging-db-monitoring:
@@ -152,7 +139,7 @@ jobs:
           # Restart Alloy service on DB-VM (using SSH port 8822)
           ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
             cd /opt/scholarship
-            docker-compose -f docker-compose.staging-db.yml restart alloy || true
+            docker compose -f docker-compose.staging-db.yml restart alloy || true
           EOF
 
       - name: Verify staging metrics
