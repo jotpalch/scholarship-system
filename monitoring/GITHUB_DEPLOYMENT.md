@@ -1,11 +1,13 @@
 # GitHub Actions Deployment Guide
 
-Complete guide for deploying the monitoring infrastructure using GitHub Actions and GitHub Secrets.
+Complete guide for deploying the monitoring infrastructure using GitHub Actions with self-hosted runner.
 
 ## Table of Contents
 
 - [Overview](#overview)
+- [Architecture](#architecture)
 - [Required GitHub Secrets](#required-github-secrets)
+- [Self-Hosted Runner Setup](#self-hosted-runner-setup)
 - [Deployment Workflow](#deployment-workflow)
 - [Manual Deployment](#manual-deployment)
 - [Troubleshooting](#troubleshooting)
@@ -13,28 +15,69 @@ Complete guide for deploying the monitoring infrastructure using GitHub Actions 
 ## Overview
 
 The monitoring stack is deployed using GitHub Actions workflows that:
-1. Deploy the central monitoring server (Grafana, Loki, Prometheus, AlertManager)
-2. Deploy monitoring agents on application VMs (staging/production)
-3. Deploy monitoring agents on database VMs (staging/production)
+1. Deploy the central monitoring server (Grafana, Loki, Prometheus, AlertManager) **on Staging AP-VM**
+2. Deploy monitoring agents on Staging AP-VM (localhost)
+3. Deploy monitoring agents on Staging DB-VM (via SSH)
 4. Perform health checks to ensure all services are running
 5. Verify Prometheus targets are UP and collecting metrics
 
 **Workflow File**: `.github/workflows/deploy-monitoring-stack.yml`
 
+## Architecture
+
+### Deployment Model
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Staging AP-VM (localhost)                              │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │  GitHub Actions Self-Hosted Runner                │  │
+│  └───────────────────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │  Monitoring Stack                                 │  │
+│  │  - Grafana, Prometheus, Loki, AlertManager        │  │
+│  │  - Grafana Alloy (staging-ap-vm.alloy)            │  │
+│  │  - Node Exporter, cAdvisor, Nginx Exporter        │  │
+│  └───────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          │ SSH
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│  Staging DB-VM (remote)                                 │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │  Monitoring Agents                                │  │
+│  │  - Grafana Alloy (staging-db-vm.alloy)            │  │
+│  │  - Postgres Exporter, Redis Exporter, MinIO      │  │
+│  └───────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Key Points**:
+- **Self-hosted runner**: GitHub Actions workflow runs ON Staging AP-VM
+- **Monitoring server**: Co-located on Staging AP-VM (localhost)
+- **No SSH for AP-VM**: All operations on AP-VM use local commands
+- **SSH only for DB-VM**: Remote deployment to Staging DB-VM
+
 ## Required GitHub Secrets
 
-### Monitoring Server Secrets
+Configure these in GitHub repository settings → Secrets and variables → Actions → Environment secrets (staging):
 
-Configure these in GitHub repository settings → Secrets and variables → Actions:
+### Core Monitoring Secrets (Required)
 
 | Secret Name | Description | Example |
 |-------------|-------------|---------|
-| `MONITORING_SERVER_HOST` | Monitoring server hostname or IP | `monitoring.example.com` |
-| `MONITORING_SERVER_USER` | SSH username for monitoring server | `ubuntu` |
-| `MONITORING_SERVER_SSH_KEY` | Private SSH key for monitoring server | `-----BEGIN RSA PRIVATE KEY-----...` |
 | `GRAFANA_ADMIN_USER` | Grafana admin username | `admin` |
 | `GRAFANA_ADMIN_PASSWORD` | Grafana admin password | `SuperSecurePassword123!` |
-| `GRAFANA_ROOT_URL` | Grafana public URL | `https://monitoring.example.com` |
+| `GRAFANA_ROOT_URL` | Grafana public URL | `https://staging-monitoring.example.com` |
+
+### Database VM Secrets (Required)
+
+| Secret Name | Description | Example |
+|-------------|-------------|---------|
+| `STAGING_DB_HOST` | Staging database VM hostname or IP | `10.0.2.5` or `staging-db.example.com` |
+| `STAGING_DB_USER` | SSH username for staging DB-VM | `ubuntu` |
+| `STAGING_DB_SSH_KEY` | Private SSH key for staging DB-VM | `-----BEGIN RSA PRIVATE KEY-----...` |
 
 ### Alert Configuration Secrets (Optional)
 
@@ -47,27 +90,60 @@ Configure these in GitHub repository settings → Secrets and variables → Acti
 | `ALERT_SMTP_PASSWORD` | SMTP password | No |
 | `ALERT_SLACK_WEBHOOK` | Slack webhook URL for alerts | No |
 
-### Staging Environment Secrets
+### Secrets Summary
 
-| Secret Name | Description | Example |
-|-------------|-------------|---------|
-| `STAGING_AP_HOST` | Staging application VM hostname | `staging-ap.example.com` |
-| `STAGING_AP_USER` | SSH username for staging AP-VM | `ubuntu` |
-| `STAGING_AP_SSH_KEY` | Private SSH key for staging AP-VM | `-----BEGIN RSA PRIVATE KEY-----...` |
-| `STAGING_DB_HOST` | Staging database VM hostname | `staging-db.example.com` |
-| `STAGING_DB_USER` | SSH username for staging DB-VM | `ubuntu` |
-| `STAGING_DB_SSH_KEY` | Private SSH key for staging DB-VM | `-----BEGIN RSA PRIVATE KEY-----...` |
+**Total Required Secrets**: 6 (3 core + 3 DB-VM)
 
-### Production Environment Secrets
+**Removed from Previous Design**:
+- ❌ `MONITORING_SERVER_*` secrets (no longer needed - monitoring server is localhost)
+- ❌ `STAGING_AP_*` secrets (no longer needed - AP-VM is localhost)
+- ❌ `PROD_*` secrets (production deployment not in this workflow)
 
-| Secret Name | Description | Example |
-|-------------|-------------|---------|
-| `PROD_AP_HOST` | Production application VM hostname | `prod-ap.example.com` |
-| `PROD_AP_USER` | SSH username for production AP-VM | `ubuntu` |
-| `PROD_AP_SSH_KEY` | Private SSH key for production AP-VM | `-----BEGIN RSA PRIVATE KEY-----...` |
-| `PROD_DB_HOST` | Production database VM hostname | `prod-db.example.com` |
-| `PROD_DB_USER` | SSH username for production DB-VM | `ubuntu` |
-| `PROD_DB_SSH_KEY` | Private SSH key for production DB-VM | `-----BEGIN RSA PRIVATE KEY-----...` |
+## Self-Hosted Runner Setup
+
+### Prerequisites
+
+The GitHub Actions runner must be installed on Staging AP-VM. Follow these steps:
+
+### 1. Install GitHub Actions Runner
+
+```bash
+# SSH to Staging AP-VM
+ssh user@staging-ap-vm
+
+# Create runner directory
+mkdir -p ~/actions-runner && cd ~/actions-runner
+
+# Download latest runner
+curl -o actions-runner-linux-x64-2.311.0.tar.gz -L \
+  https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-x64-2.311.0.tar.gz
+
+# Extract
+tar xzf ./actions-runner-linux-x64-2.311.0.tar.gz
+
+# Configure runner
+./config.sh --url https://github.com/YOUR_ORG/YOUR_REPO --token YOUR_TOKEN
+
+# Install as service
+sudo ./svc.sh install
+sudo ./svc.sh start
+```
+
+### 2. Verify Runner Installation
+
+```bash
+# Check runner status
+sudo ./svc.sh status
+
+# View runner logs
+journalctl -u actions.runner.* -f
+```
+
+### 3. Verify in GitHub
+
+1. Go to repository settings → Actions → Runners
+2. You should see your self-hosted runner listed as "Idle"
+3. Label should show "self-hosted"
 
 ## Deployment Workflow
 
@@ -77,146 +153,194 @@ The workflow automatically triggers when:
 - Changes are pushed to `main` branch in the `monitoring/` directory
 - Changes are made to the workflow file itself
 
-**Automatic deployments only deploy to Staging environment by default.**
+**Automatic deployments deploy to Staging environment only.**
 
 ### Manual Deployment
 
-Trigger manual deployment for staging or production:
+Trigger manual deployment:
 
 1. Go to GitHub Actions tab in your repository
 2. Select "Deploy Monitoring Stack" workflow
 3. Click "Run workflow"
-4. Choose environment:
-   - **staging**: Deploy to staging environment
-   - **production**: Deploy to production environment
-5. Click "Run workflow"
+4. Click "Run workflow" to confirm
 
 ### Deployment Steps
 
-The workflow performs these steps:
+The workflow performs these steps in 2 jobs:
 
-**1. Deploy Monitoring Server**
-- Copies monitoring configuration to server
-- Sets environment variables from GitHub secrets
-- Pulls latest Docker images
-- Starts/restarts monitoring stack
-- Runs health checks on all 4 services
+#### Job 1: Deploy Monitoring Server (Staging AP-VM)
 
-**2. Deploy Environment Monitoring (Staging or Production)**
-- Copies Grafana Alloy configs to AP-VM and DB-VM
-- Restarts monitoring agents
-- Verifies all Prometheus targets are UP
-- Reports any failed targets
+**Runs on**: Self-hosted runner (localhost operations)
 
-**3. Health Verification**
-- Grafana API health check
-- Prometheus health check
-- Loki readiness check
-- AlertManager health check
-- Prometheus targets status check
+1. **Checkout code**: Clone repository to runner workspace
+2. **Create directories**: Create `/opt/scholarship/monitoring` with proper permissions
+3. **Deploy configuration**: Copy monitoring configs to `/opt/scholarship/monitoring/`
+4. **Set environment variables**: Create `.env.monitoring` from GitHub secrets
+5. **Pull images**: Update to latest Docker images
+6. **Deploy stack**: Start monitoring services (Grafana, Prometheus, Loki, AlertManager)
+7. **Health check**: Verify all 4 services are healthy
+8. **Deploy Alloy**: Copy `staging-ap-vm.alloy` config and restart Alloy
+
+#### Job 2: Deploy Staging DB-VM Monitoring
+
+**Runs on**: Self-hosted runner (SSH to remote DB-VM)
+
+1. **Setup SSH**: Configure SSH key for DB-VM access
+2. **Deploy Alloy**: Copy `staging-db-vm.alloy` config to DB-VM via SCP
+3. **Restart Alloy**: Restart monitoring agent on DB-VM
+4. **Verify metrics**: Check Prometheus targets are UP
+5. **Check logs**: Verify Loki is receiving logs
+6. **Cleanup**: Remove SSH keys
+7. **Summary**: Display monitoring access URLs
+
+### Health Verification
+
+The workflow performs comprehensive health checks:
+
+- ✅ Grafana API health check (`/api/health`)
+- ✅ Prometheus health check (`/-/healthy`)
+- ✅ Loki readiness check (`/ready`)
+- ✅ AlertManager health check (`/-/healthy`)
+- ✅ Prometheus targets status (all staging targets UP)
+- ✅ Loki log ingestion (staging logs being received)
 
 ## Manual Deployment
 
 If you prefer to deploy manually without GitHub Actions:
 
-### Step 1: Set Up SSH Access
+### Step 1: Deploy Monitoring Server (on Staging AP-VM)
 
 ```bash
-# On your local machine
-ssh-copy-id user@monitoring-server
-ssh-copy-id user@staging-ap-vm
-ssh-copy-id user@staging-db-vm
-ssh-copy-id user@prod-ap-vm  # For production
-ssh-copy-id user@prod-db-vm  # For production
-```
+# Already on Staging AP-VM
+cd /path/to/repository
 
-### Step 2: Deploy Monitoring Server
+# Create monitoring directory
+sudo mkdir -p /opt/scholarship/monitoring
+sudo chown -R $USER:$USER /opt/scholarship/monitoring
 
-```bash
 # Copy monitoring configuration
-rsync -avz --delete ./monitoring/ user@monitoring-server:/opt/scholarship/monitoring/
-
-# SSH to monitoring server
-ssh user@monitoring-server
-
-cd /opt/scholarship/monitoring
+cp -r ./monitoring/* /opt/scholarship/monitoring/
 
 # Create .env file
+cd /opt/scholarship/monitoring
 cat > .env.monitoring << EOF
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=YourSecurePassword
-GRAFANA_ROOT_URL=https://monitoring.example.com
+GRAFANA_ROOT_URL=https://staging-monitoring.example.com
 GF_LOG_LEVEL=info
 EOF
 
 # Deploy monitoring stack
+docker-compose -f docker-compose.monitoring.yml pull
 docker-compose -f docker-compose.monitoring.yml up -d
 
+# Wait for services to start
+sleep 30
+
 # Check health
-docker-compose -f docker-compose.monitoring.yml ps
+docker ps --filter "name=monitoring_"
 curl http://localhost:3000/api/health
 curl http://localhost:9090/-/healthy
 curl http://localhost:3100/ready
 curl http://localhost:9093/-/healthy
 ```
 
-### Step 3: Deploy Staging Monitoring
+### Step 2: Deploy Alloy on Staging AP-VM (localhost)
 
 ```bash
-# Deploy to Staging AP-VM
-scp ./monitoring/config/alloy/staging-ap-vm.alloy user@staging-ap-vm:/opt/scholarship/monitoring/config/alloy/
-ssh user@staging-ap-vm "cd /opt/scholarship && docker-compose -f docker-compose.staging.yml up -d"
+# Still on Staging AP-VM
+sudo mkdir -p /opt/scholarship/monitoring/config/alloy
+cp ./monitoring/config/alloy/staging-ap-vm.alloy /opt/scholarship/monitoring/config/alloy/
 
-# Deploy to Staging DB-VM
-scp ./monitoring/config/alloy/staging-db-vm.alloy user@staging-db-vm:/opt/scholarship/monitoring/config/alloy/
-ssh user@staging-db-vm "cd /opt/scholarship && docker-compose -f docker-compose.staging-db.yml up -d"
-
-# Verify targets
-ssh user@monitoring-server "curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.environment==\"staging\") | {job: .labels.job, health: .health}'"
+# Restart Alloy if running
+cd /opt/scholarship
+docker-compose -f docker-compose.staging.yml restart alloy
 ```
 
-### Step 4: Deploy Production Monitoring (When Ready)
+### Step 3: Deploy Alloy on Staging DB-VM (remote)
 
 ```bash
-# Deploy to Production AP-VM
-scp ./monitoring/config/alloy/prod-ap-vm.alloy user@prod-ap-vm:/opt/scholarship/monitoring/config/alloy/
-ssh user@prod-ap-vm "cd /opt/scholarship && docker-compose -f docker-compose.prod.yml up -d"
+# From Staging AP-VM, deploy to DB-VM
+scp ./monitoring/config/alloy/staging-db-vm.alloy \
+  user@staging-db-vm:/opt/scholarship/monitoring/config/alloy/
 
-# Deploy to Production DB-VM
-scp ./monitoring/config/alloy/prod-db-vm.alloy user@prod-db-vm:/opt/scholarship/monitoring/config/alloy/
-ssh user@prod-db-vm "cd /opt/scholarship && docker-compose -f docker-compose.prod-db.yml up -d"
+# Restart Alloy on DB-VM
+ssh user@staging-db-vm "cd /opt/scholarship && docker-compose -f docker-compose.staging-db.yml restart alloy"
+```
 
-# Verify targets
-ssh user@monitoring-server "curl -s http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | select(.labels.environment==\"prod\") | {job: .labels.job, health: .health}'"
+### Step 4: Verify Deployment
+
+```bash
+# On Staging AP-VM
+# Check Prometheus targets
+curl -s http://localhost:9090/api/v1/targets | \
+  jq '.data.activeTargets[] | select(.labels.environment=="staging") | {job: .labels.job, health: .health}'
+
+# Check Loki logs
+curl -H "X-Scope-OrgID: staging" -G "http://localhost:3100/loki/api/v1/query" \
+  --data-urlencode 'query={environment="staging"}' \
+  --data-urlencode 'limit=5'
 ```
 
 ## Troubleshooting
 
-### Deployment Fails - SSH Connection Error
+### Self-Hosted Runner Issues
 
-**Symptom**: GitHub Actions workflow fails with "Permission denied (publickey)"
+#### Runner Not Picking Up Jobs
+
+**Symptom**: Workflow queued but not starting
 
 **Solution**:
-1. Verify SSH key is correctly added to GitHub secrets
+```bash
+# Check runner status
+sudo systemctl status actions.runner.*
+
+# Restart runner
+sudo ./svc.sh restart
+
+# View runner logs
+journalctl -u actions.runner.* -f
+```
+
+#### Runner Permission Errors
+
+**Symptom**: "Permission denied" when creating directories
+
+**Solution**:
+```bash
+# Ensure runner user has sudo access
+sudo usermod -aG sudo runner-user
+
+# Or set specific permissions for /opt/scholarship
+sudo chown -R runner-user:runner-user /opt/scholarship
+```
+
+### Deployment Fails - SSH Connection to DB-VM
+
+**Symptom**: GitHub Actions workflow fails with "Permission denied (publickey)" for DB-VM
+
+**Solution**:
+1. Verify SSH key is correctly added to GitHub secrets (Environment: staging)
 2. Ensure the private key format is correct (no extra line breaks)
-3. Check that the public key is added to `~/.ssh/authorized_keys` on the server
-4. Verify the SSH user has correct permissions:
+3. Check that the public key is added to `~/.ssh/authorized_keys` on DB-VM
+4. Verify SSH key permissions on DB-VM:
    ```bash
+   ssh user@staging-db-vm
    chmod 700 ~/.ssh
    chmod 600 ~/.ssh/authorized_keys
    ```
 
-### Deployment Succeeds But Services Don't Start
+### Services Don't Start After Deployment
 
 **Symptom**: Workflow completes but health checks fail
 
 **Solution**:
 ```bash
-# SSH to monitoring server
-ssh user@monitoring-server
+# On Staging AP-VM
+cd /opt/scholarship/monitoring
 
 # Check container logs
-docker-compose -f /opt/scholarship/monitoring/docker-compose.monitoring.yml logs --tail=100
+docker-compose -f docker-compose.monitoring.yml logs --tail=100
 
 # Check specific service
 docker logs monitoring_grafana --tail=50
@@ -224,32 +348,31 @@ docker logs monitoring_prometheus --tail=50
 docker logs monitoring_loki --tail=50
 
 # Restart services
-docker-compose -f /opt/scholarship/monitoring/docker-compose.monitoring.yml restart
+docker-compose -f docker-compose.monitoring.yml restart
 ```
 
 ### Prometheus Targets Showing as DOWN
 
-**Symptom**: Prometheus reports targets as "DOWN" in `/targets` page
+**Symptom**: Prometheus reports DB-VM targets as "DOWN" in `/targets` page
 
 **Diagnosis**:
 ```bash
-# Check if monitoring agents are running
-ssh user@staging-ap-vm "docker ps | grep -E '(alloy|exporter)'"
-ssh user@staging-db-vm "docker ps | grep -E '(alloy|exporter)'"
+# Check if Alloy is running on DB-VM
+ssh user@staging-db-vm "docker ps | grep alloy"
 
-# Check Alloy logs
-ssh user@staging-ap-vm "docker logs scholarship_alloy_staging_ap --tail=100"
+# Check Alloy logs on DB-VM
+ssh user@staging-db-vm "docker logs scholarship_alloy_staging_db --tail=100"
 
-# Test exporter endpoints directly
-ssh user@staging-ap-vm "curl http://localhost:9100/metrics"  # Node Exporter
-ssh user@staging-ap-vm "curl http://localhost:9113/metrics"  # Nginx Exporter
+# Test exporter endpoints on DB-VM
+ssh user@staging-db-vm "curl http://localhost:9187/metrics"  # Postgres Exporter
+ssh user@staging-db-vm "curl http://localhost:9121/metrics"  # Redis Exporter
 ```
 
 **Solution**:
-1. Ensure all exporter containers are running
-2. Check Docker network connectivity
-3. Verify Prometheus scrape configuration
-4. Restart monitoring services
+1. Ensure Alloy container is running on DB-VM
+2. Check Docker network connectivity between VMs
+3. Verify firewall allows connections on exporter ports
+4. Restart Alloy on DB-VM
 
 ### Loki Not Receiving Logs
 
@@ -257,44 +380,54 @@ ssh user@staging-ap-vm "curl http://localhost:9113/metrics"  # Nginx Exporter
 
 **Diagnosis**:
 ```bash
-# Check Alloy is pushing logs
-ssh user@staging-ap-vm "docker logs scholarship_alloy_staging_ap | grep -i loki"
+# Check Alloy on AP-VM is pushing logs
+docker logs scholarship_alloy_staging_ap | grep -i loki
+
+# Check Alloy on DB-VM is pushing logs
+ssh user@staging-db-vm "docker logs scholarship_alloy_staging_db | grep -i loki"
 
 # Check Loki ingester
-ssh user@monitoring-server "curl http://localhost:3100/ingester/ring | jq"
+curl http://localhost:3100/ingester/ring | jq
 
-# Query Loki directly
-curl -G -s "http://monitoring-server:3100/loki/api/v1/query" \
+# Query Loki directly with tenant header
+curl -G -s "http://localhost:3100/loki/api/v1/query" \
   --data-urlencode 'query={environment="staging"}' \
   --data-urlencode 'limit=10' \
   -H "X-Scope-OrgID: staging"
 ```
 
 **Solution**:
-1. Verify `X-Scope-OrgID` header is set correctly in Alloy config
+1. Verify `X-Scope-OrgID: staging` header is set in Alloy configs
 2. Check Loki has sufficient disk space
-3. Verify Loki is reachable from Alloy containers
-4. Restart Loki and Alloy services
+3. Verify Alloy can reach Loki (port 3100)
+4. Restart Loki and both Alloy instances
 
 ### GitHub Secrets Not Being Applied
 
 **Symptom**: Services start with default values instead of secret values
 
 **Solution**:
-1. Verify secrets are correctly named (exact match including case)
-2. Check secrets are set in the correct environment (staging/production)
-3. Re-run workflow after updating secrets
-4. Verify docker-compose uses `${VAR:-default}` pattern
+1. Verify secrets are set in **Environment secrets** (not repository secrets)
+2. Environment name must be exactly "staging" (lowercase)
+3. Secret names must match exactly (case-sensitive)
+4. Re-run workflow after updating secrets
+5. Check `.env.monitoring` file was created correctly:
+   ```bash
+   cat /opt/scholarship/monitoring/.env.monitoring
+   ```
 
-### Workflow Permission Denied
+### Workflow Cannot Access /opt/scholarship
 
 **Symptom**: Workflow fails with "permission denied" when copying files
 
 **Solution**:
 ```bash
-# On target server, ensure deployment directory exists and has correct ownership
-ssh user@monitoring-server "sudo mkdir -p /opt/scholarship/monitoring"
-ssh user@monitoring-server "sudo chown -R user:user /opt/scholarship"
+# On Staging AP-VM
+sudo mkdir -p /opt/scholarship/monitoring
+sudo chown -R $(whoami):$(whoami) /opt/scholarship
+
+# Or if runner runs as specific user
+sudo chown -R runner-user:runner-user /opt/scholarship
 ```
 
 ## Viewing Deployment Logs
@@ -306,19 +439,34 @@ ssh user@monitoring-server "sudo chown -R user:user /opt/scholarship"
 3. Click on individual job steps to see logs
 4. Download logs using "Download log archive" button
 
-### On Servers
+### On Staging AP-VM (Monitoring Server)
 
 ```bash
 # View all monitoring services logs
-ssh user@monitoring-server "docker-compose -f /opt/scholarship/monitoring/docker-compose.monitoring.yml logs --tail=200"
+docker-compose -f /opt/scholarship/monitoring/docker-compose.monitoring.yml logs --tail=200
 
 # View specific service logs
-ssh user@monitoring-server "docker logs monitoring_grafana -f"
-ssh user@monitoring-server "docker logs monitoring_prometheus -f"
+docker logs monitoring_grafana -f
+docker logs monitoring_prometheus -f
+docker logs monitoring_loki -f
+docker logs monitoring_alertmanager -f
 
-# View Alloy logs on application VMs
-ssh user@staging-ap-vm "docker logs scholarship_alloy_staging_ap -f"
-ssh user@staging-db-vm "docker logs scholarship_alloy_staging_db -f"
+# View Alloy logs on AP-VM
+docker logs scholarship_alloy_staging_ap -f
+```
+
+### On Staging DB-VM
+
+```bash
+# SSH to DB-VM
+ssh user@staging-db-vm
+
+# View Alloy logs
+docker logs scholarship_alloy_staging_db -f
+
+# View exporter logs
+docker logs postgres_exporter_staging -f
+docker logs redis_exporter_staging -f
 ```
 
 ## Rollback Procedure
@@ -326,19 +474,25 @@ ssh user@staging-db-vm "docker logs scholarship_alloy_staging_db -f"
 If deployment causes issues, rollback to previous version:
 
 ```bash
-# On monitoring server
-ssh user@monitoring-server
-
+# On Staging AP-VM
 cd /opt/scholarship/monitoring
 
 # Stop current stack
 docker-compose -f docker-compose.monitoring.yml down
 
-# Restore from backup (if you have one)
-# Or checkout previous version from git
-git checkout <previous-commit>
+# Option 1: Restore from backup (recommended)
+# See backup-metrics.sh and restore-monitoring.sh scripts
+
+# Option 2: Checkout previous commit
+cd /path/to/repository
+git log --oneline monitoring/  # Find previous working commit
+git checkout <commit-hash> -- monitoring/
+
+# Copy to deployment directory
+cp -r ./monitoring/* /opt/scholarship/monitoring/
 
 # Start stack
+cd /opt/scholarship/monitoring
 docker-compose -f docker-compose.monitoring.yml up -d
 
 # Verify
@@ -347,20 +501,35 @@ docker-compose -f docker-compose.monitoring.yml ps
 
 ## Security Best Practices
 
-1. **Rotate SSH Keys Regularly**: Update GitHub secrets with new keys every 90 days
-2. **Use Strong Passwords**: Grafana admin password should be at least 16 characters
-3. **Limit SSH Key Access**: Use separate keys for staging and production
-4. **Monitor Secret Usage**: Review GitHub Actions logs for any secret exposure
-5. **Enable Branch Protection**: Require reviews for changes to monitoring configs
-6. **Use Environment Protection**: Enable required reviewers for production deployments
+1. **Rotate SSH Keys Regularly**: Update GitHub secrets with new DB-VM SSH key every 90 days
+2. **Use Strong Passwords**: Grafana admin password should be at least 16 characters with mixed case, numbers, and symbols
+3. **Limit SSH Key Access**: Use a dedicated SSH key for DB-VM deployment (not your personal key)
+4. **Monitor Secret Usage**: Review GitHub Actions logs to ensure no secrets are accidentally exposed
+5. **Enable Branch Protection**: Require reviews for changes to monitoring configs before merging to main
+6. **Use Environment Protection**: Enable required reviewers for staging deployments in repository settings
+7. **Runner Security**: Keep self-hosted runner updated and isolated from production services
+8. **Firewall Rules**: Only allow necessary ports between AP-VM and DB-VM
+
+## Production Deployment
+
+This workflow is designed for **staging only**. When ready for production:
+
+1. Create a separate self-hosted runner on production AP-VM
+2. Create new GitHub secrets for production environment
+3. Create a new workflow file: `deploy-monitoring-stack-prod.yml`
+4. Use `prod-ap-vm.alloy` and `prod-db-vm.alloy` configs
+5. Update Prometheus scrape configs for production targets
+6. Implement change control and approval process
 
 ## References
 
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
+- [GitHub Self-Hosted Runners](https://docs.github.com/en/actions/hosting-your-own-runners)
 - [GitHub Encrypted Secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets)
 - [SSH Key Authentication](https://docs.github.com/en/authentication/connecting-to-github-with-ssh)
 
 ---
 
 **Last Updated**: 2025-01-11
+**Architecture**: Self-hosted runner on Staging AP-VM (localhost deployment)
 **Maintained By**: Scholarship System Development Team

@@ -8,258 +8,193 @@ on:
       - 'monitoring/**'
       - '.github/workflows/deploy-monitoring-stack.yml'
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Environment to deploy'
-        required: true
-        default: 'staging'
-        type: choice
-        options:
-          - staging
-          - production
 
 jobs:
   deploy-monitoring-server:
-    name: Deploy Monitoring Server
-    runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'staging' }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.MONITORING_SERVER_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.MONITORING_SERVER_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Deploy monitoring configuration
-        run: |
-          # Copy monitoring directory to server
-          rsync -avz --delete \
-            -e "ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no" \
-            ./monitoring/ \
-            ${{ secrets.MONITORING_SERVER_USER }}@${{ secrets.MONITORING_SERVER_HOST }}:/opt/scholarship/monitoring/
-
-      - name: Set environment variables on server
-        run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.MONITORING_SERVER_USER }}@${{ secrets.MONITORING_SERVER_HOST }} << 'EOF'
-            cd /opt/scholarship/monitoring
-
-            # Create .env file from secrets (optional, for non-GitHub deployments)
-            cat > .env.monitoring << ENVEOF
-            GRAFANA_ADMIN_USER=${{ secrets.GRAFANA_ADMIN_USER }}
-            GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-            GRAFANA_ROOT_URL=${{ secrets.GRAFANA_ROOT_URL }}
-            GF_LOG_LEVEL=info
-
-            # Optional alert configuration
-            ALERT_EMAIL_FROM=${{ secrets.ALERT_EMAIL_FROM }}
-            ALERT_SMTP_HOST=${{ secrets.ALERT_SMTP_HOST }}
-            ALERT_SMTP_PORT=${{ secrets.ALERT_SMTP_PORT }}
-            ALERT_SMTP_USER=${{ secrets.ALERT_SMTP_USER }}
-            ALERT_SMTP_PASSWORD=${{ secrets.ALERT_SMTP_PASSWORD }}
-            ALERT_SLACK_WEBHOOK=${{ secrets.ALERT_SLACK_WEBHOOK }}
-            ENVEOF
-          EOF
-
-      - name: Deploy monitoring stack
-        run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.MONITORING_SERVER_USER }}@${{ secrets.MONITORING_SERVER_HOST }} << 'EOF'
-            cd /opt/scholarship/monitoring
-
-            # Pull latest images
-            docker-compose -f docker-compose.monitoring.yml pull
-
-            # Deploy with environment variables
-            export GRAFANA_ADMIN_USER="${{ secrets.GRAFANA_ADMIN_USER }}"
-            export GRAFANA_ADMIN_PASSWORD="${{ secrets.GRAFANA_ADMIN_PASSWORD }}"
-            export GRAFANA_ROOT_URL="${{ secrets.GRAFANA_ROOT_URL }}"
-
-            # Start/restart monitoring stack
-            docker-compose -f docker-compose.monitoring.yml up -d
-
-            # Wait for services to be healthy
-            sleep 30
-          EOF
-
-      - name: Health check
-        run: |
-          ssh -i ~/.ssh/id_rsa ${{ secrets.MONITORING_SERVER_USER }}@${{ secrets.MONITORING_SERVER_HOST }} << 'EOF'
-            # Check if all services are running
-            echo "Checking service health..."
-
-            docker ps --filter "name=monitoring_" --format "table {{.Names}}\t{{.Status}}"
-
-            # Test Grafana
-            if curl -f http://localhost:3000/api/health > /dev/null 2>&1; then
-              echo "✅ Grafana is healthy"
-            else
-              echo "❌ Grafana health check failed"
-              exit 1
-            fi
-
-            # Test Prometheus
-            if curl -f http://localhost:9090/-/healthy > /dev/null 2>&1; then
-              echo "✅ Prometheus is healthy"
-            else
-              echo "❌ Prometheus health check failed"
-              exit 1
-            fi
-
-            # Test Loki
-            if curl -f http://localhost:3100/ready > /dev/null 2>&1; then
-              echo "✅ Loki is healthy"
-            else
-              echo "❌ Loki health check failed"
-              exit 1
-            fi
-
-            # Test AlertManager
-            if curl -f http://localhost:9093/-/healthy > /dev/null 2>&1; then
-              echo "✅ AlertManager is healthy"
-            else
-              echo "❌ AlertManager health check failed"
-              exit 1
-            fi
-
-            echo "All monitoring services are healthy!"
-          EOF
-
-      - name: Cleanup
-        if: always()
-        run: |
-          rm -f ~/.ssh/id_rsa
-
-  deploy-staging-monitoring:
-    name: Deploy Staging Environment Monitoring
-    runs-on: ubuntu-latest
-    needs: deploy-monitoring-server
-    if: github.event.inputs.environment == 'staging' || github.event.inputs.environment == ''
+    name: Deploy Monitoring Server (Staging AP-VM)
+    runs-on: self-hosted
     environment: staging
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up SSH keys
+      - name: Create monitoring directories
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.STAGING_AP_SSH_KEY }}" > ~/.ssh/staging_ap
-          echo "${{ secrets.STAGING_DB_SSH_KEY }}" > ~/.ssh/staging_db
-          chmod 600 ~/.ssh/staging_ap ~/.ssh/staging_db
-          ssh-keyscan -H ${{ secrets.STAGING_AP_HOST }} >> ~/.ssh/known_hosts
-          ssh-keyscan -H ${{ secrets.STAGING_DB_HOST }} >> ~/.ssh/known_hosts
+          sudo mkdir -p /opt/scholarship/monitoring
+          sudo chown -R $USER:$USER /opt/scholarship/monitoring
 
-      - name: Deploy to Staging AP-VM
+      - name: Deploy monitoring configuration
         run: |
-          # Copy Alloy config
-          scp -i ~/.ssh/staging_ap \
-            ./monitoring/config/alloy/staging-ap-vm.alloy \
-            ${{ secrets.STAGING_AP_USER }}@${{ secrets.STAGING_AP_HOST }}:/opt/scholarship/monitoring/config/alloy/
+          # Copy monitoring directory to /opt/scholarship/monitoring
+          cp -r ./monitoring/* /opt/scholarship/monitoring/
 
-          # Restart services
-          ssh -i ~/.ssh/staging_ap ${{ secrets.STAGING_AP_USER }}@${{ secrets.STAGING_AP_HOST }} << 'EOF'
-            cd /opt/scholarship
-            docker-compose -f docker-compose.staging.yml restart alloy
-          EOF
-
-      - name: Deploy to Staging DB-VM
+      - name: Set environment variables
         run: |
-          # Copy Alloy config
-          scp -i ~/.ssh/staging_db \
-            ./monitoring/config/alloy/staging-db-vm.alloy \
-            ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/monitoring/config/alloy/
+          cd /opt/scholarship/monitoring
 
-          # Restart services
-          ssh -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
-            cd /opt/scholarship
-            docker-compose -f docker-compose.staging-db.yml restart alloy
-          EOF
+          # Create .env file from GitHub secrets
+          cat > .env.monitoring << 'ENVEOF'
+          GRAFANA_ADMIN_USER=${{ secrets.GRAFANA_ADMIN_USER }}
+          GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          GRAFANA_ROOT_URL=${{ secrets.GRAFANA_ROOT_URL }}
+          GF_LOG_LEVEL=info
 
-      - name: Verify staging metrics
+          # Optional alert configuration
+          ALERT_EMAIL_FROM=${{ secrets.ALERT_EMAIL_FROM }}
+          ALERT_SMTP_HOST=${{ secrets.ALERT_SMTP_HOST }}
+          ALERT_SMTP_PORT=${{ secrets.ALERT_SMTP_PORT }}
+          ALERT_SMTP_USER=${{ secrets.ALERT_SMTP_USER }}
+          ALERT_SMTP_PASSWORD=${{ secrets.ALERT_SMTP_PASSWORD }}
+          ALERT_SLACK_WEBHOOK=${{ secrets.ALERT_SLACK_WEBHOOK }}
+          ENVEOF
+
+      - name: Pull latest monitoring images
         run: |
+          cd /opt/scholarship/monitoring
+          docker-compose -f docker-compose.monitoring.yml pull
+
+      - name: Deploy monitoring stack
+        run: |
+          cd /opt/scholarship/monitoring
+
+          # Export environment variables for docker-compose
+          export GRAFANA_ADMIN_USER="${{ secrets.GRAFANA_ADMIN_USER }}"
+          export GRAFANA_ADMIN_PASSWORD="${{ secrets.GRAFANA_ADMIN_PASSWORD }}"
+          export GRAFANA_ROOT_URL="${{ secrets.GRAFANA_ROOT_URL }}"
+
+          # Start/restart monitoring stack
+          docker-compose -f docker-compose.monitoring.yml up -d
+
+          # Wait for services to be healthy
+          echo "Waiting for services to start..."
           sleep 30
-          ssh -i ~/.ssh/staging_ap ${{ secrets.MONITORING_SERVER_USER }}@${{ secrets.MONITORING_SERVER_HOST }} << 'EOF'
-            # Check if staging targets are UP in Prometheus
-            TARGETS_DOWN=$(curl -s http://localhost:9090/api/v1/targets | jq '[.data.activeTargets[] | select(.labels.environment=="staging") | select(.health!="up")] | length')
 
-            if [ "$TARGETS_DOWN" -eq "0" ]; then
-              echo "✅ All staging targets are UP"
-            else
-              echo "⚠️  Warning: $TARGETS_DOWN staging targets are DOWN"
-            fi
-          EOF
-
-      - name: Cleanup
-        if: always()
+      - name: Health check monitoring services
         run: |
-          rm -f ~/.ssh/staging_ap ~/.ssh/staging_db
+          echo "Checking service health..."
 
-  deploy-production-monitoring:
-    name: Deploy Production Environment Monitoring
-    runs-on: ubuntu-latest
+          # Check if all services are running
+          docker ps --filter "name=monitoring_" --format "table {{.Names}}\t{{.Status}}"
+
+          # Test Grafana
+          if curl -f http://localhost:3000/api/health > /dev/null 2>&1; then
+            echo "✅ Grafana is healthy"
+          else
+            echo "❌ Grafana health check failed"
+            exit 1
+          fi
+
+          # Test Prometheus
+          if curl -f http://localhost:9090/-/healthy > /dev/null 2>&1; then
+            echo "✅ Prometheus is healthy"
+          else
+            echo "❌ Prometheus health check failed"
+            exit 1
+          fi
+
+          # Test Loki
+          if curl -f http://localhost:3100/ready > /dev/null 2>&1; then
+            echo "✅ Loki is healthy"
+          else
+            echo "❌ Loki health check failed"
+            exit 1
+          fi
+
+          # Test AlertManager
+          if curl -f http://localhost:9093/-/healthy > /dev/null 2>&1; then
+            echo "✅ AlertManager is healthy"
+          else
+            echo "❌ AlertManager health check failed"
+            exit 1
+          fi
+
+          echo "All monitoring services are healthy!"
+
+      - name: Deploy Alloy to Staging AP-VM (localhost)
+        run: |
+          # Copy Alloy config to monitoring directory
+          sudo mkdir -p /opt/scholarship/monitoring/config/alloy
+          cp ./monitoring/config/alloy/staging-ap-vm.alloy /opt/scholarship/monitoring/config/alloy/
+
+          # Restart Alloy service if it's running
+          cd /opt/scholarship
+          if docker ps -q -f name=alloy > /dev/null 2>&1; then
+            docker-compose -f docker-compose.staging.yml restart alloy || true
+          fi
+
+  deploy-staging-db-monitoring:
+    name: Deploy Staging DB-VM Monitoring
+    runs-on: self-hosted
     needs: deploy-monitoring-server
-    if: github.event.inputs.environment == 'production'
-    environment: production
+    environment: staging
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up SSH keys
+      - name: Set up SSH key for DB-VM
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.PROD_AP_SSH_KEY }}" > ~/.ssh/prod_ap
-          echo "${{ secrets.PROD_DB_SSH_KEY }}" > ~/.ssh/prod_db
-          chmod 600 ~/.ssh/prod_ap ~/.ssh/prod_db
-          ssh-keyscan -H ${{ secrets.PROD_AP_HOST }} >> ~/.ssh/known_hosts
-          ssh-keyscan -H ${{ secrets.PROD_DB_HOST }} >> ~/.ssh/known_hosts
+          echo "${{ secrets.STAGING_DB_SSH_KEY }}" > ~/.ssh/staging_db
+          chmod 600 ~/.ssh/staging_db
+          ssh-keyscan -H ${{ secrets.STAGING_DB_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy to Production AP-VM
+      - name: Deploy Alloy to Staging DB-VM
         run: |
-          # Copy Alloy config
-          scp -i ~/.ssh/prod_ap \
-            ./monitoring/config/alloy/prod-ap-vm.alloy \
-            ${{ secrets.PROD_AP_USER }}@${{ secrets.PROD_AP_HOST }}:/opt/scholarship/monitoring/config/alloy/
+          # Copy Alloy config to DB-VM
+          scp -i ~/.ssh/staging_db \
+            ./monitoring/config/alloy/staging-db-vm.alloy \
+            ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/monitoring/config/alloy/
 
-          # Restart services
-          ssh -i ~/.ssh/prod_ap ${{ secrets.PROD_AP_USER }}@${{ secrets.PROD_AP_HOST }} << 'EOF'
+          # Restart Alloy service on DB-VM
+          ssh -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
             cd /opt/scholarship
-            docker-compose -f docker-compose.prod.yml restart alloy
+            docker-compose -f docker-compose.staging-db.yml restart alloy || true
           EOF
 
-      - name: Deploy to Production DB-VM
+      - name: Verify staging metrics
         run: |
-          # Copy Alloy config
-          scp -i ~/.ssh/prod_db \
-            ./monitoring/config/alloy/prod-db-vm.alloy \
-            ${{ secrets.PROD_DB_USER }}@${{ secrets.PROD_DB_HOST }}:/opt/scholarship/monitoring/config/alloy/
-
-          # Restart services
-          ssh -i ~/.ssh/prod_db ${{ secrets.PROD_DB_USER }}@${{ secrets.PROD_DB_HOST }} << 'EOF'
-            cd /opt/scholarship
-            docker-compose -f docker-compose.prod-db.yml restart alloy
-          EOF
-
-      - name: Verify production metrics
-        run: |
+          echo "Waiting for metrics to be collected..."
           sleep 30
-          ssh -i ~/.ssh/prod_ap ${{ secrets.MONITORING_SERVER_USER }}@${{ secrets.MONITORING_SERVER_HOST }} << 'EOF'
-            # Check if production targets are UP in Prometheus
-            TARGETS_DOWN=$(curl -s http://localhost:9090/api/v1/targets | jq '[.data.activeTargets[] | select(.labels.environment=="prod") | select(.health!="up")] | length')
 
-            if [ "$TARGETS_DOWN" -eq "0" ]; then
-              echo "✅ All production targets are UP"
-            else
-              echo "❌ ERROR: $TARGETS_DOWN production targets are DOWN"
-              exit 1
-            fi
-          EOF
+          # Check if staging targets are UP in Prometheus
+          TARGETS_DOWN=$(curl -s http://localhost:9090/api/v1/targets | jq '[.data.activeTargets[] | select(.labels.environment=="staging") | select(.health!="up")] | length')
 
-      - name: Cleanup
+          if [ "$TARGETS_DOWN" -eq "0" ]; then
+            echo "✅ All staging targets are UP"
+          else
+            echo "⚠️  Warning: $TARGETS_DOWN staging targets are DOWN"
+            echo "Check Prometheus targets at http://localhost:9090/targets"
+          fi
+
+          # Show staging logs in Loki
+          echo "Checking Loki logs..."
+          if curl -f -H "X-Scope-OrgID: staging" -G "http://localhost:3100/loki/api/v1/query" \
+            --data-urlencode 'query={environment="staging"}' \
+            --data-urlencode 'limit=1' > /dev/null 2>&1; then
+            echo "✅ Loki is receiving staging logs"
+          else
+            echo "⚠️  Warning: No staging logs found in Loki yet"
+          fi
+
+      - name: Cleanup SSH keys
         if: always()
         run: |
-          rm -f ~/.ssh/prod_ap ~/.ssh/prod_db
+          rm -f ~/.ssh/staging_db
+
+      - name: Deployment summary
+        if: success()
+        run: |
+          echo "========================================="
+          echo "  Monitoring Stack Deployment Complete"
+          echo "========================================="
+          echo ""
+          echo "Access monitoring:"
+          echo "  Grafana:      http://localhost:3000"
+          echo "  Prometheus:   http://localhost:9090"
+          echo "  Loki:         http://localhost:3100"
+          echo "  AlertManager: http://localhost:9093"
+          echo ""
+          echo "Staging environment monitoring is active"
+          echo ""
