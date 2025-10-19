@@ -35,6 +35,7 @@ import {
 } from "@/lib/constants/allocation-matrix-layout";
 import { useGridMetrics } from "@/hooks/useGridMetrics";
 import { usePillMetrics } from "@/hooks/usePillMetrics";
+import { useScholarshipData } from "@/hooks/use-scholarship-data";
 import * as XLSX from "xlsx";
 import { useToast } from "@/hooks/use-toast";
 
@@ -286,8 +287,10 @@ export function DistributionResultsPanel({
     useState<DistributionDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [subTypeTranslations, setSubTypeTranslations] =
-    useState<SubTypeTranslations>({ zh: {}, en: {} });
+
+  // ✨ Use SWR hook to fetch sub-type translations (auto-detects user role)
+  const { subTypeTranslations } = useScholarshipData();
+
   const { toast } = useToast();
 
   const handleExportDistribution = () => {
@@ -461,27 +464,8 @@ export function DistributionResultsPanel({
     fetchDistributionDetails();
   }, [rankingId]);
 
-  useEffect(() => {
-    let isMounted = true;
-    const loadTranslations = async () => {
-      try {
-        const response = await apiClient.college.getSubTypeTranslations();
-        if (response.success && response.data && isMounted) {
-          setSubTypeTranslations({
-            zh: response.data.zh || {},
-            en: response.data.en || {},
-          });
-        }
-      } catch (err) {
-        console.error("Failed to load sub-type translations:", err);
-      }
-    };
-
-    loadTranslations();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  // ✨ Translations are now loaded automatically via useScholarshipData hook
+  // No need for manual useEffect anymore!
 
   const subTypeMetaMap = useMemo(() => {
     if (!distributionData?.sub_type_metadata) {
