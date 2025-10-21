@@ -366,20 +366,25 @@ export function DistributionResultsPanel({
       // Sheet 2: Details (詳細清單)
       const detailsData = studentRows.map((student) => {
         const allocation = student.allocation;
-        const backupInfo = student.backupEntries.length > 0 ? student.backupEntries[0] : null;
+        const hasBackups = student.backupEntries.length > 0;
 
         let allocationType = "-";
         let allocatedSubType = "-";
-        let backupSubType = "-";
-        let backupPosition = "-";
+        let backupSubTypes = "-";
+        let backupPositions = "-";
 
         if (allocation) {
           allocationType = locale === "zh" ? "正取" : "Admitted";
           allocatedSubType = getColumnLabel(allocation.subType);
-        } else if (backupInfo) {
+        } else if (hasBackups) {
           allocationType = locale === "zh" ? "備取" : "Backup";
-          backupSubType = getColumnLabel(backupInfo.subType);
-          backupPosition = backupInfo.backupPosition?.toString() || "-";
+          // Show all backup sub-types and positions
+          backupSubTypes = student.backupEntries
+            .map((entry) => getColumnLabel(entry.subType))
+            .join(", ");
+          backupPositions = student.backupEntries
+            .map((entry) => entry.backupPosition?.toString() || "-")
+            .join(", ");
         } else if (student.rejection) {
           allocationType = locale === "zh" ? "未獲分配" : "Not Allocated";
         } else {
@@ -394,8 +399,8 @@ export function DistributionResultsPanel({
           '符合子項目': student.eligibleLabels.join(", ") || "-",
           '分配狀態': allocationType,
           '正取子項目': allocatedSubType,
-          '備取子項目': backupSubType,
-          '備取順位': backupPosition,
+          '備取子項目': backupSubTypes,
+          '備取順位': backupPositions,
           '申請編號': student.appId || "-",
         };
       });

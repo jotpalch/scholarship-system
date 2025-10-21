@@ -203,14 +203,29 @@ export function BatchApplicationFileUpload({
     setShowDeleteDialog(true);
   };
 
-  const handleDeleteSuccess = () => {
+  const handleDeleteSuccess = async () => {
     if (applicationToDelete) {
-      // Remove from application states
-      setApplicationStates((prev) => {
-        const updated = new Map(prev);
-        updated.delete(applicationToDelete.id);
-        return updated;
-      });
+      try {
+        // Refresh application data to get updated status (deleted)
+        const refreshResponse = await apiClient.applications.getApplicationById(
+          applicationToDelete.id
+        );
+        if (refreshResponse.success && refreshResponse.data) {
+          setApplicationStates((prev) => {
+            const updated = new Map(prev);
+            const state = updated.get(applicationToDelete.id);
+            if (state) {
+              updated.set(applicationToDelete.id, {
+                ...state,
+                application: refreshResponse.data || null,
+              });
+            }
+            return updated;
+          });
+        }
+      } catch (err) {
+        console.error(`Failed to refresh application ${applicationToDelete.id}:`, err);
+      }
 
       // Notify completion (optional - refresh parent data)
       if (onUploadComplete) {
@@ -224,9 +239,7 @@ export function BatchApplicationFileUpload({
 
   const handleRestore = async (appId: number) => {
     try {
-      const response = await apiClient.applications.updateApplication(appId, {
-        status: "draft",
-      });
+      const response = await apiClient.applications.restoreApplication(appId);
 
       if (response.success) {
         // Refresh application data
