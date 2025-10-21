@@ -21,11 +21,24 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Add backup_allocations column to college_ranking_items
-    op.add_column(
-        "college_ranking_items", sa.Column("backup_allocations", postgresql.JSONB(astext_type=sa.Text()), nullable=True)
-    )
+    # Check if column doesn't exist before adding
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    columns = [c["name"] for c in inspector.get_columns("college_ranking_items")]
+
+    if "backup_allocations" not in columns:
+        op.add_column(
+            "college_ranking_items",
+            sa.Column("backup_allocations", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        )
 
 
 def downgrade() -> None:
     # Remove backup_allocations column
-    op.drop_column("college_ranking_items", "backup_allocations")
+    # Check if column exists before dropping
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    columns = [c["name"] for c in inspector.get_columns("college_ranking_items")]
+
+    if "backup_allocations" in columns:
+        op.drop_column("college_ranking_items", "backup_allocations")
