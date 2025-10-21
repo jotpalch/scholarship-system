@@ -14,7 +14,7 @@ import { useLanguagePreference } from '@/hooks/use-language-preference';
  * Example 1: Simple scholarship list display
  */
 export function ScholarshipListExample() {
-  const { scholarships, isLoading, error, refresh } = useScholarshipData('admin');
+  const { scholarships, isLoading, error, refresh } = useScholarshipData(true);
 
   if (isLoading) {
     return <div className="p-4 text-gray-600">載入獎學金列表中...</div>;
@@ -53,8 +53,8 @@ export function ScholarshipListExample() {
  * Example 2: Scholarship display with locale support
  */
 export function ScholarshipWithLocaleExample() {
-  const { locale } = useLanguagePreference();
-  const { scholarships, isLoading } = useScholarshipData('admin');
+  const { locale } = useLanguagePreference("student");
+  const { scholarships, isLoading } = useScholarshipData(true);
 
   if (isLoading) {
     return <div className="p-4">Loading...</div>;
@@ -99,8 +99,8 @@ export function ScholarshipWithLocaleExample() {
  * Example 3: Sub-type translation display
  */
 export function SubTypeTranslationExample() {
-  const { locale } = useLanguagePreference();
-  const { subTypeTranslations, isLoading, getSubTypeName } = useScholarshipData('college');
+  const { locale } = useLanguagePreference("student");
+  const { subTypeTranslations, isLoading, getSubTypeName } = useScholarshipData(true);
 
   if (isLoading) {
     return <div className="p-4">Loading...</div>;
@@ -139,13 +139,13 @@ interface ApplicationCardProps {
 }
 
 export function ApplicationCardExample({ applicationId, scholarshipId, subType }: ApplicationCardProps) {
-  const { locale } = useLanguagePreference();
+  const { locale } = useLanguagePreference("student");
   const {
     getScholarshipName,
     getSubTypeName,
     subTypeTranslations,
     isLoading,
-  } = useScholarshipData('college');
+  } = useScholarshipData(true);
 
   if (isLoading) {
     return <div className="p-4 bg-gray-100 rounded h-24" />;
@@ -190,8 +190,8 @@ interface ScholarshipSelectorProps {
 }
 
 export function ScholarshipSelectorExample({ value, onChange }: ScholarshipSelectorProps) {
-  const { locale } = useLanguagePreference();
-  const { scholarships, isLoading } = useScholarshipData('admin');
+  const { locale } = useLanguagePreference("student");
+  const { scholarships, isLoading } = useScholarshipData(true);
 
   return (
     <div>
@@ -223,8 +223,8 @@ export function ScholarshipSelectorExample({ value, onChange }: ScholarshipSelec
  * Example 6: Scholarship data with manual refresh
  */
 export function ScholarshipAdminPanelExample() {
-  const { locale } = useLanguagePreference();
-  const { scholarships, isLoading, refresh } = useScholarshipData('admin');
+  const { locale } = useLanguagePreference("student");
+  const { scholarships, isLoading, refresh } = useScholarshipData(true);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
 
   const handleRefresh = async () => {

@@ -12,9 +12,9 @@ interface PermissionStatus {
   college_name: string | null;
   scholarship_count: number;
   scholarship_list: Array<{
-    id: number;
-    name: string;
     code: string;
+    name: string;
+    name_en?: string;
   }>;
   has_full_permission: boolean;
   permission_issues: string[];
@@ -76,7 +76,7 @@ export function PermissionStatusPanel({
 
       const statusData: PermissionStatus = {
         user_nycu_id: user.nycu_id || user.name,
-        user_id: user.id,
+        user_id: typeof user.id === "string" ? parseInt(user.id, 10) : user.id,
         college_code: collegeResponse.data?.code || null,
         college_name: collegeResponse.data?.name || null,
         scholarship_count: collegeResponse.data?.scholarship_count || 0,

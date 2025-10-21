@@ -22,6 +22,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ApplicationFileUploadDialog } from "@/components/application-file-upload-dialog";
 import { DeleteApplicationDialog } from "@/components/delete-application-dialog";
+import { ApplicationStatus } from "@/lib/enums";
 import type { Application } from "@/lib/api";
 
 interface BatchApplicationFileUploadProps {
@@ -332,7 +333,7 @@ export function BatchApplicationFileUpload({
           </TableHeader>
           <TableBody>
             {Array.from(applicationStates.entries()).map(([appId, state]) => {
-              const isDeleted = (state.application?.status as ApplicationStatus) === 'deleted';
+              const isDeleted = state.application?.status === 'deleted';
               return (
               <TableRow
                 key={appId}
