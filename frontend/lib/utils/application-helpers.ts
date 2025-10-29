@@ -1,5 +1,10 @@
 import { Locale } from "@/lib/validators";
 import { api } from "@/lib/api";
+import {
+  ReviewStage,
+  getReviewStageLabel,
+  getReviewStageBadgeVariant,
+} from "@/lib/enums";
 
 // 申請狀態類型
 export type ApplicationStatus =
@@ -9,7 +14,7 @@ export type ApplicationStatus =
   | "pending_recommendation"
   | "recommended"
   | "approved"
-  | "partial_approve"
+  | "partial_approved"
   | "rejected"
   | "returned"
   | "withdrawn"
@@ -295,7 +300,7 @@ export const getStatusColor = (status: ApplicationStatus): BadgeVariant => {
     pending_recommendation: "outline",
     recommended: "outline",
     approved: "default",
-    partial_approve: "outline",
+    partial_approved: "outline",
     rejected: "destructive",
     returned: "secondary",
     withdrawn: "secondary",
@@ -303,6 +308,68 @@ export const getStatusColor = (status: ApplicationStatus): BadgeVariant => {
     deleted: "destructive",
   };
   return statusMap[status];
+};
+
+// 判斷是否應該顯示階段狀態 (ReviewStage)
+export const shouldShowReviewStage = (
+  status: string,
+  reviewStage?: string
+): boolean => {
+  // 如果沒有 review_stage,不顯示
+  if (!reviewStage) return false;
+
+  // 草稿狀態不顯示階段
+  if (status === "draft") return false;
+
+  // 最終狀態(已核准/已拒絕等)可以選擇不顯示詳細階段
+  const finalStatuses = ["approved", "rejected", "withdrawn", "cancelled", "deleted"];
+
+  // 可根據需求調整:最終狀態是否仍顯示階段
+  // return !finalStatuses.includes(status);
+
+  // 目前策略:所有非草稿狀態都顯示階段
+  return true;
+};
+
+// 獲取顯示狀態 - 返回狀態和階段的組合資訊
+export const getDisplayStatusInfo = (
+  application: any,
+  locale: Locale
+): {
+  showStatus: boolean;
+  showStage: boolean;
+  statusLabel: string;
+  stageLabel: string;
+  statusVariant: BadgeVariant;
+  stageVariant: BadgeVariant;
+} => {
+  const status = application.status as ApplicationStatus;
+  const reviewStage = application.review_stage;
+
+  // 獲取階段標籤和 variant
+  let stageLabel = "";
+  let stageVariant: BadgeVariant = "outline";
+
+  if (reviewStage) {
+    try {
+      // 將 string 轉換為 ReviewStage enum
+      const stageEnum = reviewStage as ReviewStage;
+      stageLabel = getReviewStageLabel(stageEnum, locale);
+      stageVariant = getReviewStageBadgeVariant(stageEnum);
+    } catch (error) {
+      // 如果轉換失敗,使用原始值
+      stageLabel = reviewStage;
+    }
+  }
+
+  return {
+    showStatus: true, // 狀態永遠顯示
+    showStage: shouldShowReviewStage(status, reviewStage),
+    statusLabel: getStatusName(status, locale),
+    stageLabel,
+    statusVariant: getStatusColor(status),
+    stageVariant,
+  };
 };
 
 // 獲取狀態名稱
@@ -315,7 +382,7 @@ export const getStatusName = (status: ApplicationStatus, locale: Locale) => {
       pending_recommendation: "待教授推薦",
       recommended: "已推薦",
       approved: "已核准",
-      partial_approve: "部分核准",
+      partial_approved: "部分核准",
       rejected: "已拒絕",
       returned: "已退回",
       withdrawn: "已撤回",
@@ -329,7 +396,7 @@ export const getStatusName = (status: ApplicationStatus, locale: Locale) => {
       pending_recommendation: "Pending Recommendation",
       recommended: "Recommended",
       approved: "Approved",
-      partial_approve: "Partial Approval",
+      partial_approved: "Partial Approval",
       rejected: "Rejected",
       returned: "Returned",
       withdrawn: "Withdrawn",

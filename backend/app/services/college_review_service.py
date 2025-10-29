@@ -357,7 +357,6 @@ class CollegeReviewService:
             )
             .where(
                 or_(
-                    Application.status == ApplicationStatus.recommended.value,
                     Application.status == ApplicationStatus.under_review.value,
                     Application.status == ApplicationStatus.approved.value,  # 包含已核准的申請
                     Application.status == ApplicationStatus.rejected.value,  # 包含已駁回的申請
@@ -365,9 +364,7 @@ class CollegeReviewService:
                 )
             )
         )
-        logger.info(
-            "Base query created, looking for status in [recommended, under_review, approved, rejected, college_reviewed]"
-        )
+        logger.info("Base query created, looking for status in [under_review, approved, rejected, college_reviewed]")
 
         # Apply filters
         if scholarship_type_id:
@@ -548,7 +545,6 @@ class CollegeReviewService:
                 Application.deleted_at.is_(None),  # Exclude soft-deleted applications
                 Application.status.in_(  # Whitelist valid statuses
                     [
-                        ApplicationStatus.recommended.value,
                         ApplicationStatus.under_review.value,
                         ApplicationStatus.approved.value,
                         ApplicationStatus.rejected.value,
@@ -589,7 +585,6 @@ class CollegeReviewService:
                 Application.deleted_at.is_(None),  # Exclude soft-deleted applications
                 Application.status.in_(  # Whitelist valid statuses
                     [
-                        ApplicationStatus.recommended.value,
                         ApplicationStatus.under_review.value,
                         ApplicationStatus.approved.value,
                         ApplicationStatus.rejected.value,

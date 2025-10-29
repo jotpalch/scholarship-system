@@ -237,6 +237,47 @@ export const getReviewStageLabel = (
   return labels[locale][stage];
 };
 
+export const getReviewStageBadgeVariant = (
+  stage: ReviewStage
+): "default" | "secondary" | "outline" | "destructive" => {
+  switch (stage) {
+    // 學生階段 - secondary (灰色)
+    case ReviewStage.STUDENT_DRAFT:
+    case ReviewStage.STUDENT_SUBMITTED:
+      return "secondary";
+
+    // 進行中階段 - default (藍色)
+    case ReviewStage.PROFESSOR_REVIEW:
+    case ReviewStage.COLLEGE_REVIEW:
+    case ReviewStage.COLLEGE_RANKING:
+    case ReviewStage.ADMIN_REVIEW:
+    case ReviewStage.QUOTA_DISTRIBUTION:
+    case ReviewStage.ROSTER_PREPARATION:
+      return "default";
+
+    // 已完成階段 - outline (淺色邊框)
+    case ReviewStage.PROFESSOR_REVIEWED:
+    case ReviewStage.COLLEGE_REVIEWED:
+    case ReviewStage.COLLEGE_RANKED:
+    case ReviewStage.ADMIN_REVIEWED:
+    case ReviewStage.QUOTA_DISTRIBUTED:
+      return "outline";
+
+    // 造冊完成階段 - default (強調)
+    case ReviewStage.ROSTER_PREPARED:
+    case ReviewStage.ROSTER_SUBMITTED:
+      return "default";
+
+    // 完成階段 - outline
+    case ReviewStage.COMPLETED:
+    case ReviewStage.ARCHIVED:
+      return "outline";
+
+    default:
+      return "secondary";
+  }
+};
+
 export const getUserRoleLabel = (
   role: UserRole,
   locale: "zh" | "en" = "zh"

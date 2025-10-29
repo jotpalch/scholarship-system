@@ -49,6 +49,7 @@ import { getTranslation } from "@/lib/i18n";
 import {
   getStatusColor,
   getStatusName,
+  getDisplayStatusInfo,
   ApplicationStatus,
 } from "@/lib/utils/application-helpers";
 import {
@@ -1969,11 +1970,23 @@ export function CollegeDashboard({
                                   </Badge>
                                 </TableCell>
                                 <TableCell>
-                                  <Badge
-                                    variant={getStatusColor(app.status as ApplicationStatus)}
-                                  >
-                                    {app.status_zh || getStatusName(app.status as ApplicationStatus, locale)}
-                                  </Badge>
+                                  <div className="flex gap-2">
+                                    {(() => {
+                                      const statusInfo = getDisplayStatusInfo(app, locale);
+                                      return (
+                                        <>
+                                          <Badge variant={statusInfo.statusVariant}>
+                                            {app.status_zh || statusInfo.statusLabel}
+                                          </Badge>
+                                          {statusInfo.showStage && statusInfo.stageLabel && (
+                                            <Badge variant={statusInfo.stageVariant}>
+                                              {statusInfo.stageLabel}
+                                            </Badge>
+                                          )}
+                                        </>
+                                      );
+                                    })()}
+                                  </div>
                                 </TableCell>
                                 <TableCell>
                                   {app.created_at

@@ -647,7 +647,7 @@ export function ApplicationReviewPanel({
                 <SelectItem value="approved">
                   {locale === "zh" ? "已核准" : "Approved"}
                 </SelectItem>
-                <SelectItem value="partial_approve">
+                <SelectItem value="partial_approved">
                   {locale === "zh" ? "部分核准" : "Partial Approval"}
                 </SelectItem>
                 <SelectItem value="rejected">

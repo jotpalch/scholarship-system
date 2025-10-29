@@ -35,6 +35,7 @@ import apiClient, {
 import {
   getStatusColor,
   getStatusName,
+  getDisplayStatusInfo,
   ApplicationStatus,
 } from "@/lib/utils/application-helpers";
 import { Locale } from "@/lib/validators";
@@ -511,16 +512,23 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <Badge
-                                  variant={getStatusColor(
-                                    application.status as ApplicationStatus
-                                  )}
-                                >
-                                  {getStatusName(
-                                    application.status as ApplicationStatus,
-                                    locale
-                                  )}
-                                </Badge>
+                                <div className="flex gap-2">
+                                  {(() => {
+                                    const statusInfo = getDisplayStatusInfo(application, locale);
+                                    return (
+                                      <>
+                                        <Badge variant={statusInfo.statusVariant}>
+                                          {statusInfo.statusLabel}
+                                        </Badge>
+                                        {statusInfo.showStage && statusInfo.stageLabel && (
+                                          <Badge variant={statusInfo.stageVariant}>
+                                            {statusInfo.stageLabel}
+                                          </Badge>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
                               </TableCell>
                               <TableCell>
                                 <div className="text-sm">
@@ -800,16 +808,23 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <Badge
-                                  variant={getStatusColor(
-                                    application.status as ApplicationStatus
-                                  )}
-                                >
-                                  {getStatusName(
-                                    application.status as ApplicationStatus,
-                                    locale
-                                  )}
-                                </Badge>
+                                <div className="flex gap-2">
+                                  {(() => {
+                                    const statusInfo = getDisplayStatusInfo(application, locale);
+                                    return (
+                                      <>
+                                        <Badge variant={statusInfo.statusVariant}>
+                                          {statusInfo.statusLabel}
+                                        </Badge>
+                                        {statusInfo.showStage && statusInfo.stageLabel && (
+                                          <Badge variant={statusInfo.stageVariant}>
+                                            {statusInfo.stageLabel}
+                                          </Badge>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
                               </TableCell>
                               <TableCell>
                                 <div className="text-sm">

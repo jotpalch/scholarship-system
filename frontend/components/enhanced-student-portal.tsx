@@ -73,6 +73,7 @@ import {
   getApplicationTimeline,
   getStatusColor,
   getStatusName,
+  getDisplayStatusInfo,
   ApplicationStatus,
 } from "@/lib/utils/application-helpers";
 import { clsx } from "@/lib/utils";
@@ -1210,11 +1211,23 @@ export function EnhancedStudentPortal({
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span>{application.scholarship_type}</span>
-          <Badge
-            variant={getStatusColor(application.status as ApplicationStatus)}
-          >
-            {getStatusName(application.status as ApplicationStatus, locale)}
-          </Badge>
+          <div className="flex gap-2">
+            {(() => {
+              const statusInfo = getDisplayStatusInfo(application, locale);
+              return (
+                <>
+                  <Badge variant={statusInfo.statusVariant}>
+                    {statusInfo.statusLabel}
+                  </Badge>
+                  {statusInfo.showStage && statusInfo.stageLabel && (
+                    <Badge variant={statusInfo.stageVariant}>
+                      {statusInfo.stageLabel}
+                    </Badge>
+                  )}
+                </>
+              );
+            })()}
+          </div>
         </CardTitle>
         <CardDescription>
           {t("applications.submitted_at")}:{" "}
