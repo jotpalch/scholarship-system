@@ -188,7 +188,7 @@ export function ApplicationReviewPanel({
     // Status filter
     if (statusFilter !== "all") {
       if (statusFilter === "pending") {
-        if (app.status !== "recommended" && app.status !== "submitted") {
+        if (app.status !== "submitted") {
           return false;
         }
       } else if (app.status !== statusFilter) {
@@ -486,7 +486,6 @@ export function ApplicationReviewPanel({
               {
                 applications.filter(
                   app =>
-                    app.status === "recommended" ||
                     app.status === "submitted"
                 ).length
               }
@@ -511,9 +510,7 @@ export function ApplicationReviewPanel({
               {
                 applications.filter(
                   app =>
-                    app.status === "under_review" ||
-                    (app.status === "recommended" &&
-                      app.college_review_completed)
+                    app.status === "under_review"
                 ).length
               }
             </div>

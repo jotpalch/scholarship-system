@@ -1347,7 +1347,7 @@ export function CollegeDashboard({
         let collegeReviewStatus = "-";
         if (app.college_review_completed) {
           collegeReviewStatus = locale === "zh" ? "已審核" : "Reviewed";
-        } else if (app.status === "recommended" || app.status === "submitted") {
+        } else if (app.status === "submitted") {
           collegeReviewStatus = locale === "zh" ? "待審核" : "Pending";
         } else if (app.status === "under_review") {
           collegeReviewStatus = locale === "zh" ? "審核中" : "Under Review";
@@ -1730,7 +1730,6 @@ export function CollegeDashboard({
                         {
                           applications.filter(
                             app =>
-                              app.status === "recommended" ||
                               app.status === "submitted"
                           ).length
                         }
@@ -1755,9 +1754,7 @@ export function CollegeDashboard({
                         {
                           applications.filter(
                             app =>
-                              app.status === "under_review" ||
-                              (app.status === "recommended" &&
-                                app.college_review_completed)
+                              app.status === "under_review"
                           ).length
                         }
                       </div>

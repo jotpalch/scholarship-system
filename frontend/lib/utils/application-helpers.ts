@@ -11,8 +11,6 @@ export type ApplicationStatus =
   | "draft"
   | "submitted"
   | "under_review"
-  | "pending_recommendation"
-  | "recommended"
   | "approved"
   | "partial_approved"
   | "rejected"
@@ -47,10 +45,8 @@ const WAIT_PROFESSOR_CURRENT_STATUSES = new Set<string>([
 ]);
 
 const WAIT_PROFESSOR_COMPLETED_STATUSES = new Set<string>([
-  "pending_recommendation",
   "professor_review_pending",
   "professor_reviewed",
-  "recommended",
   "college_review_pending",
   "college_reviewed",
   "under_review",
@@ -64,13 +60,11 @@ const WAIT_PROFESSOR_COMPLETED_STATUSES = new Set<string>([
 ]);
 
 const PROFESSOR_REVIEW_CURRENT_STATUSES = new Set<string>([
-  "pending_recommendation",
   "professor_review_pending",
 ]);
 
 const PROFESSOR_REVIEW_COMPLETED_STATUSES = new Set<string>([
   "professor_reviewed",
-  "recommended",
   "college_review_pending",
   "college_reviewed",
   "under_review",
@@ -85,7 +79,6 @@ const PROFESSOR_REVIEW_COMPLETED_STATUSES = new Set<string>([
 
 const PROFESSOR_REVIEW_SUBMITTED_STATUSES = new Set<string>([
   "professor_reviewed",
-  "recommended",
   "college_review_pending",
   "college_reviewed",
   "under_review",
@@ -100,7 +93,6 @@ const PROFESSOR_REVIEW_SUBMITTED_STATUSES = new Set<string>([
 
 const WAIT_COLLEGE_CURRENT_STATUSES = new Set<string>([
   "professor_reviewed",
-  "recommended",
   "college_review_pending",
 ]);
 
@@ -297,8 +289,6 @@ export const getStatusColor = (status: ApplicationStatus): BadgeVariant => {
     draft: "secondary",
     submitted: "default",
     under_review: "outline",
-    pending_recommendation: "outline",
-    recommended: "outline",
     approved: "default",
     partial_approved: "outline",
     rejected: "destructive",
@@ -379,8 +369,6 @@ export const getStatusName = (status: ApplicationStatus, locale: Locale) => {
       draft: "草稿",
       submitted: "已提交",
       under_review: "審核中",
-      pending_recommendation: "待教授推薦",
-      recommended: "已推薦",
       approved: "已核准",
       partial_approved: "部分核准",
       rejected: "已拒絕",
@@ -393,8 +381,6 @@ export const getStatusName = (status: ApplicationStatus, locale: Locale) => {
       draft: "Draft",
       submitted: "Submitted",
       under_review: "Under Review",
-      pending_recommendation: "Pending Recommendation",
-      recommended: "Recommended",
       approved: "Approved",
       partial_approved: "Partial Approval",
       rejected: "Rejected",
