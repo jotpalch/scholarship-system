@@ -190,6 +190,42 @@ export const getApplicationStatusLabel = (
   return labels[locale][status];
 };
 
+export const getApplicationStatusBadgeVariant = (
+  status: ApplicationStatus
+): "default" | "secondary" | "outline" | "destructive" => {
+  switch (status) {
+    // 草稿狀態 - secondary (灰色)
+    case ApplicationStatus.DRAFT:
+      return "secondary";
+
+    // 已提交/審核中 - default (藍色)
+    case ApplicationStatus.SUBMITTED:
+    case ApplicationStatus.APPROVED:
+      return "default";
+
+    // 審核中/部分核准 - outline (淺色邊框)
+    case ApplicationStatus.UNDER_REVIEW:
+    case ApplicationStatus.PENDING_DOCUMENTS:
+    case ApplicationStatus.PARTIAL_APPROVED:
+      return "outline";
+
+    // 拒絕/刪除 - destructive (紅色)
+    case ApplicationStatus.REJECTED:
+    case ApplicationStatus.DELETED:
+      return "destructive";
+
+    // 退回/撤回/取消/排除 - secondary (灰色)
+    case ApplicationStatus.RETURNED:
+    case ApplicationStatus.WITHDRAWN:
+    case ApplicationStatus.CANCELLED:
+    case ApplicationStatus.MANUAL_EXCLUDED:
+      return "secondary";
+
+    default:
+      return "secondary";
+  }
+};
+
 export const getReviewStageLabel = (
   stage: ReviewStage,
   locale: "zh" | "en" = "zh"

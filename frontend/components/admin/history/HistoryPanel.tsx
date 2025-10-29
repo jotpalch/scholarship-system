@@ -33,10 +33,11 @@ import apiClient, {
   HistoricalApplicationFilters,
 } from "@/lib/api";
 import {
-  getStatusColor,
-  getStatusName,
-  getDisplayStatusInfo,
   ApplicationStatus,
+  getApplicationStatusLabel,
+} from "@/lib/enums";
+import {
+  getDisplayStatusInfo,
 } from "@/lib/utils/application-helpers";
 import { Locale } from "@/lib/validators";
 import { AlertCircle, Eye, FileText, RefreshCw } from "lucide-react";

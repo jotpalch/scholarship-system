@@ -38,10 +38,10 @@ import { ApplicationReviewDialog } from "@/components/common/ApplicationReviewDi
 import { DeleteApplicationDialog } from "@/components/delete-application-dialog";
 import { DocumentRequestForm } from "@/components/document-request-form";
 import {
-  getStatusColor,
-  getStatusName,
   ApplicationStatus,
-} from "@/lib/utils/application-helpers";
+  getApplicationStatusLabel,
+  getApplicationStatusBadgeVariant,
+} from "@/lib/enums";
 import {
   Search,
   Eye,
@@ -322,7 +322,7 @@ export function ApplicationReviewPanel({
       // Prepare export data
       const exportData = applications.map((app) => {
         // Format status
-        const statusText = app.status_zh || getStatusName(app.status as ApplicationStatus, locale);
+        const statusText = app.status_zh || getApplicationStatusLabel(app.status as ApplicationStatus, locale);
 
         // Format application type
         const applicationType = app.is_renewal
@@ -748,9 +748,9 @@ export function ApplicationReviewPanel({
                       {/* 7. 狀態 */}
                       <TableCell>
                         <Badge
-                          variant={getStatusColor(app.status as ApplicationStatus)}
+                          variant={getApplicationStatusBadgeVariant(app.status as ApplicationStatus)}
                         >
-                          {app.status_zh || getStatusName(app.status as ApplicationStatus, locale)}
+                          {app.status_zh || getApplicationStatusLabel(app.status as ApplicationStatus, locale)}
                         </Badge>
                       </TableCell>
 

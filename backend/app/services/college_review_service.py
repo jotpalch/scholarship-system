@@ -809,7 +809,7 @@ class CollegeReviewService:
 
                 # Update application status
                 item.application.quota_allocation_status = "rejected"
-                item.application.status = "rejected"
+                item.application.status = ApplicationStatus.rejected.value
             else:
                 # Allocate quota
                 item.is_allocated = True
@@ -819,7 +819,7 @@ class CollegeReviewService:
 
                 # Update application status
                 item.application.quota_allocation_status = "allocated"
-                item.application.status = "approved"
+                item.application.status = ApplicationStatus.approved.value
 
             allocation_results.append(
                 {

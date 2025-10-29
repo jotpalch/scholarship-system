@@ -61,12 +61,14 @@ import {
   getEnrollTypeName,
 } from "@/hooks/use-reference-data";
 import {
+  ApplicationStatus,
+  getApplicationStatusLabel,
+  getApplicationStatusBadgeVariant,
+} from "@/lib/enums";
+import {
   getApplicationTimeline,
-  getStatusColor,
-  getStatusName,
   getDocumentLabel,
   fetchApplicationFiles,
-  ApplicationStatus,
   formatFieldName,
 } from "@/lib/utils/application-helpers";
 import { getCurrentSemesterROC, toROCYear } from "@/src/utils/dateUtils";
@@ -1426,8 +1428,8 @@ export function ApplicationReviewDialog({
                             {locale === "zh" ? "申請狀態" : "Status"}
                           </Label>
                           <div className="flex items-center gap-2">
-                            <Badge variant={getStatusColor(displayData.status as ApplicationStatus)}>
-                              {displayData.status_name || getStatusName(displayData.status as ApplicationStatus, locale)}
+                            <Badge variant={getApplicationStatusBadgeVariant(displayData.status as ApplicationStatus)}>
+                              {displayData.status_name || getApplicationStatusLabel(displayData.status as ApplicationStatus, locale)}
                             </Badge>
                             {displayData.is_renewal && (
                               <Badge variant="outline" className="text-blue-600 border-blue-300">

@@ -47,10 +47,12 @@ import { DeleteApplicationDialog } from "@/components/delete-application-dialog"
 import { DocumentRequestForm } from "@/components/document-request-form";
 import { getTranslation } from "@/lib/i18n";
 import {
-  getStatusColor,
-  getStatusName,
-  getDisplayStatusInfo,
   ApplicationStatus,
+  getApplicationStatusLabel,
+  getApplicationStatusBadgeVariant,
+} from "@/lib/enums";
+import {
+  getDisplayStatusInfo,
 } from "@/lib/utils/application-helpers";
 import {
   Search,
@@ -1341,7 +1343,7 @@ export function CollegeDashboard({
       // Prepare export data
       const exportData = applications.map((app) => {
         // Format status
-        const statusText = app.status_zh || getStatusName(app.status as ApplicationStatus, locale);
+        const statusText = app.status_zh || getApplicationStatusLabel(app.status as ApplicationStatus, locale);
 
         // Format review status (學院審核狀態)
         let collegeReviewStatus = "-";

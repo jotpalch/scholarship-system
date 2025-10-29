@@ -70,11 +70,13 @@ import api, {
   ApplicationDocument,
 } from "@/lib/api";
 import {
-  getApplicationTimeline,
-  getStatusColor,
-  getStatusName,
-  getDisplayStatusInfo,
   ApplicationStatus,
+  getApplicationStatusLabel,
+  getApplicationStatusBadgeVariant,
+} from "@/lib/enums";
+import {
+  getApplicationTimeline,
+  getDisplayStatusInfo,
 } from "@/lib/utils/application-helpers";
 import { clsx } from "@/lib/utils";
 import { User } from "@/types/user";
@@ -1317,11 +1319,11 @@ export function EnhancedStudentPortal({
                         </p>
                       </div>
                       <Badge
-                        variant={getStatusColor(
+                        variant={getApplicationStatusBadgeVariant(
                           app.status as ApplicationStatus
                         )}
                       >
-                        {getStatusName(
+                        {getApplicationStatusLabel(
                           app.status as ApplicationStatus,
                           locale
                         )}
