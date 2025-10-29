@@ -359,12 +359,12 @@ class CollegeReviewService:
                 or_(
                     Application.status == ApplicationStatus.under_review.value,
                     Application.status == ApplicationStatus.approved.value,  # 包含已核准的申請
+                    Application.status == ApplicationStatus.partial_approved.value,  # 包含部分核准的申請
                     Application.status == ApplicationStatus.rejected.value,  # 包含已駁回的申請
-                    Application.status == "college_reviewed",  # 向後兼容舊資料
                 )
             )
         )
-        logger.info("Base query created, looking for status in [under_review, approved, rejected, college_reviewed]")
+        logger.info("Base query created, looking for status in [under_review, approved, partial_approved, rejected]")
 
         # Apply filters
         if scholarship_type_id:
