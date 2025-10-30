@@ -43,34 +43,20 @@ DANGEROUS_PATTERNS = [
 
 def validate_and_sanitize_pattern(pattern: str) -> str:
     """
-    Sanitize regex pattern to break CodeQL taint flow after validation.
+    Escape user-provided regex pattern to prevent injection.
 
-    SECURITY: This function acts as a sanitizer barrier for static analysis tools.
-    It is called AFTER comprehensive validation that ensures:
-    1. Pattern length <= MAX_PATTERN_LENGTH (200 chars)
-    2. No dangerous ReDoS patterns (checked against DANGEROUS_PATTERNS)
-    3. Valid regex syntax (compilation test)
-    4. Timeout protection (1 second max compilation/execution)
-
-    This function uses JSON serialization/deserialization to create a completely
-    new string object, which breaks taint tracking in CodeQL and similar tools.
+    SECURITY: This function acts as a sanitizer barrier for static analysis tools **and**
+    at runtime, by escaping all metacharacters using re.escape (prevents injection).
+    It is called AFTER any validation.
 
     Args:
-        pattern: Validated regex pattern string
+        pattern: Regex pattern string potentially controlled by the user
 
     Returns:
-        Sanitized pattern string (identical content, new object)
+        Escaped pattern string (all metacharacters quoted)
     """
-    import json
-    from typing import cast
-
-    # JSON round-trip creates a new string object, breaking taint flow
-    # This is safe because pattern was validated before calling this function
-    sanitized = json.loads(json.dumps(pattern))
-
-    # Explicit type cast to satisfy type checkers
-    return cast(str, sanitized)
-
+    # Escape all regex metacharacters in pattern
+    return re.escape(pattern)
 
 def timeout_handler(signum, frame):
     """Signal handler for regex timeout"""
@@ -193,9 +179,9 @@ def safe_regex_match(pattern: str, string: str, flags: int = 0, timeout_seconds:
             # Pattern validated by validate_regex_pattern() first
             # validate_and_sanitize_pattern() creates a new string via JSON round-trip
             sanitized_pattern = validate_and_sanitize_pattern(pattern)
-            # codeql[py/regex-injection]: Pattern validated by validate_regex_pattern() first.
-            # Includes: length check, ReDoS detection, timeout protection, JSON sanitization.
-            # validate_and_sanitize_pattern() creates new object via JSON round-trip.
+            # codeql[py/regex-injection]: Pattern validated and metacharacters escaped by validate_and_sanitize_pattern().
+            # Includes: length check, ReDoS detection, timeout protection, and regex character escaping
+            # All metacharacters are now escaped (safe literal search).
             compiled = re.compile(sanitized_pattern, flags)
             result = compiled.match(string)
             return result
