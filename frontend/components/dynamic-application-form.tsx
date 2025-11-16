@@ -576,17 +576,24 @@ export function DynamicApplicationForm({
         className={`space-y-3 p-4 border rounded-lg ${isFixedDocument ? "border-blue-200 bg-blue-50/50" : ""}`}
       >
         <div className="flex items-center justify-between">
-          <Label className="text-base font-medium">
-            {documentName}
-            {document.is_required && (
-              <span className="text-red-500 ml-1">*</span>
-            )}
+          <div className="flex items-center gap-2">
+            <Label className="text-base font-medium">
+              {documentName}
+              {document.is_required && (
+                <span className="text-red-500 ml-1 text-lg font-bold">*</span>
+              )}
+            </Label>
             {isFixedDocument && (
-              <Badge variant="outline" className="ml-2 text-xs">
+              <Badge variant="outline" className="text-xs">
                 {locale === "zh" ? "固定文件" : "Fixed Document"}
               </Badge>
             )}
-          </Label>
+            {document.is_required && (
+              <Badge variant="destructive" className="text-xs">
+                {locale === "zh" ? "必填" : "Required"}
+              </Badge>
+            )}
+          </div>
           {files.length > 0 && (
             <Badge variant="secondary" className="text-xs">
               {files.length} {locale === "zh" ? "個檔案" : "files"}
@@ -601,6 +608,9 @@ export function DynamicApplicationForm({
                 ? "已上傳檔案 (1/1) - "
                 : "Uploaded files (1/1) - "}
               {documentName}
+              {document.is_required && (
+                <span className="text-red-500 ml-1 text-base font-bold">*</span>
+              )}
             </h4>
             <Card>
               <CardContent className="flex items-center justify-between p-3">
@@ -642,7 +652,20 @@ export function DynamicApplicationForm({
         )}
 
         {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
+          <div className="space-y-1">
+            <p className="text-sm text-muted-foreground">{description}</p>
+            {document.is_required && (
+              <p className="text-sm font-medium text-red-600">
+                {locale === "zh" ? "⚠️ 此為必填文件，請務必上傳" : "⚠️ This is a required document, please upload"}
+              </p>
+            )}
+          </div>
+        )}
+
+        {!description && document.is_required && (
+          <p className="text-sm font-medium text-red-600">
+            {locale === "zh" ? "⚠️ 此為必填文件，請務必上傳" : "⚠️ This is a required document, please upload"}
+          </p>
         )}
 
         <FileUpload
