@@ -622,10 +622,30 @@ class RosterService:
                 )
 
                 if not ranking:
-                    raise ValueError(
-                        f"找不到已執行分發的排名。Matrix 模式獎學金必須先執行矩陣分發才能產生造冊。"
-                        f"獎學金類型ID: {config.scholarship_type_id}, 學年度: {academic_year}"
+                    # 提供更詳細的錯誤診斷資訊
+                    available_rankings = (
+                        self.db.query(CollegeRanking)
+                        .filter(
+                            and_(
+                                CollegeRanking.scholarship_type_id == config.scholarship_type_id,
+                                CollegeRanking.academic_year == academic_year,
+                            )
+                        )
+                        .all()
                     )
+
+                    logger.error(
+                        f"No finalized ranking found for auto-detection. "
+                        f"Scholarship type ID: {config.scholarship_type_id}, Academic year: {academic_year}. "
+                        f"Available rankings: {[(r.id, r.ranking_status, r.distribution_executed) for r in available_rankings]}"
+                    )
+
+                    error_message = (
+                        f"找不到已執行分發的排名。Matrix 模式獎學金必須先執行矩陣分發才能產生造冊。"
+                        f"獎學金類型ID: {config.scholarship_type_id}, 學年度: {academic_year}. "
+                        f"請檢查是否已完成排名及矩陣分發流程。"
+                    )
+                    raise ValueError(error_message)
 
                 ranking_id = ranking.id
                 logger.info(

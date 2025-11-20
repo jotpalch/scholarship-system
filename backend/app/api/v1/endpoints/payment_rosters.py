@@ -202,9 +202,36 @@ def generate_payment_roster(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
     except ValueError as e:
-        # Validation errors (missing data, invalid parameters)
+        # Validation errors (missing data, invalid parameters, ranking not found, etc.)
         logger.warning(f"Roster generation validation error: {e}")
+
+        # 保存 roster ID (如果存在) 用於後續標記
+        roster_id_to_mark = roster.id if (roster and hasattr(roster, "id") and roster.id) else None
+
+        # 回滾主事務
         db.rollback()
+
+        # 如果 roster 已創建，使用獨立 session 標記為 FAILED
+        if roster_id_to_mark:
+            from app.db.session import SessionLocal
+
+            independent_db = SessionLocal()
+            try:
+                roster_to_mark = (
+                    independent_db.query(PaymentRoster).filter(PaymentRoster.id == roster_id_to_mark).first()
+                )
+
+                if roster_to_mark:
+                    roster_to_mark.status = RosterStatus.FAILED
+                    roster_to_mark.notes = f"[{datetime.now(timezone.utc).isoformat()}] 驗證失敗: {str(e)}"
+                    independent_db.commit()
+                    logger.info(f"Roster {roster_id_to_mark} marked as FAILED due to validation error")
+            except Exception as mark_error:
+                logger.error(f"Failed to mark roster {roster_id_to_mark} as FAILED: {mark_error}")
+                independent_db.rollback()
+            finally:
+                independent_db.close()
+
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     except Exception as e:
