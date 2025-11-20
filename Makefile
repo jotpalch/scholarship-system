@@ -305,17 +305,43 @@ init-testdata: ## Initialize test data (users, scholarships, etc.)
 	@echo "  - Student (碩士): stu_master / stumaster123"
 	@echo "  - Student (陸生): stu_china / stuchina123"
 
-init-all: docker-up ## Initialize complete development environment (Docker + DB + Test Data)
-	@echo "$(CYAN)🚀 Running database seed...$(NC)"
+init-all: ## Initialize complete development environment (Docker + Migrations + Seed Data)
+	@echo "$(GREEN)🚀 Initializing complete development environment...$(NC)"
+	@echo "$(CYAN)Step 1: Starting Docker services...$(NC)"
+	docker compose -f docker-compose.dev.yml up -d
+	@echo "$(CYAN)Step 2: Waiting for services to be ready...$(NC)"
+	@sleep 10
+	@echo "$(CYAN)🔍 Checking database connection...$(NC)"
+	@for i in {1..30}; do \
+		if docker exec scholarship_postgres_dev pg_isready -U scholarship_user -d scholarship_db > /dev/null 2>&1; then \
+			echo "$(GREEN)✅ Database is ready$(NC)"; \
+			break; \
+		fi; \
+		if [ $$i -eq 30 ]; then \
+			echo "$(RED)❌ Database failed to start after 30 attempts$(NC)"; \
+			exit 1; \
+		fi; \
+		echo "   Waiting for database... ($$i/30)"; \
+		sleep 2; \
+	done
+	@echo "$(CYAN)Step 3: Running database migrations...$(NC)"
+	@docker exec scholarship_backend_dev alembic upgrade head
+	@echo "$(CYAN)Step 4: Seeding database with test data...$(NC)"
 	@docker exec scholarship_backend_dev python -m app.seed
 	@echo ""
 	@echo "$(GREEN)🎉 Development environment fully initialized!$(NC)"
 	@echo "$(CYAN)Ready to start developing!$(NC)"
 	@echo ""
+	@echo "$(YELLOW)Quick Links:$(NC)"
+	@echo "  - Frontend: http://localhost:3000"
+	@echo "  - Backend API: http://localhost:8000"
+	@echo "  - API Docs: http://localhost:8000/docs"
+	@echo "  - MinIO Console: http://localhost:9001"
+	@echo ""
 	@echo "$(YELLOW)Next steps:$(NC)"
-	@echo "  - Run 'make dev' to start development servers"
-	@echo "  - Visit http://localhost:3000 for frontend"
-	@echo "  - Visit http://localhost:8000/docs for API docs"
+	@echo "  - Open http://localhost:3000 in your browser"
+	@echo "  - Use test users to log in (see README.md for credentials)"
+	@echo "  - Run 'make dev' to start local development servers (if needed)"
 
 # Utility Commands
 clean: ## Clean up generated files and caches

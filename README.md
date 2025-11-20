@@ -172,35 +172,50 @@ scholarship-system/
 
 ## Quick Start
 
+### TL;DR
+
+Just run this one command and you're done:
+
+```bash
+make init-all
+```
+
+✅ Everything will be set up automatically!
+
+---
+
 ### Prerequisites
 
 - **Docker Engine** & **Docker Compose v2** (recommended for fastest setup)
 - **Python 3.11+** (if running backend locally)
 - **Node.js 22+** and **npm 10+** (if running frontend locally)
-- **Make** (optional, for Makefile commands)
+- **Make** (for Makefile commands)
 
 ### Option A: Complete Setup with Makefile (Recommended)
 
-The fastest way to get everything running:
+The fastest way to get everything running - **just run one command**:
 
 ```bash
-# Initialize entire development environment (Docker + Database + Test Data)
 make init-all
 ```
 
-This single command will:
-1. Start all Docker services (PostgreSQL, Redis, MinIO, backend, frontend)
-2. Initialize lookup tables (degrees, departments, enrollment types)
-3. Create test users and sample scholarships
-4. Wait 10-15 minutes for complete initialization
+This single command handles everything:
+1. ✅ Starts all Docker services (PostgreSQL, Redis, MinIO, backend, frontend)
+2. ✅ Waits for database to be ready
+3. ✅ Runs all database migrations
+4. ✅ Seeds test data (14 test users, 3 scholarships, reference data)
 
-After initialization completes:
+**That's it!** The system will be fully initialized and ready to use.
+
+After initialization completes, access:
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
 - **MinIO Console**: http://localhost:9001
 
-Test user accounts (see [Database Management](#database-management) for credentials).
+Test user accounts are automatically created (see [Database Management](#database-management) for credentials).
+
+**Time**: ~5-10 minutes for first run (subsequent runs are faster)
 
 ### Option B: Docker Compose Only
 
@@ -380,12 +395,14 @@ git add lib/api/generated/schema.d.ts
 
 ## Makefile Commands Reference
 
+### 🚀 Main Initialization Command
+- **`make init-all`** - **[RECOMMENDED]** Full initialization (Docker + Migrations + Seed Data) - Run this once for complete setup!
+
 ### Setup Commands
 - `make install` - Install all dependencies (backend + frontend)
 - `make setup` - Complete project setup with env files
-- `make init-all` - Full initialization (Docker + DB + test data)
-- `make init-lookup` - Initialize lookup tables only
-- `make init-testdata` - Initialize test users and data
+- `make init-lookup` - Initialize lookup tables only (advanced)
+- `make init-testdata` - Initialize test users and data (advanced)
 
 ### Development Commands
 - `make dev` - Start both backend and frontend with hot reload
