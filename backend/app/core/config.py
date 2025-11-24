@@ -109,6 +109,7 @@ class Settings(BaseSettings):
     portal_jwt_server_url: str = "https://portal.test.nycu.edu.tw/jwt/portal"
     portal_test_mode: bool = False  # Set to True for testing with mock data
     portal_sso_timeout: float = 10.0  # Timeout for Portal JWT verification
+    portal_sso_verify_ssl: bool = True  # Set to False for test environments with self-signed certificates
 
     # Super Admin Configuration
     super_admin_nycu_id: str = "super_admin"  # NYCU ID that should be granted super_admin role

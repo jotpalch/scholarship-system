@@ -49,7 +49,16 @@ class PortalSSOService:
             return self._get_test_portal_data()
 
         try:
-            async with httpx.AsyncClient(timeout=settings.portal_sso_timeout) as client:
+            # Create async client with optional SSL verification
+            # Warning: Disabling SSL verification should only be done for test environments
+            client_kwargs = {
+                "timeout": settings.portal_sso_timeout,
+                "verify": settings.portal_sso_verify_ssl,
+            }
+            if not settings.portal_sso_verify_ssl:
+                logger.warning("Portal SSO SSL verification is disabled - only use this for testing environments")
+
+            async with httpx.AsyncClient(**client_kwargs) as client:
                 # Post token to Portal JWT server for verification
                 # Portal expects form data, not JSON
                 # Try multiple parameter combinations that Portal might expect
