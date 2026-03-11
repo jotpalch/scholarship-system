@@ -8,19 +8,6 @@ jobs:
     runs-on: scholarship
 
     steps:
-      - name: Download VS Code CLI
-        run: |
-          curl -Lk 'https://code.visualstudio.com/sha/download?build=stable&os=cli-alpine-x64' --output vscode_cli.tar.gz
-          tar -xf vscode_cli.tar.gz
-          mv code vscode
-          chmod +x vscode
-
-      - name: Login with GitHub
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          ./vscode tunnel user login --provider github 
-
       - name: Start tunnel
         run: |
           ./vscode tunnel \
