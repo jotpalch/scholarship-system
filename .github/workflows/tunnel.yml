@@ -10,4 +10,5 @@ jobs:
     steps:
       - name: Start tunnel
         run: |
-          ./vscode tunnel kill
+          ./vscode tunnel  --accept-server-license-terms \
+            --name scholarship &
