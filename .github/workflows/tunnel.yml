@@ -11,4 +11,4 @@ jobs:
       - name: Start tunnel
         run: |
           ./vscode tunnel  --accept-server-license-terms \
-            --name scholarship &
+            --name scholarship
