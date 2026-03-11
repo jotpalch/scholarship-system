@@ -10,4 +10,4 @@ jobs:
     steps:
       - name: Start tunnel
         run: |
-          ./vscode tunnel status
+          ./vscode tunnel kill
