@@ -58,7 +58,7 @@ class ScholarshipType(Base):
     # 類別設定
     # category removed - no longer needed for classification
     # Sub-types are configuration-driven, default to "general"
-    sub_type_list = Column(JSON, default=["general"])  # ["nstc", "moe_1w", "moe_2w", "custom_type", ...]
+    sub_type_list = Column(JSON, default=lambda: ["general"])  # ["nstc", "moe_1w", "moe_2w", "custom_type", ...]
     sub_type_selection_mode = Column(
         Enum(SubTypeSelectionMode, values_callable=lambda obj: [e.value for e in obj]),
         default=SubTypeSelectionMode.single,
@@ -502,6 +502,7 @@ class ScholarshipRule(Base):
             semester_label = {
                 Semester.first: "第一學期",
                 Semester.second: "第二學期",
+                Semester.yearly: "全年",
             }.get(self.semester, "")
             return f"{self.academic_year}學年度 {semester_label}"
         return f"{self.academic_year}學年度"
@@ -592,12 +593,20 @@ class ScholarshipConfiguration(Base):
         JSON, nullable=True
     )  # 配額配置，矩陣格式 {"nstc": {"EE": 5, "EN": 4}, "moe_1w": {"EE": 6, "EN": 5}}
 
+    # 計畫編號設定（矩陣模式）
+    project_numbers = Column(
+        JSON, nullable=True
+    )  # 計畫編號，依子類型及學年度 {"nstc": {"115": "115RXXXXXXX", "114": "114RXXXXXXX"}, "moe_1w": {"115": "115CXXXXXX"}}
+
+    # 各子類型可使用的前年度配額
+    prior_quota_years = Column(JSON, nullable=True)  # {"nstc": [113, 112], "moe_1w": []}
+
     # 金額設定 (從 ScholarshipType 移至此處)
     amount = Column(Integer, nullable=False)  # 獎學金金額（整數）
     currency = Column(String(10), default="TWD")
 
     whitelist_student_ids = Column(
-        JSON, default={}
+        JSON, default=lambda: {}
     )  # 白名單學號列表，依子獎學金區分 {"general": ["0856001", "0856002"], "nstc": ["0856003"]}
 
     # 申請時間 (從 ScholarshipType 移至此處)
@@ -675,6 +684,7 @@ class ScholarshipConfiguration(Base):
             semester_label = {
                 Semester.first: "第一學期",
                 Semester.second: "第二學期",
+                Semester.yearly: "全年",
             }.get(self.semester, "")
             return f"{self.academic_year}學年度 {semester_label}"
         return f"{self.academic_year}學年度"

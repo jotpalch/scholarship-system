@@ -6,7 +6,7 @@ Multi-role review operations (professor, college, admin)
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -23,8 +23,9 @@ from app.models.review import ApplicationReview, ApplicationReviewItem
 from app.models.user import User
 from app.schemas.response import ApiResponse
 from app.schemas.review import ReviewCreate, ReviewItemResponse, ReviewResponse, ReviewSubmitRequest
+from app.models.scholarship import ScholarshipType
 from app.services.application_audit_service import ApplicationAuditService
-from app.services.college_review_service import CollegeReviewService
+from app.services.email_automation_service import email_automation_service
 from app.services.review_service import ReviewService
 
 logger = logging.getLogger(__name__)
@@ -93,7 +94,7 @@ async def create_review(
     combined_comments = await review_service.combine_comments(items_dict)
 
     # 創建審查記錄
-    reviewed_at = datetime.utcnow()
+    reviewed_at = datetime.now(timezone.utc)
     new_review = ApplicationReview(
         application_id=review_data.application_id,
         reviewer_id=current_user.id,
@@ -508,6 +509,42 @@ async def submit_application_review(
             status="success",
         )
 
+        # Trigger college_review_submitted email automation (college role only)
+        if current_user.is_college():
+            try:
+                stmt_app = select(Application).where(Application.id == application_id)
+                result_app = await db.execute(stmt_app)
+                application = result_app.scalar_one_or_none()
+                if application:
+                    stmt_student = select(User).where(User.id == application.user_id)
+                    result_student = await db.execute(stmt_student)
+                    student = result_student.scalar_one_or_none()
+
+                    stmt_scholarship = select(ScholarshipType).where(
+                        ScholarshipType.id == application.scholarship_type_id
+                    )
+                    result_scholarship = await db.execute(stmt_scholarship)
+                    scholarship = result_scholarship.scalar_one_or_none()
+
+                    await email_automation_service.trigger_college_review_submitted(
+                        db=db,
+                        application_id=application.id,
+                        review_data={
+                            "app_id": application.app_id,
+                            "student_name": student.name if student else "Unknown",
+                            "student_email": student.email if student else "",
+                            "college_name": current_user.name,
+                            "recommendation": review.recommendation,
+                            "comments": review.comments or "",
+                            "reviewer_name": current_user.name,
+                            "scholarship_type": scholarship.name if scholarship else "Unknown",
+                            "scholarship_type_id": application.scholarship_type_id,
+                            "review_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                        },
+                    )
+            except Exception:
+                logger.exception("Failed to trigger college review automation")
+
         # Build response with unified format
         review_response = ReviewResponse(
             id=review.id,
@@ -529,18 +566,7 @@ async def submit_application_review(
             ],
         )
 
-        # Trigger auto-redistribution for rankings (college/admin reviews only)
-        redistribution_info = None
-        if current_user.is_college() or current_user.is_admin() or current_user.is_super_admin():
-            college_review_service = CollegeReviewService(db)
-            redistribution_info = await college_review_service.auto_redistribute_after_status_change(
-                application_id=application_id, executor_id=current_user.id
-            )
-            logger.info(f"Auto-redistribution completed for application {application_id}: {redistribution_info}")
-
         response_data = review_response.model_dump()
-        if redistribution_info:
-            response_data["redistribution_info"] = redistribution_info
 
         return ApiResponse(
             success=True,
@@ -552,25 +578,29 @@ async def submit_application_review(
         # Re-raise FastAPI HTTPException as-is (preserves status code and detail)
         raise
     except ValueError as e:
-        logger.warning(f"Invalid review data for application {application_id}: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid review data: {str(e)}")
+        logger.warning(f"Invalid review data for application {application_id}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid review data") from e
     except PermissionError as e:
-        logger.warning(f"Permission denied for review creation by user {current_user.id}: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to review this application")
+        logger.warning(f"Permission denied for review creation by user {current_user.id}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to review this application"
+        ) from e
     except IntegrityError as e:
-        logger.error(f"Database integrity error creating review for application {application_id}: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Review creation conflicts with existing data")
+        logger.exception("Database integrity error creating review for application %s", application_id)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Review creation conflicts with existing data"
+        ) from e
     except DatabaseError as e:
-        logger.error(f"Database error creating review for application {application_id}: {str(e)}")
+        logger.exception("Database error creating review for application %s", application_id)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database service temporarily unavailable"
-        )
+        ) from e
     except Exception as e:
-        logger.error(f"Unexpected error creating review for application {application_id}: {str(e)}")
+        logger.exception("Unexpected error creating review for application %s", application_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while creating the review",
-        )
+        ) from e
 
 
 @router.get("/applications/{application_id}/review")
@@ -630,14 +660,11 @@ async def get_user_application_review(
         }
 
     except Exception as e:
-        logger.error(f"Error fetching user review: {str(e)}")
-        import traceback
-
-        logger.error(f"Full traceback: {traceback.format_exc()}")
+        logger.exception("Error fetching user review")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An internal error occurred while fetching review",
-        )
+        ) from e
 
 
 @router.get("/applications/{application_id}/sub-types")
@@ -647,35 +674,24 @@ async def get_application_reviewable_sub_types(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """Get reviewable sub-types for an application (multi-role, role-filtered).
+
+    Returns sub-types that the current user is authorized to review:
+
+    - Professor: all active sub-types.
+    - College: sub-types not rejected by any professor.
+    - Admin / super_admin: sub-types not rejected by any professor or college.
+
+    Implementation lives in ``ApplicationService.get_application_available_sub_types``
+    (closes issue #649 for the multi-role review route).
     """
-    Get reviewable sub-types for an application (multi-role)
+    from app.core.exceptions import NotFoundError
+    from app.services.application_service import ApplicationService
 
-    Returns sub-types that the current user is authorized to review,
-    with localized labels (zh/en) from database configuration.
-
-    Role-based filtering:
-    - Professor: all sub-types
-    - College: sub-types not rejected by professor
-    - Admin: sub-types not rejected by professor or college
-    """
-    logger.info(f"User {current_user.id} ({current_user.role}) requesting sub-types for application {application_id}")
-
+    service = ApplicationService(db)
     try:
-        from app.services.application_service import ApplicationService
+        sub_types = await service.get_application_available_sub_types(application_id, current_user)
+    except NotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="申請不存在") from exc
 
-        service = ApplicationService(db)
-        sub_types = await service.get_application_available_sub_types(application_id)
-
-        logger.info(f"Found {len(sub_types)} sub-types for application {application_id}")
-        return {
-            "success": True,
-            "message": "查詢成功",
-            "data": sub_types,
-        }
-
-    except Exception as e:
-        logger.error(f"Error fetching application sub-types: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An internal error occurred while fetching sub-types",
-        )
+    return {"success": True, "message": "查詢成功", "data": sub_types}

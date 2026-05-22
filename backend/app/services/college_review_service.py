@@ -18,13 +18,14 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.exceptions import BusinessLogicError, NotFoundError
+from app.core.exceptions import AuthorizationError, BusinessLogicError, NotFoundError
+from app.core.metrics import scholarship_reviews_total
 from app.models.application import Application, ApplicationStatus
-from app.models.college_review import CollegeRanking, CollegeRankingItem, QuotaDistribution
+from app.models.college_review import CollegeRanking, CollegeRankingItem
 from app.models.enums import Semester
 from app.models.review import ApplicationReview  # Unified review system
 from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
-from app.services.email_automation_service import email_automation_service
+from app.models.user import User, UserRole
 
 func: Any = sa_func
 
@@ -67,6 +68,83 @@ class CollegeReviewService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def assert_ranking_within_deadline(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: Optional[str],
+        current_user: User,
+    ) -> None:
+        """
+        Guard for ranking write operations (#63): block college users from
+        creating / updating / finalizing / unfinalizing a ranking once the
+        scholarship's college-review deadline has passed. Admins / super_admins
+        bypass to keep the manual-extension escape hatch open.
+
+        The deadline lives on ScholarshipConfiguration, scoped by
+        (scholarship_type_id, academic_year, semester). If no matching
+        configuration is found OR the configuration has no deadline set,
+        the guard is a no-op (don't block what isn't constrained).
+        """
+        if current_user.role in (UserRole.admin, UserRole.super_admin):
+            return
+
+        # Resolve the matching ScholarshipConfiguration row.
+        # Yearly cycles store semester as either NULL or "yearly" — match both.
+        normalized_semester = self._normalize_semester_value(semester) if semester else None
+        is_yearly = self._is_yearly_semester(semester) if semester else False
+
+        conditions = [
+            ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+            ScholarshipConfiguration.academic_year == academic_year,
+        ]
+        if is_yearly or normalized_semester is None:
+            conditions.append(
+                or_(
+                    ScholarshipConfiguration.semester.is_(None),
+                    ScholarshipConfiguration.semester == Semester.yearly.value,
+                )
+            )
+        else:
+            conditions.append(ScholarshipConfiguration.semester == normalized_semester)
+
+        stmt = select(ScholarshipConfiguration).where(and_(*conditions)).limit(1)
+        result = await self.db.execute(stmt)
+        config = result.scalar_one_or_none()
+
+        if config is None:
+            return  # no configuration → don't block (let other validation surface the missing config)
+
+        deadline = config.college_review_end
+        if deadline is None:
+            return  # no deadline configured → don't block
+
+        # Normalize naive deadlines to UTC so comparison with timezone-aware now() works.
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+
+        now = datetime.now(timezone.utc)
+        if deadline < now:
+            formatted = deadline.strftime("%Y-%m-%d %H:%M %Z").strip()
+            raise AuthorizationError(f"已過排名截止時間 ({formatted})，如需修改請聯絡管理員延期")
+
+    async def assert_ranking_within_deadline_by_ranking(
+        self,
+        ranking_id: int,
+        current_user: User,
+    ) -> None:
+        """Same as assert_ranking_within_deadline but resolves
+        scholarship_type_id / academic_year / semester from a ranking_id first."""
+        ranking = await self.db.get(CollegeRanking, ranking_id)
+        if not ranking:
+            raise NotFoundError(f"Ranking {ranking_id} not found")
+        await self.assert_ranking_within_deadline(
+            ranking.scholarship_type_id,
+            ranking.academic_year,
+            ranking.semester,
+            current_user,
+        )
 
     async def check_ranking_roster_status(self, ranking_id: int) -> Dict[str, Any]:
         """
@@ -151,143 +229,6 @@ class CollegeReviewService:
         else:
             return 1  # 預設為 1
 
-    async def auto_redistribute_after_status_change(self, application_id: int, executor_id: int) -> Dict[str, Any]:
-        """
-        Check and execute auto-redistribution for ALL rankings under the scholarship configuration.
-
-        When an application's status changes, this redistributes ALL rankings that share the same
-        scholarship_type_id, academic_year, and semester to ensure quota allocation consistency.
-
-        Args:
-            application_id: ID of the application whose status changed
-            executor_id: ID of the user who triggered the status change
-
-        Returns:
-            Dict containing:
-            - auto_redistributed: bool - Whether any redistribution was executed
-            - total_allocated: int - Total number of students allocated across all rankings
-            - rankings_processed: int - Number of rankings processed
-            - results: list - List of results for each ranking
-            - reason: str - Reason for redistribution or skip
-        """
-        # Get application information
-        app_stmt = select(Application).where(Application.id == application_id)
-        app_result = await self.db.execute(app_stmt)
-        application = app_result.scalar_one_or_none()
-
-        if not application:
-            logger.warning(f"Application {application_id} not found, skip auto-redistribution")
-            return {"auto_redistributed": False, "reason": "application_not_found"}
-
-        logger.info(
-            f"Starting auto-redistribution for scholarship configuration: "
-            f"type_id={application.scholarship_type_id}, year={application.academic_year}, "
-            f"semester={application.semester}"
-        )
-
-        # Get all rankings for this scholarship configuration
-        rankings_stmt = select(CollegeRanking).where(
-            and_(
-                CollegeRanking.scholarship_type_id == application.scholarship_type_id,
-                CollegeRanking.academic_year == application.academic_year,
-                CollegeRanking.semester == application.semester,
-            )
-        )
-        rankings_result = await self.db.execute(rankings_stmt)
-        rankings = rankings_result.scalars().all()
-
-        if not rankings:
-            logger.warning(
-                f"No rankings found for scholarship configuration "
-                f"(type_id={application.scholarship_type_id}, year={application.academic_year}, "
-                f"semester={application.semester}), skip auto-redistribution"
-            )
-            return {"auto_redistributed": False, "reason": "no_rankings"}
-
-        logger.info(f"Found {len(rankings)} rankings to process for auto-redistribution")
-
-        # Process each ranking
-        redistribution_results = []
-        total_allocated = 0
-        successful_count = 0
-
-        for ranking in rankings:
-            ranking_result = {
-                "ranking_id": ranking.id,
-                "sub_type_code": ranking.sub_type_code,
-            }
-
-            # Check roster status
-            roster_status = await self.check_ranking_roster_status(ranking.id)
-            logger.info(
-                f"Ranking {ranking.id} ({ranking.sub_type_code}): "
-                f"has_roster={roster_status['has_roster']}, can_redistribute={roster_status['can_redistribute']}"
-            )
-
-            if roster_status["can_redistribute"]:
-                # Execute redistribution
-                logger.info(f"🔄 Starting auto-redistribution for ranking {ranking.id} ({ranking.sub_type_code})")
-                try:
-                    from app.services.matrix_distribution import MatrixDistributionService
-
-                    matrix_service = MatrixDistributionService(self.db)
-                    distribution_result = await matrix_service.execute_matrix_distribution(
-                        ranking_id=ranking.id, executor_id=executor_id
-                    )
-
-                    allocated = distribution_result.get("total_allocated", 0)
-                    total_allocated += allocated
-                    successful_count += 1
-
-                    ranking_result.update({"status": "success", "allocated": allocated})
-
-                    logger.info(
-                        f"✅ Redistributed ranking {ranking.id} ({ranking.sub_type_code}), " f"allocated: {allocated}"
-                    )
-
-                except Exception as e:
-                    logger.error(
-                        f"❌ Failed to redistribute ranking {ranking.id} ({ranking.sub_type_code}): {str(e)}",
-                        exc_info=True,
-                    )
-                    ranking_result.update({"status": "failed", "error": str(e)})
-
-            else:
-                # Roster exists - cannot redistribute
-                roster_code = (
-                    roster_status.get("roster_info", {}).get("roster_code", "UNKNOWN")
-                    if roster_status.get("roster_info")
-                    else "NONE"
-                )
-                logger.info(
-                    f"⚠️ Ranking {ranking.id} ({ranking.sub_type_code}) has active roster, "
-                    f"skip auto-redistribution. Roster: {roster_code}"
-                )
-                ranking_result.update(
-                    {
-                        "status": "skipped",
-                        "reason": "roster_exists",
-                        "roster_code": roster_code,
-                    }
-                )
-
-            redistribution_results.append(ranking_result)
-
-        # Summary
-        logger.info(
-            f"📊 Auto-redistribution summary: {successful_count}/{len(rankings)} rankings redistributed, "
-            f"total allocated: {total_allocated}"
-        )
-
-        return {
-            "auto_redistributed": successful_count > 0,
-            "total_allocated": total_allocated,
-            "rankings_processed": len(rankings),
-            "successful_count": successful_count,
-            "results": redistribution_results,
-            "reason": "status_changed",
-        }
-
     @staticmethod
     def _normalize_semester_value(semester: Optional[Any]) -> Optional[str]:
         """Normalize semester representations to canonical string or None for yearly."""
@@ -329,6 +270,12 @@ class CollegeReviewService:
     # Use ReviewService.create_review() instead for all review operations
     # Ranking functionality now handled by create_ranking() method
 
+    @staticmethod
+    def _role_matches(role, *expected: str) -> bool:
+        """Compare role (enum or string) against expected string values."""
+        role_str = role.value if hasattr(role, "value") else role
+        return role_str in expected
+
     async def get_applications_for_review(
         self,
         scholarship_type_id: Optional[int] = None,
@@ -349,9 +296,8 @@ class CollegeReviewService:
             select(Application)
             .options(
                 selectinload(Application.scholarship_type_ref),
-                selectinload(Application.reviews).selectinload(
-                    ApplicationReview.reviewer
-                ),  # Unified review system with reviewer info
+                selectinload(Application.reviews).selectinload(ApplicationReview.reviewer),
+                selectinload(Application.reviews).selectinload(ApplicationReview.items),
                 selectinload(Application.files),
                 selectinload(Application.student),  # Load student information
             )
@@ -359,7 +305,7 @@ class CollegeReviewService:
                 or_(
                     Application.status == ApplicationStatus.under_review.value,
                     Application.status == ApplicationStatus.approved.value,  # 包含已核准的申請
-                    Application.status == ApplicationStatus.partial_approved.value,  # 包含部分核准的申請
+                    Application.status == ApplicationStatus.partial_approved.value,  # 包含部分同意的申請
                     Application.status == ApplicationStatus.rejected.value,  # 包含已駁回的申請
                 )
             )
@@ -448,16 +394,26 @@ class CollegeReviewService:
                 "status": app.status,
                 "created_at": app.created_at,
                 "student_data": student_payload,
-                "is_renewal": app.is_renewal if hasattr(app, "is_renewal") else False,
-                # Check if professor has reviewed (unified review system - check if any reviewer with professor role exists)
+                "is_renewal": app.is_renewal,
+                # Professor review details
                 "professor_review_completed": any(
-                    review.reviewer.role == "professor" for review in app.reviews if hasattr(review, "reviewer")
+                    self._role_matches(review.reviewer.role, "professor") for review in app.reviews if review.reviewer
                 ),
+                "professor_review_items": [
+                    {
+                        "sub_type_code": item.sub_type_code,
+                        "recommendation": item.recommendation,
+                        "comments": item.comments,
+                    }
+                    for review in app.reviews
+                    if review.reviewer and self._role_matches(review.reviewer.role, "professor")
+                    for item in review.items
+                ],
                 # college_review_completed replaced by checking ApplicationReview with college role
                 "college_review_completed": any(
-                    review.reviewer.role in ["college", "admin", "super_admin"]
+                    self._role_matches(review.reviewer.role, "college", "admin", "super_admin")
                     for review in app.reviews
-                    if hasattr(review, "reviewer")
+                    if review.reviewer
                 ),
                 # Use Application.final_ranking_position instead of college_review.final_rank
                 "final_ranking_position": app.final_ranking_position,
@@ -536,20 +492,22 @@ class CollegeReviewService:
             f"Building query for sub_type_code={sub_type_code}, semester_filter type={type(semester_filter)}, semester_filter={semester_filter}, creator_college={creator_college}"
         )
 
+        # Valid statuses for ranking: include all reviewed/approved states
+        valid_ranking_statuses = [
+            ApplicationStatus.submitted.value,
+            ApplicationStatus.under_review.value,
+            ApplicationStatus.approved.value,
+            ApplicationStatus.partial_approved.value,
+            ApplicationStatus.rejected.value,
+        ]
+
         if sub_type_code == "default":
             # Include all applications for this scholarship type, regardless of sub-type
             conditions = [
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.academic_year == academic_year,
-                Application.is_renewal.is_(False),  # Exclude renewal applications
                 Application.deleted_at.is_(None),  # Exclude soft-deleted applications
-                Application.status.in_(  # Whitelist valid statuses
-                    [
-                        ApplicationStatus.under_review.value,
-                        ApplicationStatus.approved.value,
-                        ApplicationStatus.rejected.value,
-                    ]
-                ),
+                Application.status.in_(valid_ranking_statuses),
             ]
             logger.debug(f"Initial conditions count: {len(conditions)}")
 
@@ -580,15 +538,8 @@ class CollegeReviewService:
                 Application.scholarship_type_id == scholarship_type_id,
                 Application.sub_scholarship_type == sub_type_code,
                 Application.academic_year == academic_year,
-                Application.is_renewal.is_(False),  # Exclude renewal applications
                 Application.deleted_at.is_(None),  # Exclude soft-deleted applications
-                Application.status.in_(  # Whitelist valid statuses
-                    [
-                        ApplicationStatus.under_review.value,
-                        ApplicationStatus.approved.value,
-                        ApplicationStatus.rejected.value,
-                    ]
-                ),
+                Application.status.in_(valid_ranking_statuses),
             ]
             logger.debug(f"Initial conditions count: {len(conditions)}")
 
@@ -670,14 +621,15 @@ class CollegeReviewService:
         await self.db.flush()  # Flush within transaction context
         await self.db.refresh(ranking)
 
-        # Create ranking items - sort by final_ranking_position (if available), then by submission date
+        # Create ranking items - renewal students always come first, then by rank/submission date
         def sort_key(app):
+            sort_group = 0 if app.is_renewal else 1  # 0 = renewal (top), 1 = new
             # If application has final_ranking_position, use it; otherwise use a large number (lowest priority)
-            # Lower rank number = higher priority (rank 1 is best)
             rank = app.final_ranking_position if app.final_ranking_position else 999999
             # Use submitted_at as secondary sort (earlier submissions get higher priority if same rank)
             submitted_at = app.submitted_at or app.created_at
             return (
+                sort_group,  # Renewal first, new applications after
                 rank,  # Ascending order: lower rank number comes first
                 submitted_at.timestamp(),  # Ascending: earlier submission comes first
             )
@@ -718,175 +670,75 @@ class CollegeReviewService:
     async def update_ranking_order(self, ranking_id: int, new_order: List[Dict[str, Any]]) -> CollegeRanking:
         """Update the ranking order of applications with transaction safety"""
 
-        try:
-            # Get ranking with pessimistic locking
-            ranking_stmt = (
-                select(CollegeRanking)
-                .options(selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.application))
-                .where(CollegeRanking.id == ranking_id)
-                .with_for_update()
-            )
-
-            ranking_result = await self.db.execute(ranking_stmt)
-            ranking = ranking_result.scalar_one_or_none()
-
-            if not ranking:
-                raise RankingNotFoundError(f"Ranking with ID {ranking_id} not found")
-
-            if ranking.is_finalized:
-                raise RankingModificationError(f"Cannot modify finalized ranking {ranking_id}")
-
-            # Validate input
-            if not new_order:
-                raise InvalidRankingDataError("New order cannot be empty")
-
-            positions = [item.get("position") for item in new_order]
-            if len(positions) != len(set(positions)):
-                raise InvalidRankingDataError("Duplicate positions found in ranking update")
-
-            # Update rank positions with validation
-            updated_count = 0
-            for order_item in new_order:
-                item_id = order_item.get("item_id")
-                new_position = order_item.get("position")
-
-                if not item_id or new_position is None:
-                    continue
-
-                # Find the ranking item
-                ranking_item = next((item for item in ranking.items if item.id == item_id), None)
-
-                if ranking_item and ranking_item.rank_position != new_position:
-                    ranking_item.rank_position = new_position
-                    # Also update the application's ranking position for consistency
-                    if ranking_item.application:
-                        ranking_item.application.final_ranking_position = new_position
-                    updated_count += 1
-
-            if updated_count == 0:
-                raise InvalidRankingDataError("No valid position updates found in ranking data")
-
-            ranking.updated_at = datetime.now(timezone.utc)
-            await self.db.flush()
-            await self.db.refresh(ranking)
-
-            return ranking
-
-        except Exception as e:
-            raise e
-
-    async def execute_quota_distribution(
-        self,
-        ranking_id: int,
-        executor_id: int,
-        distribution_rules: Optional[Dict[str, Any]] = None,
-    ) -> QuotaDistribution:
-        """Execute quota-based distribution for a ranking"""
-
-        ranking = await self.get_ranking(ranking_id)
-        if not ranking:
-            raise NotFoundError("Ranking", str(ranking_id))
-
-        if ranking.distribution_executed:
-            raise BusinessLogicError("Distribution already executed for this ranking")
-
-        # Sort ranking items by position
-        sorted_items = sorted(ranking.items, key=lambda x: x.rank_position)
-
-        # Apply quota allocation
-        allocated_count = 0
-        allocation_results = []
-
-        for item in sorted_items:
-            if ranking.total_quota and allocated_count >= ranking.total_quota:
-                # No more quota available
-                item.is_allocated = False
-                item.status = "rejected"
-                item.allocation_reason = "Quota exceeded"
-
-                # Update application status
-                item.application.quota_allocation_status = "rejected"
-                item.application.status = ApplicationStatus.rejected.value
-            else:
-                # Allocate quota
-                item.is_allocated = True
-                item.status = "allocated"
-                item.allocation_reason = "Within quota limit"
-                allocated_count += 1
-
-                # Update application status
-                item.application.quota_allocation_status = "allocated"
-                item.application.status = ApplicationStatus.approved.value
-
-            allocation_results.append(
-                {
-                    "application_id": item.application_id,
-                    "rank_position": item.rank_position,
-                    "is_allocated": item.is_allocated,
-                    "status": item.status,
-                }
-            )
-
-        # Update ranking
-        ranking.allocated_count = allocated_count
-        ranking.distribution_executed = True
-        ranking.distribution_date = datetime.now(timezone.utc)
-
-        # Create distribution record
-        distribution = QuotaDistribution(
-            distribution_name=f"Distribution for {ranking.ranking_name}",
-            academic_year=ranking.academic_year,
-            semester=ranking.semester,
-            total_applications=ranking.total_applications,
-            total_quota=ranking.total_quota or ranking.total_applications,
-            total_allocated=allocated_count,
-            algorithm_version="v1.0",
-            distribution_rules=distribution_rules or {},
-            distribution_summary={
-                ranking.sub_type_code: {
-                    "total_applications": ranking.total_applications,
-                    "total_quota": ranking.total_quota,
-                    "allocated": allocated_count,
-                    "rejected": ranking.total_applications - allocated_count,
-                }
-            },
-            executed_by=executor_id,
+        # Get ranking with pessimistic locking
+        ranking_stmt = (
+            select(CollegeRanking)
+            .options(selectinload(CollegeRanking.items).selectinload(CollegeRankingItem.application))
+            .where(CollegeRanking.id == ranking_id)
+            .with_for_update()
         )
 
-        self.db.add(distribution)
-        await self.db.flush()  # Flush within transaction context
-        await self.db.refresh(distribution)
+        ranking_result = await self.db.execute(ranking_stmt)
+        ranking = ranking_result.scalar_one_or_none()
 
-        # 發送自動化通知 - Final results decided
-        try:
-            # Send result notifications for all applications in this ranking
-            import logging
+        if not ranking:
+            raise RankingNotFoundError(f"Ranking with ID {ranking_id} not found")
 
-            logger = logging.getLogger(__name__)
+        if ranking.is_finalized:
+            raise RankingModificationError(f"Cannot modify finalized ranking {ranking_id}")
 
-            for item in sorted_items:
-                application = item.application
-                result_status = "獲得" if item.is_allocated else "未獲得"
-                approved_amount = (
-                    getattr(application.scholarship, "amount", "")
-                    if item.is_allocated and application.scholarship
-                    else ""
-                )
+        # Validate input
+        if not new_order:
+            raise InvalidRankingDataError("New order cannot be empty")
 
-                result_data = {
-                    "result_status": result_status,
-                    "approved_amount": str(approved_amount) if approved_amount else "",
-                    "result_message": f"您的申請已完成審核程序，結果為：{result_status}",
-                    "next_steps": "請查看系統通知了解後續步驟。" if item.is_allocated else "感謝您的申請。",
-                }
+        positions = [item.get("position") for item in new_order]
+        if len(positions) != len(set(positions)):
+            raise InvalidRankingDataError("Duplicate positions found in ranking update")
 
-                # Trigger email automation for final result
-                await email_automation_service.trigger_final_result_decided(self.db, application.id, result_data)
+        # Build a lookup of item_id -> new_position from the request
+        order_lookup = {}
+        for order_item in new_order:
+            item_id = order_item.get("item_id")
+            new_position = order_item.get("position")
+            if item_id and new_position is not None:
+                order_lookup[item_id] = new_position
 
-        except Exception as e:
-            logger.error(f"Failed to trigger automated result emails: {e}")
+        # Validate: renewal students must rank before all new applications
+        item_lookup = {item.id: item for item in ranking.items}
+        renewal_positions = []
+        new_positions = []
+        for item_id, pos in order_lookup.items():
+            item = item_lookup.get(item_id)
+            if item and item.application:
+                if item.application.is_renewal:
+                    renewal_positions.append(pos)
+                else:
+                    new_positions.append(pos)
 
-        return distribution
+        if renewal_positions and new_positions:
+            max_renewal_pos = max(renewal_positions)
+            min_new_pos = min(new_positions)
+            if max_renewal_pos > min_new_pos:
+                raise InvalidRankingDataError("續領學生的排名必須在所有新申請學生之前")
+
+        # Update rank positions
+        updated_count = 0
+        for item_id, new_position in order_lookup.items():
+            ranking_item = item_lookup.get(item_id)
+            if ranking_item and ranking_item.rank_position != new_position:
+                ranking_item.rank_position = new_position
+                if ranking_item.application:
+                    ranking_item.application.final_ranking_position = new_position
+                updated_count += 1
+
+        if updated_count == 0:
+            raise InvalidRankingDataError("No valid position updates found in ranking data")
+
+        ranking.updated_at = datetime.now(timezone.utc)
+        await self.db.flush()
+        await self.db.refresh(ranking)
+
+        return ranking
 
     async def finalize_ranking(self, ranking_id: int, finalizer_id: int) -> CollegeRanking:
         """Finalize a ranking (makes it read-only) with concurrent access protection"""
@@ -945,12 +797,20 @@ class CollegeReviewService:
 
             await self.db.flush()  # Flush within transaction context
 
+            # Business metric: count college finalize actions to complete
+            # the reviewer_type dimension of scholarship_reviews_total
+            # (professor counterpart wired in PR #564, follow-up from #159).
+            scholarship_reviews_total.labels(
+                reviewer_type="college",
+                action="finalize",
+            ).inc()
+
             return ranking
 
         except (RankingNotFoundError, RankingModificationError):
             raise  # Re-raise specific exceptions
         except Exception as e:
-            raise BusinessLogicError(f"Failed to finalize ranking {ranking_id}: {str(e)}")
+            raise BusinessLogicError(f"Failed to finalize ranking {ranking_id}") from e
 
     async def unfinalize_ranking(self, ranking_id: int) -> CollegeRanking:
         """Unfinalize a ranking (makes it editable again)"""
@@ -981,7 +841,7 @@ class CollegeReviewService:
         except (RankingNotFoundError, RankingModificationError):
             raise  # Re-raise specific exceptions
         except Exception as e:
-            raise BusinessLogicError(f"Failed to unfinalize ranking {ranking_id}: {str(e)}")
+            raise BusinessLogicError(f"Failed to unfinalize ranking {ranking_id}") from e
 
     async def get_quota_status(
         self,
@@ -1101,7 +961,9 @@ class CollegeReviewService:
                                 f"  Sub-type {sub_type_code}: {numeric_quota} quota for college {college_code}"
                             )
                     except (TypeError, ValueError) as e:
-                        logger.warning(f"Invalid quota value for {sub_type_code}/{college_code}: {quota_value} ({e})")
+                        logger.warning(
+                            f"Invalid quota value for {sub_type_code}/{college_code}: {quota_value} ()", exc_info=True
+                        )
                         pass
 
             if total_college_quota > 0:

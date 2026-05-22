@@ -3,7 +3,7 @@ Application models for scholarship applications
 """
 
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import (
@@ -22,6 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
+from app.core.encrypted_json import StudentDataJSON
 from app.db.base_class import Base
 from app.models.enums import ApplicationStatus, ReviewStage, Semester
 from app.models.scholarship import SubTypeSelectionMode
@@ -83,10 +84,11 @@ class Application(Base):
     )  # Specific configuration applied for
     scholarship_name = Column(String(200))
     amount = Column(Numeric(10, 2))
-    scholarship_subtype_list = Column(JSON, nullable=False, default=[])
+    scholarship_subtype_list = Column(JSON, nullable=False, default=lambda: [])
     sub_type_selection_mode = Column(
         Enum(SubTypeSelectionMode, values_callable=lambda obj: [e.value for e in obj]), nullable=False
     )
+    sub_type_preferences = Column(JSON, nullable=True)  # Ordered preference list: ["nstc", "moe_1w"]
 
     # New fields for comprehensive scholarship system (Issue #10)
     # Sub type is configuration-driven (dynamic), use String for flexibility
@@ -98,6 +100,7 @@ class Application(Base):
         nullable=False,
     )
     is_renewal = Column(Boolean, default=False, nullable=False)  # 是否為續領申請
+    renewal_year = Column(Integer, nullable=True)  # 續領年份 (e.g. 113)，用於批次匯入時直接指定
     previous_application_id = Column(Integer, ForeignKey("applications.id"))
     review_deadline = Column(DateTime(timezone=True))
     decision_date = Column(DateTime(timezone=True))
@@ -124,7 +127,9 @@ class Application(Base):
     )  # Can be NULL for yearly scholarships
 
     # 申請資料 (申請當時)
-    student_data = Column(JSON)  # Student 資料
+    # std_pid (身分證字號) inside this JSON is transparently AES-256-GCM
+    # encrypted at rest by StudentDataJSON; the column is read as plaintext.
+    student_data = Column(StudentDataJSON)  # Student 資料
     submitted_form_data = Column(JSON)  # Field, Document 資料
 
     # 同意條款
@@ -159,6 +164,8 @@ class Application(Base):
     batch_import_id = Column(Integer, ForeignKey("batch_imports.id"), nullable=True)  # 批次匯入紀錄
     import_source = Column(String(20), nullable=True, default="online")  # 'online' | 'batch_import'
     document_status = Column(String(30), nullable=True, default="complete")  # 'complete' | 'pending_documents'
+    application_document_url = Column(String(500), nullable=True)  # 申請文件
+    application_document_original_filename = Column(String(255), nullable=True)
 
     # 其他資訊
     meta_data = Column(JSON)  # 額外的元資料
@@ -212,12 +219,12 @@ class Application(Base):
     @property
     def is_editable(self) -> bool:
         """Check if application can be edited"""
-        return bool(self.status in [ApplicationStatus.draft.value, ApplicationStatus.returned.value])
+        return bool(self.status in [ApplicationStatus.draft, ApplicationStatus.returned])
 
     @property
     def is_submitted(self) -> bool:
         """Check if application is submitted"""
-        return bool(self.status != ApplicationStatus.draft.value)
+        return bool(self.status != ApplicationStatus.draft)
 
     @property
     def can_be_reviewed(self) -> bool:
@@ -225,8 +232,8 @@ class Application(Base):
         return bool(
             self.status
             in [
-                ApplicationStatus.submitted.value,
-                ApplicationStatus.under_review.value,
+                ApplicationStatus.submitted,
+                ApplicationStatus.under_review,
             ]
         )
 
@@ -235,7 +242,7 @@ class Application(Base):
         """Check if application review is overdue"""
         if not self.review_deadline:
             return False
-        return bool(datetime.now().replace(tzinfo=None) > self.review_deadline.replace(tzinfo=None))
+        return bool(datetime.now(timezone.utc).replace(tzinfo=None) > self.review_deadline.replace(tzinfo=None))
 
     # get_main_type_enum() removed - main_scholarship_type field no longer exists
 
@@ -252,6 +259,7 @@ class Application(Base):
         return {
             Semester.first: "第一學期",
             Semester.second: "第二學期",
+            Semester.yearly: "全年",
         }.get(self.semester, "")
 
     @property
@@ -272,14 +280,14 @@ class Application(Base):
     def get_review_stage(self) -> Optional[str]:
         """Get current review stage based on application type and status"""
         if self.is_renewal:
-            if self.status == ApplicationStatus.submitted.value:
+            if self.status == ApplicationStatus.submitted:
                 return "renewal_professor"
-            elif self.status == ApplicationStatus.under_review.value:
+            elif self.status == ApplicationStatus.under_review:
                 return "renewal_college"
         else:
-            if self.status == ApplicationStatus.submitted.value:
+            if self.status == ApplicationStatus.submitted:
                 return "general_professor"
-            elif self.status == ApplicationStatus.under_review.value:
+            elif self.status == ApplicationStatus.under_review:
                 return "general_college"
         return None
 

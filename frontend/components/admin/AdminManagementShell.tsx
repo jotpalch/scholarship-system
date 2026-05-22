@@ -1,6 +1,7 @@
 "use client";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { logger } from "@/lib/utils/logger";
 import { AdminManagementProvider, useAdminManagement } from "@/contexts/admin-management-context";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
@@ -31,6 +32,7 @@ import { ConfigurationsPanel } from "./configurations/ConfigurationsPanel";
 import { RulesPanel } from "./rules/RulesPanel";
 import { WorkflowsPanel } from "./workflows/WorkflowsPanel";
 import { SettingsPanel } from "./settings/SettingsPanel";
+import { SystemDocsPanel } from "./system-docs/SystemDocsPanel";
 
 interface User {
   id: string;
@@ -49,7 +51,7 @@ interface User {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -73,13 +75,11 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
         const response = await apiClient.admin.getCurrentUserScholarshipPermissions();
         if (response.success && response.data) {
           const permissions = response.data as ScholarshipPermission[];
-          const hasQuota = permissions.some(
-            (p: any) => p.can_manage_quota
-          );
+          const hasQuota = permissions.some(p => p.can_manage_quota);
           setHasQuotaPermission(hasQuota);
         }
       } catch (error) {
-        console.error("Failed to check quota permissions:", error);
+        logger.error("Failed to check quota permissions", { error: error });
       }
     };
 
@@ -99,7 +99,7 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList
-          className={`grid w-full ${hasQuotaPermission ? "grid-cols-11" : "grid-cols-10"}`}
+          className={`grid w-full ${hasQuotaPermission ? "grid-cols-12" : "grid-cols-11"}`}
         >
           <TabsTrigger value="dashboard">系統概覽</TabsTrigger>
           <TabsTrigger value="users">使用者權限</TabsTrigger>
@@ -114,6 +114,7 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
           <TabsTrigger value="history">歷史申請</TabsTrigger>
           <TabsTrigger value="announcements">系統公告</TabsTrigger>
           <TabsTrigger value="settings">系統設定</TabsTrigger>
+          <TabsTrigger value="system-docs">系統文件</TabsTrigger>
         </TabsList>
 
         <TabsContent value="dashboard" className="space-y-4">
@@ -160,6 +161,10 @@ function AdminManagementContent({ user }: AdminManagementShellProps) {
 
         <TabsContent value="settings" className="space-y-4">
           <SettingsPanel />
+        </TabsContent>
+
+        <TabsContent value="system-docs" className="space-y-4">
+          <SystemDocsPanel />
         </TabsContent>
       </Tabs>
     </div>

@@ -11,6 +11,8 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import RosterAlreadyExistsError, RosterGenerationError, RosterLockedError, RosterNotFoundError
+from app.core.metrics import payment_rosters_total
+from app.core.pii_crypto import redact_dict_pii
 from app.models.application import Application
 from app.models.enums import QuotaManagementMode
 from app.models.payment_roster import (
@@ -172,6 +174,11 @@ class RosterService:
 
                 logger.info(f"Creating new roster {roster_code}")
 
+                # Business metric: count roster creations so the
+                # Scholarship System Overview dashboard reflects when
+                # admins kick off a new payment cycle (issue #159).
+                payment_rosters_total.labels(status="processing").inc()
+
             # 記錄稽核日誌
             user = self.db.query(User).filter(User.id == created_by_user_id).first()
             user_name = user.name if user else "Unknown"
@@ -273,8 +280,17 @@ class RosterService:
                                 logger.info(f"Updated {key} for application {application.id}: {old_value} -> {value}")
 
                         if has_changes:
-                            # 更新Application的student_data欄位（稽核用）
+                            # 更新Application的student_data欄位（稽核用）。
+                            # stored_student_data is the same dict reference as
+                            # application.student_data; flag_modified() is required
+                            # because SQLAlchemy's default JSON change detection
+                            # compares object identity, not contents — without
+                            # this, the in-place mutations on line 270 would be
+                            # silently discarded on commit.
+                            from sqlalchemy.orm.attributes import flag_modified
+
                             application.student_data = stored_student_data
+                            flag_modified(application, "student_data")
                             self.db.add(application)
 
                             # 記錄更新日誌
@@ -285,10 +301,18 @@ class RosterService:
                                 user_id=created_by_user_id,
                                 user_name=user_name,
                                 description=f"學籍驗證後更新欄位: {', '.join(updated_fields)}",
-                                old_values={f: stored_student_data.get(f) for f in updated_fields},
-                                new_values={
-                                    f: fresh_student_data[f] for f in updated_fields if f in fresh_student_data
-                                },
+                                # Redact std_pid (and any other PII keys configured in
+                                # `redact_dict_pii` defaults) before persisting to
+                                # audit_logs.old_values / new_values. The ORM-loaded
+                                # `stored_student_data` has already been decrypted by
+                                # the PII TypeDecorator, so without this guard a
+                                # `std_pid` entry in `updated_fields` would write
+                                # plaintext into the audit trail and bypass at-rest
+                                # encryption. Defense in depth — see PR #202.
+                                old_values=redact_dict_pii({f: stored_student_data.get(f) for f in updated_fields}),
+                                new_values=redact_dict_pii(
+                                    {f: fresh_student_data[f] for f in updated_fields if f in fresh_student_data}
+                                ),
                                 level=RosterAuditLevel.INFO,
                                 metadata={
                                     "application_id": application.id,
@@ -318,7 +342,7 @@ class RosterService:
                         disqualified_count += 1
 
                 except Exception as e:
-                    logger.error(f"Error processing application {application.id}: {e}")
+                    logger.exception(f"Error processing application {application.id}")
                     disqualified_count += 1
 
                     # 記錄錯誤日誌
@@ -387,8 +411,8 @@ class RosterService:
         except Exception as e:
             # 不在此處執行 rollback，讓調用者決定如何處理事務
             # 這避免了與 API 端點的 rollback 重複執行
-            logger.error(f"Error generating roster: {e}")
-            raise RosterGenerationError(f"Failed to generate roster: {e}")
+            logger.exception("Error generating roster")
+            raise RosterGenerationError(f"Failed to generate roster: {e}") from e
 
     def validate_roster_consistency(self, roster: PaymentRoster) -> Dict[str, Any]:
         """
@@ -419,9 +443,14 @@ class RosterService:
             )
 
         # 2. 檢查金額總計是否正確
+        # Skip None amounts in the sum — the per-item check below catches them
+        # as an error. Without this guard, sum() raises TypeError on None and
+        # the validator crashes instead of returning a clean error dict.
         if roster.items:
             actual_total = sum(
-                item.scholarship_amount for item in roster.items if item.is_included and item.is_qualified
+                item.scholarship_amount
+                for item in roster.items
+                if item.is_included and item.is_qualified and item.scholarship_amount is not None
             )
             if abs(float(actual_total) - float(roster.total_amount)) > 0.01:
                 errors.append(f"總金額不一致: 計算值={actual_total}, 儲存值={roster.total_amount}")
@@ -588,6 +617,7 @@ class RosterService:
                 ),
                 Application.status == "approved",  # 已核准
                 Application.academic_year == academic_year,
+                Application.deleted_at.is_(None),  # 排除已退件
             )
         )
 
@@ -613,8 +643,8 @@ class RosterService:
                         and_(
                             CollegeRanking.scholarship_type_id == config.scholarship_type_id,
                             CollegeRanking.academic_year == academic_year,
-                            CollegeRanking.is_finalized == True,  # 必須已完成
-                            CollegeRanking.distribution_executed == True,  # 必須已執行分發
+                            CollegeRanking.is_finalized.is_(True),  # 必須已完成
+                            CollegeRanking.distribution_executed.is_(True),  # 必須已執行分發
                         )
                     )
                     .order_by(CollegeRanking.finalized_at.desc())
@@ -637,7 +667,7 @@ class RosterService:
             query = query.join(CollegeRankingItem, CollegeRankingItem.application_id == Application.id).filter(
                 and_(
                     CollegeRankingItem.ranking_id == ranking_id,
-                    CollegeRankingItem.is_allocated == True,  # 只選正取學生
+                    CollegeRankingItem.is_allocated.is_(True),  # 只選正取學生
                 )
             )
         else:
@@ -668,6 +698,11 @@ class RosterService:
                 year, month = period_label.split("-")
                 try:
                     month_int = int(month)
+                    if not 1 <= month_int <= 12:
+                        # Out-of-range months (e.g. 0, 13, 999) used to fall through
+                        # both `if` branches silently — no semester filter applied,
+                        # caller got an unfiltered query and didn't know.
+                        raise ValueError(f"month must be 1-12, got {month_int}")
                     # 2-7月 = 下學期(second), 8-1月 = 上學期(first)
                     if month_int in [2, 3, 4, 5, 6, 7]:
                         semester = "second"
@@ -675,14 +710,15 @@ class RosterService:
                         logger.info(
                             f"Filtering semester-based scholarship for semester '{semester}' (month {month_int})"
                         )
-                    elif month_int in [8, 9, 10, 11, 12, 1]:
+                    else:
+                        # months 1, 8, 9, 10, 11, 12 → first semester
                         semester = "first"
                         query = query.filter(Application.semester == semester)
                         logger.info(
                             f"Filtering semester-based scholarship for semester '{semester}' (month {month_int})"
                         )
                 except ValueError:
-                    logger.warning(f"Invalid month in period_label: {month}")
+                    logger.warning("Invalid month in period_label: %s", month, exc_info=True)
         else:
             # 學年制獎學金：不應用學期過濾
             # 申請的 semester 應該是 NULL
@@ -766,11 +802,13 @@ class RosterService:
                 f"Checked nested and flat structures. submitted_form_data keys: {list(form_data.keys())}"
             )
 
-        # 查詢 CollegeRankingItem 以取得備取資訊
+        # 查詢 CollegeRankingItem 以取得備取資訊與分發資訊
         backup_info = None
-        if roster.ranking_id:
-            from app.models.college_review import CollegeRankingItem
+        allocation_year = None
+        allocated_sub_type = None
+        from app.models.college_review import CollegeRanking, CollegeRankingItem
 
+        if roster.ranking_id:
             ranking_item = (
                 self.db.query(CollegeRankingItem)
                 .filter(
@@ -782,9 +820,37 @@ class RosterService:
                 .first()
             )
 
-            if ranking_item and ranking_item.backup_allocations:
-                backup_info = ranking_item.backup_allocations
-                logger.info(f"Application {application.id} has backup allocations: {len(backup_info)} positions")
+            if ranking_item:
+                if ranking_item.backup_allocations:
+                    backup_info = ranking_item.backup_allocations
+                    logger.info(f"Application {application.id} has backup allocations: {len(backup_info)} positions")
+                allocation_year = ranking_item.allocation_year
+                allocated_sub_type = ranking_item.allocated_sub_type
+
+        # 若無 ranking_id（月份造冊），從同學年度已分發排名中查詢
+        if not allocated_sub_type:
+            alloc_item = (
+                self.db.query(CollegeRankingItem)
+                .join(CollegeRanking, CollegeRankingItem.ranking_id == CollegeRanking.id)
+                .filter(
+                    and_(
+                        CollegeRankingItem.application_id == application.id,
+                        CollegeRankingItem.is_allocated.is_(True),
+                        CollegeRanking.academic_year == roster.academic_year,
+                    )
+                )
+                .first()
+            )
+            if alloc_item:
+                allocation_year = allocation_year or alloc_item.allocation_year
+                allocated_sub_type = alloc_item.allocated_sub_type
+
+        # 計算申請身分別
+        application_identity = None
+        if application.is_renewal and application.previous_application_id:
+            application_identity = f"{application.academic_year}續領"
+        else:
+            application_identity = f"{application.academic_year}新申請"
 
         roster_item = PaymentRosterItem(
             roster_id=roster.id,
@@ -796,6 +862,9 @@ class RosterService:
             scholarship_name=application.scholarship_configuration.scholarship_type.name,
             scholarship_amount=application.amount or application.scholarship_configuration.amount,
             scholarship_subtype=application.sub_scholarship_type,
+            allocation_year=allocation_year,  # 消耗哪一年的配額（補發時不同於 academic_year）
+            allocated_sub_type=allocated_sub_type,  # 分發到的子類型快照
+            application_identity=application_identity,  # 申請身分快照
             verification_status=verification_status,
             verification_message=verification_result.get("message") if verification_result else None,
             verification_at=datetime.now(timezone.utc) if verification_result else None,
@@ -806,7 +875,7 @@ class RosterService:
             rule_validation_result=eligibility_result,
             failed_rules=eligibility_result.get("failed_rules", []) if eligibility_result else [],
             warning_rules=eligibility_result.get("warning_rules", []) if eligibility_result else [],
-            backup_info=backup_info,  # 新增：備取資訊
+            backup_info=backup_info,
         )
 
         self.db.add(roster_item)
@@ -936,9 +1005,16 @@ class RosterService:
             scholarship_config = application.scholarship_configuration
 
             if not scholarship_config or not student:
+                if not student and not scholarship_config:
+                    missing_reason = "缺少學生資訊/獎學金配置"
+                elif not student:
+                    missing_reason = "缺少學生資訊"
+                else:
+                    missing_reason = "缺少獎學金配置"
+
                 return {
                     "is_eligible": False,
-                    "failed_rules": ["缺少學生或獎學金配置資訊"],
+                    "failed_rules": [missing_reason],
                     "warning_rules": [],
                     "details": {},
                 }
@@ -989,7 +1065,7 @@ class RosterService:
             }
 
         except Exception as e:
-            logger.error(f"Error validating student eligibility for application {application.id}: {e}")
+            logger.exception(f"Error validating student eligibility for application {application.id}")
             return {
                 "is_eligible": False,
                 "failed_rules": [f"驗證過程發生錯誤: {str(e)}"],
@@ -1071,7 +1147,7 @@ class RosterService:
             }
 
         except Exception as e:
-            logger.error(f"Error evaluating rule {rule.id}: {e}")
+            logger.exception(f"Error evaluating rule {rule.id}")
             return {
                 "passed": False,
                 "rule_name": rule.rule_name,
@@ -1159,9 +1235,12 @@ class RosterService:
                 logger.warning(f"Unknown operator: {operator}")
                 return False
 
-        except (ValueError, TypeError) as e:
-            logger.error(
-                f"Error evaluating condition: actual={actual_value}, operator={operator}, expected={expected_value}, error={e}"
+        except (ValueError, TypeError):
+            logger.exception(
+                "Error evaluating condition: actual=%s, operator=%s, expected=%s",
+                actual_value,
+                operator,
+                expected_value,
             )
             return False
 
@@ -1265,7 +1344,7 @@ class RosterService:
 
                 except Exception as e:
                     potential_issues.append(f"處理申請 {application.id} 時發生錯誤: {str(e)}")
-                    logger.warning(f"Error processing application {application.id} in dry run: {e}")
+                    logger.warning(f"Error processing application {application.id} in dry run", exc_info=True)
 
             # 5. 產生驗證摘要
             validation_summary = {
@@ -1318,5 +1397,359 @@ class RosterService:
             return result
 
         except Exception as e:
-            logger.error(f"Dry run failed: {e}")
-            raise ValueError(f"預演失敗: {str(e)}")
+            logger.exception("Dry run failed")
+            raise ValueError("預演失敗") from e
+
+    def generate_rosters_from_distribution(
+        self,
+        scholarship_type_id: int,
+        academic_year: int,
+        semester: str,
+        created_by_user_id: int,
+        student_verification_enabled: bool = True,
+        force_regenerate: bool = False,
+    ) -> List[PaymentRoster]:
+        """
+        從矩陣分發結果批次產生造冊
+
+        針對每個唯一的 (allocation_year, sub_type) 組合建立獨立的造冊。
+        例如：
+          - 115 學年度分發完成後，若有 nstc-115, nstc-114, nstc-113, moe_1w-115 四種組合，
+            則會產生 4 個造冊，各自包含對應學生。
+
+        Args:
+            scholarship_type_id: 獎學金類型 ID
+            academic_year: 學年度
+            semester: 學期
+            created_by_user_id: 操作者用戶 ID
+            student_verification_enabled: 是否啟用學籍驗證
+            force_regenerate: 是否強制重新產生已存在的造冊
+
+        Returns:
+            List[PaymentRoster]: 已產生的造冊列表
+
+        Raises:
+            ValueError: 找不到排名、尚未完成分發、或其他驗證錯誤
+        """
+        from app.models.college_review import CollegeRanking, CollegeRankingItem
+
+        # 1. 取得所有已完成分發的排名
+        # 根據 semester 的值建立篩選條件
+        if semester in ("annual", "yearly", ""):
+            sem_filter = or_(
+                CollegeRanking.semester.is_(None),
+                CollegeRanking.semester == "annual",
+                CollegeRanking.semester == "yearly",
+            )
+        else:
+            sem_filter = CollegeRanking.semester == semester
+
+        rankings = (
+            self.db.query(CollegeRanking)
+            .filter(
+                and_(
+                    CollegeRanking.scholarship_type_id == scholarship_type_id,
+                    CollegeRanking.academic_year == academic_year,
+                    sem_filter,
+                    CollegeRanking.is_finalized.is_(True),
+                    CollegeRanking.distribution_executed.is_(True),
+                )
+            )
+            .all()
+        )
+
+        if not rankings:
+            raise ValueError(
+                f"找不到已完成分發的排名：scholarship_type_id={scholarship_type_id}, "
+                f"academic_year={academic_year}, semester={semester}。"
+                "請先完成排名並執行矩陣分發後再產生造冊。"
+            )
+
+        ranking_ids = [r.id for r in rankings]
+
+        # 2. 取得對應的獎學金配置
+        scholarship_config = (
+            self.db.query(ScholarshipConfiguration)
+            .filter(
+                and_(
+                    ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+                    ScholarshipConfiguration.academic_year == academic_year,
+                )
+            )
+            .first()
+        )
+
+        if not scholarship_config:
+            raise ValueError(
+                f"找不到對應的獎學金配置：scholarship_type_id={scholarship_type_id}, " f"academic_year={academic_year}"
+            )
+
+        # 3. 取得所有已分配的 ranking items，並按 (allocation_year, allocated_sub_type) 分組
+        allocated_items = (
+            self.db.query(CollegeRankingItem)
+            .filter(
+                and_(
+                    CollegeRankingItem.ranking_id.in_(ranking_ids),
+                    CollegeRankingItem.is_allocated.is_(True),
+                )
+            )
+            .all()
+        )
+
+        if not allocated_items:
+            raise ValueError(f"排名 {ranking_ids} 沒有已分配的學生。請確認已完成手動分發並確認分發。")
+
+        # 分組：{(allocation_year, sub_type): [ranking_item, ...]}
+        groups: Dict[tuple, List] = {}
+        for item in allocated_items:
+            alloc_year = item.allocation_year or academic_year
+            sub_type = item.allocated_sub_type or "general"
+            key = (alloc_year, sub_type)
+            groups.setdefault(key, []).append(item)
+
+        logger.info(
+            f"Rankings {ranking_ids}: found {len(allocated_items)} allocated items in {len(groups)} groups: "
+            + ", ".join(f"{sub_type}-{yr}({len(items)}人)" for (yr, sub_type), items in groups.items())
+        )
+
+        # 4. 為每個分組建立造冊
+        created_rosters: List[PaymentRoster] = []
+
+        for (alloc_year, sub_type), group_items in groups.items():
+            application_ids_in_group = {item.application_id for item in group_items}
+
+            try:
+                roster = self._generate_one_sub_type_roster(
+                    scholarship_config=scholarship_config,
+                    ranking_ids=ranking_ids,
+                    allocation_year=alloc_year,
+                    sub_type=sub_type,
+                    application_ids_in_group=application_ids_in_group,
+                    created_by_user_id=created_by_user_id,
+                    student_verification_enabled=student_verification_enabled,
+                    force_regenerate=force_regenerate,
+                )
+                created_rosters.append(roster)
+            except RosterAlreadyExistsError:
+                logger.info(f"Roster for ({alloc_year}, {sub_type}) already exists, skipping.")
+                continue
+            except Exception:
+                logger.exception(f"Failed to generate roster for ({alloc_year}, {sub_type})")
+                raise
+
+        self.db.commit()
+        logger.info(f"Generated {len(created_rosters)} rosters from distribution rankings {ranking_ids}")
+        return created_rosters
+
+    def _generate_one_sub_type_roster(
+        self,
+        scholarship_config: ScholarshipConfiguration,
+        ranking_ids: List[int],
+        allocation_year: int,
+        sub_type: str,
+        application_ids_in_group: set,
+        created_by_user_id: int,
+        student_verification_enabled: bool,
+        force_regenerate: bool,
+    ) -> PaymentRoster:
+        """
+        為特定 (allocation_year, sub_type) 組合產生一個造冊
+
+        Returns:
+            PaymentRoster: 已建立的造冊
+        """
+        academic_year = scholarship_config.academic_year
+        period_label = str(academic_year)  # 學年制：period_label = 學年度
+
+        # 取得計畫編號
+        project_number = None
+        if scholarship_config.project_numbers:
+            sub_type_projects = scholarship_config.project_numbers.get(sub_type, {})
+            project_number = sub_type_projects.get(str(allocation_year))
+
+        # 產生造冊代碼（包含 sub_type 和 allocation_year 以確保唯一性）
+        roster_code = f"ROSTER-{academic_year}-{sub_type}-{allocation_year}-{scholarship_config.config_code}"
+
+        # 檢查是否已存在
+        existing_roster = (
+            self.db.query(PaymentRoster)
+            .filter(
+                and_(
+                    PaymentRoster.scholarship_configuration_id == scholarship_config.id,
+                    PaymentRoster.period_label == period_label,
+                    PaymentRoster.sub_type == sub_type,
+                    PaymentRoster.allocation_year == allocation_year,
+                )
+            )
+            .first()
+        )
+
+        if existing_roster and not force_regenerate:
+            raise RosterAlreadyExistsError(
+                f"造冊已存在：{sub_type} {allocation_year} 年度。使用 force_regenerate=True 可覆蓋。"
+            )
+
+        if existing_roster and existing_roster.is_locked:
+            raise RosterLockedError(f"無法重新產生已鎖定的造冊：{existing_roster.roster_code}")
+
+        user = self.db.query(User).filter(User.id == created_by_user_id).first()
+        user_name = user.name if user else "Unknown"
+
+        if existing_roster and force_regenerate:
+            roster = existing_roster
+            roster.status = RosterStatus.PROCESSING
+            roster.trigger_type = RosterTriggerType.MANUAL
+            roster.student_verification_enabled = student_verification_enabled
+            roster.started_at = datetime.now(timezone.utc)
+            roster.completed_at = None
+            roster.total_applications = 0
+            roster.qualified_count = 0
+            roster.disqualified_count = 0
+            roster.total_amount = 0
+            roster.verification_api_failures = 0
+            roster.project_number = project_number
+            self.db.query(PaymentRosterItem).filter(PaymentRosterItem.roster_id == roster.id).delete()
+            logger.info(f"Regenerating roster {roster_code}")
+        else:
+            roster = PaymentRoster(
+                roster_code=roster_code,
+                scholarship_configuration_id=scholarship_config.id,
+                ranking_id=ranking_ids[0] if ranking_ids else None,  # Use first ranking_id for reference
+                period_label=period_label,
+                academic_year=academic_year,
+                roster_cycle=RosterCycle.YEARLY,
+                sub_type=sub_type,
+                allocation_year=allocation_year,
+                project_number=project_number,
+                status=RosterStatus.PROCESSING,
+                trigger_type=RosterTriggerType.MANUAL,
+                created_by=created_by_user_id,
+                student_verification_enabled=student_verification_enabled,
+                started_at=datetime.now(timezone.utc),
+            )
+            self.db.add(roster)
+            self.db.flush()
+            logger.info(f"Creating roster {roster_code} ({len(application_ids_in_group)} students)")
+
+        # 取得本組的申請
+        applications = (
+            self.db.query(Application)
+            .filter(
+                and_(
+                    Application.id.in_(application_ids_in_group),
+                    Application.status == "approved",
+                )
+            )
+            .all()
+        )
+
+        roster.total_applications = len(applications)
+
+        qualified_count = 0
+        disqualified_count = 0
+        total_amount = 0
+        verification_failures = 0
+
+        for application in applications:
+            try:
+                stored_student_data = application.student_data or {}
+                student_id_number = stored_student_data.get("std_stdcode")
+                student_name = stored_student_data.get("std_cname")
+
+                if not student_id_number or not student_name:
+                    logger.warning(f"Application {application.id} missing student ID or name")
+                    disqualified_count += 1
+                    continue
+
+                verification_result = None
+                verification_status = StudentVerificationStatus.VERIFIED
+                fresh_student_data = None
+
+                if student_verification_enabled:
+                    verification_result = self.student_verification_service.verify_student(
+                        student_id_number, student_name
+                    )
+                    verification_status = verification_result.get("status", StudentVerificationStatus.VERIFIED)
+                    if verification_status == StudentVerificationStatus.API_ERROR:
+                        verification_failures += 1
+                    else:
+                        fresh_student_data = verification_result.get("student_info", {})
+
+                eligibility_result = self._validate_student_eligibility(
+                    application, academic_year, period_label, fresh_api_data=fresh_student_data
+                )
+
+                roster_item = self._create_roster_item(
+                    roster, application, verification_result, verification_status, eligibility_result
+                )
+
+                if roster_item.is_qualified:
+                    qualified_count += 1
+                    total_amount += roster_item.scholarship_amount
+                else:
+                    disqualified_count += 1
+
+            except Exception:
+                logger.exception(f"Error processing application {application.id}")
+                disqualified_count += 1
+
+        roster.qualified_count = qualified_count
+        roster.disqualified_count = disqualified_count
+        roster.total_amount = total_amount
+        roster.verification_api_failures = verification_failures
+        roster.status = RosterStatus.COMPLETED
+        roster.completed_at = datetime.now(timezone.utc)
+
+        # Business metric: roster reached the completed state. Pairs
+        # with the "processing" increment at creation so dashboards can
+        # show completion ratio over time (issue #159).
+        payment_rosters_total.labels(status="completed").inc()
+
+        self.db.flush()
+
+        logger.info(
+            f"Roster {roster_code} completed: {qualified_count} qualified, "
+            f"{disqualified_count} disqualified, total {total_amount}"
+        )
+
+        # 產生 Excel 並上傳至 MinIO（在 sync 環境中執行，避免 greenlet 問題）
+        from app.services.excel_export_service import ExcelExportService
+
+        try:
+            export_service = ExcelExportService()
+            export_service.export_roster_to_excel(
+                roster=roster,
+                template_name="STD_UP_MIXLISTA",
+                include_header=True,
+                include_statistics=True,
+                include_excluded=False,
+            )
+            self.db.flush()  # Persist minio_object_name and excel_filename
+            logger.info(f"Excel generated for roster {roster_code}: {roster.minio_object_name}")
+        except Exception:
+            logger.exception(f"Failed to generate Excel for roster {roster_code}")
+
+        audit_service.log_roster_operation(
+            roster_id=roster.id,
+            action=RosterAuditAction.CREATE,
+            title=f"批次造冊產生: {sub_type} {allocation_year}年度 合格{qualified_count}人",
+            user_id=created_by_user_id,
+            user_name=user_name,
+            description=f"計畫編號: {project_number or '未設定'}，總金額: ${total_amount}",
+            old_values=None,
+            new_values=None,
+            level=RosterAuditLevel.INFO,
+            affected_items_count=qualified_count + disqualified_count,
+            metadata={
+                "sub_type": sub_type,
+                "allocation_year": allocation_year,
+                "project_number": project_number,
+                "qualified_count": qualified_count,
+                "disqualified_count": disqualified_count,
+                "total_amount": float(total_amount),
+            },
+            tags=["batch_generation", sub_type],
+            db=self.db,
+        )
+
+        return roster

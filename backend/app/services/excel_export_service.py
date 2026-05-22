@@ -6,7 +6,7 @@ Excel export service for payment roster generation
 import hashlib
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -59,7 +59,7 @@ class ExcelExportService:
 
                 # Extract headers from template
                 self.template_columns = []
-                for col in range(1, 31):  # 30 columns max
+                for col in range(1, 33):  # 32 columns max
                     cell_value = ws.cell(row=1, column=col).value
                     if cell_value:
                         self.template_columns.append(str(cell_value))
@@ -71,8 +71,8 @@ class ExcelExportService:
             else:
                 logger.warning(f"Template not found at {self.template_path}, using default columns")
                 self._set_default_columns()
-        except Exception as e:
-            logger.error(f"Failed to load template: {e}, using default columns")
+        except Exception:
+            logger.exception("Failed to load template; using default columns")
             self._set_default_columns()
 
     def _set_default_columns(self):
@@ -106,6 +106,8 @@ class ExcelExportService:
             "E-MAIL",  # 26. 選填
             "個人身分別(1:本國人,2:外國人,3:大陸人)",  # 27. 本國人=1
             "居留天數是否滿183天(是/否)",  # 28. 本國人預設"是"
+            "申請身分",  # 29. 申請身分別 (e.g. 114新申請, 114續領)
+            "分發獎學金",  # 30. 分發到的獎學金 (e.g. 114年 國科會)
         ]
 
         # Field mapping for easy access
@@ -195,7 +197,7 @@ class ExcelExportService:
 
         if async_mode:
             task_id = f"roster-export-{uuid4().hex}"
-            estimated_completion = (datetime.utcnow() + timedelta(minutes=5)).isoformat()
+            estimated_completion = (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()
             return {
                 "task_id": task_id,
                 "status": "queued",
@@ -318,8 +320,8 @@ class ExcelExportService:
             }
 
         except Exception as e:
-            logger.error(f"Excel export failed: {e}")
-            raise FileStorageError(f"Failed to export Excel file: {e}", file_name=file_name)
+            logger.exception("Excel export failed")
+            raise FileStorageError(f"Failed to export Excel file: {e}", file_name=file_name) from e
 
     def _get_roster_items(self, roster: PaymentRoster, include_excluded: bool) -> List[PaymentRosterItem]:
         """取得造冊明細"""
@@ -356,6 +358,21 @@ class ExcelExportService:
         logger.warning("Template %s not found. Falling back to default template.", candidate)
         return self.template_path
 
+    @staticmethod
+    def _format_allocation_display(item: PaymentRosterItem) -> str:
+        """Format allocated sub-type + year for Excel display"""
+        if not item.allocated_sub_type:
+            return ""
+        sub_type_map = {
+            "nstc": "國科會",
+            "moe_1w": "教育部(1萬)",
+            "moe_2w": "教育部(2萬)",
+        }
+        display = sub_type_map.get(item.allocated_sub_type, item.allocated_sub_type)
+        if item.allocation_year:
+            return f"{item.allocation_year}年 {display}"
+        return display
+
     def _get_filtered_roster_items(self, roster: PaymentRoster, include_excluded: bool) -> List[PaymentRosterItem]:
         """Compatibility helper for legacy calls that expect filtered roster items"""
         return self._get_roster_items(roster, include_excluded)
@@ -375,11 +392,24 @@ class ExcelExportService:
                 )
                 continue
 
-            # 生成備註 (第25欄) - 包含期間標籤、獎學金名稱和狀態
+            # 生成備註 (第25欄) - 包含期間標籤、獎學金名稱、分發資訊和狀態
             remarks_parts = []
             if hasattr(roster, "period_label") and roster.period_label:
                 remarks_parts.append(f"期間:{roster.period_label}")
             remarks_parts.append(f"獎學金:{item.scholarship_name}")
+            # 分發資訊（從快照欄位取得）
+            if item.application_identity:
+                remarks_parts.append(f"身分:{item.application_identity}")
+            if item.allocated_sub_type:
+                sub_type_display = {
+                    "nstc": "國科會",
+                    "moe_1w": "教育部(1萬)",
+                    "moe_2w": "教育部(2萬)",
+                }.get(item.allocated_sub_type, item.allocated_sub_type)
+                alloc_label = sub_type_display
+                if item.allocation_year:
+                    alloc_label = f"{item.allocation_year}年 {sub_type_display}"
+                remarks_parts.append(f"分發:{alloc_label}")
             if not item.is_included:
                 remarks_parts.append("狀態:不合格")
             if not item.bank_account:
@@ -434,6 +464,10 @@ class ExcelExportService:
                 "個人身分別(1:本國人,2:外國人,3:大陸人)": "1",
                 # 28. 居留天數是否滿183天(是/否) (本國人預設"是")
                 "居留天數是否滿183天(是/否)": "是",
+                # 29. 申請身分 (快照欄位)
+                "申請身分": item.application_identity or "",
+                # 30. 分發獎學金 (快照欄位)
+                "分發獎學金": self._format_allocation_display(item),
             }
 
             # 儲存Excel行資料到資料庫
@@ -442,7 +476,7 @@ class ExcelExportService:
 
             excel_data.append(row_data)
 
-        logger.info(f"Prepared {len(excel_data)} rows for 28-column format export")
+        logger.info(f"Prepared {len(excel_data)} rows for 30-column format export")
         return excel_data
 
     def _validate_export_data(self, excel_data: List[Dict]) -> Dict[str, Any]:
@@ -469,7 +503,7 @@ class ExcelExportService:
         # STD_UP_MIXLISTA必填欄位檢查
         required_fields = ["身分證字號", "姓名"]  # 第1、2欄必填
 
-        for idx, row in enumerate(excel_data, start=1):
+        for _idx, row in enumerate(excel_data, start=1):
             # 檢查必填欄位
             missing_required = False
             for field in required_fields:
@@ -605,11 +639,11 @@ class ExcelExportService:
             logger.info("Excel file created successfully: %s", file_path)
 
         except Exception as e:
-            logger.error(f"Failed to create Excel file: {e}")
+            logger.exception("Failed to create Excel file")
             raise FileStorageError(
                 f"Failed to create Excel file: {e}",
                 file_name=os.path.basename(file_path),
-            )
+            ) from e
 
     def _apply_excel_styling(self, ws, max_row: int, include_header: bool):
         """應用Excel樣式"""
@@ -656,6 +690,8 @@ class ExcelExportService:
             "審核狀態": 8,
             "備註": 20,
             "驗證狀態": 10,
+            "申請身分": 14,
+            "分發獎學金": 18,
         }
 
         for col_idx, column_name in enumerate(self.template_columns, start=1):
@@ -752,7 +788,7 @@ class ExcelExportService:
                 db.close()
 
         except Exception as e:
-            logger.warning(f"Failed to get advisor name for student {student.id}: {e}")
+            logger.warning(f"Failed to get advisor name for student {student.id}", exc_info=True)
 
         return ""
 
@@ -834,8 +870,8 @@ class ExcelExportService:
             logger.info(f"Deleted Excel file: {roster.excel_file_path}")
             return True
 
-        except Exception as e:
-            logger.error(f"Failed to delete Excel file: {e}")
+        except Exception:
+            logger.exception("Failed to delete Excel file")
             return False
 
     def preview_roster_export(
@@ -871,7 +907,7 @@ class ExcelExportService:
                 "preview_rows": len(preview_data),
                 "roster_code": roster.roster_code,
                 "period_label": getattr(roster, "period_label", ""),
-                "generated_at": datetime.now().isoformat(),
+                "generated_at": datetime.now(timezone.utc).isoformat(),
                 "std_up_mixlista_format": True,
             }
 
@@ -884,8 +920,8 @@ class ExcelExportService:
             }
 
         except Exception as e:
-            logger.error(f"Failed to preview roster export: {e}")
-            raise FileStorageError(f"預覽產生失敗: {str(e)}")
+            logger.exception("Failed to preview roster export")
+            raise FileStorageError(f"預覽產生失敗: {str(e)}") from e
 
     def process_async_export(
         self,
@@ -954,6 +990,6 @@ class ExcelExportService:
             finally:
                 db.close()
 
-        except Exception as e:
-            logger.error(f"Async export failed: roster_id={roster_id}, task_id={task_id}, error={e}")
+        except Exception:
+            logger.exception(f"Async export failed: roster_id={roster_id}, task_id={task_id}")
             # 這裡可以實作錯誤通知機制

@@ -244,6 +244,18 @@ class SubTypeOption(BaseModel):
     is_default: bool = False
 
 
+class SubtypeRuleDetail(BaseModel):
+    rule_name: str
+    message: Optional[str] = None
+    tag: Optional[str] = None
+
+
+class SubtypeEligibilityInfo(BaseModel):
+    eligible: bool
+    failed_rules: List[SubtypeRuleDetail] = []
+    warning_rules: List[SubtypeRuleDetail] = []
+
+
 class EligibleScholarshipResponse(BaseModel):
     id: int
     configuration_id: int  # Add configuration ID for application creation
@@ -268,6 +280,8 @@ class EligibleScholarshipResponse(BaseModel):
     warnings: List[RuleMessage]
     errors: List[RuleMessage]
     created_at: datetime
+    all_sub_type_list: List[str] = []
+    subtype_eligibility: Dict[str, SubtypeEligibilityInfo] = {}
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -394,7 +408,7 @@ class RuleTemplateRequest(BaseModel):
     template_name: str = Field(..., min_length=1, max_length=100, description="Template name")
     template_description: Optional[str] = Field(None, description="Template description")
     scholarship_type_id: int = Field(..., ge=1, description="Scholarship type ID")
-    rule_ids: List[int] = Field(..., min_items=1, description="Rule IDs to include in template")
+    rule_ids: List[int] = Field(..., min_length=1, description="Rule IDs to include in template")
 
     @field_validator("rule_ids")
     @classmethod
@@ -432,7 +446,7 @@ class BulkRuleOperation(BaseModel):
     """Schema for bulk rule operations"""
 
     operation: str = Field(..., pattern=r"^(activate|deactivate|delete)$", description="Operation type")
-    rule_ids: List[int] = Field(..., min_items=1, description="Rule IDs to operate on")
+    rule_ids: List[int] = Field(..., min_length=1, description="Rule IDs to operate on")
     parameters: Optional[Dict[str, Any]] = Field(None, description="Operation-specific parameters")
 
     @field_validator("rule_ids")

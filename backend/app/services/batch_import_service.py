@@ -19,7 +19,7 @@ from app.models.application import Application, ApplicationStatus
 from app.models.application_sequence import ApplicationSequence
 from app.models.batch_import import BatchImport
 from app.models.enums import BatchImportStatus, Semester
-from app.models.scholarship import ScholarshipType
+from app.models.scholarship import ScholarshipConfiguration, ScholarshipType
 from app.models.user import User
 from app.schemas.batch_import import ApplicationDataRow, BatchImportValidationError
 from app.services.student_service import StudentService
@@ -50,6 +50,21 @@ def _normalize_optional(value: Any) -> Optional[str]:
             value = int(value)
     normalized = str(value).strip()
     return normalized or None
+
+
+def _parse_renewal_year(raw_value: Any) -> Tuple[bool, Optional[int]]:
+    """Parse renewal year from Excel cell value.
+
+    Returns (is_renewal, renewal_year).  A non-empty integer value means
+    the student is a renewal for that academic year.
+    """
+    val = _normalize_optional(raw_value)
+    if val:
+        try:
+            return True, int(val)
+        except (ValueError, TypeError):
+            pass
+    return False, None
 
 
 class BatchImportService:
@@ -134,12 +149,15 @@ class BatchImportService:
         for field in custom_fields:
             custom_field_mapping[field.field_label] = field.field_name
 
+        # Pre-compute column set for O(1) membership tests
+        df_columns = set(df.columns)
+
         # Validate required columns (check both Chinese and English names)
         required_columns_chinese = ["學號", "學生姓名"]
         required_columns_english = ["student_id", "student_name"]
 
-        has_chinese = all(col in df.columns for col in required_columns_chinese)
-        has_english = all(col in df.columns for col in required_columns_english)
+        has_chinese = all(col in df_columns for col in required_columns_chinese)
+        has_english = all(col in df_columns for col in required_columns_english)
 
         if not has_chinese and not has_english:
             errors.append(
@@ -201,6 +219,10 @@ class BatchImportService:
             try:
                 # Get values based on column format
                 if use_chinese_columns:
+                    is_renewal, renewal_year = _parse_renewal_year(
+                        row.get("續領年份") if "續領年份" in df_columns else None
+                    )
+
                     data_row = {
                         "student_id": student_id,
                         "student_name": _normalize_identifier(row.get("學生姓名", "")),
@@ -208,19 +230,29 @@ class BatchImportService:
                         "advisor_name": _normalize_optional(row.get("指導教授姓名")),
                         "advisor_email": _normalize_optional(row.get("指導教授Email")),
                         "advisor_nycu_id": _normalize_optional(row.get("指導教授本校人事編號")),
+                        "is_renewal": is_renewal,
+                        "renewal_year": renewal_year,
                         "sub_types": [],
                         "custom_fields": {},
                     }
 
                     # Parse sub_types from Chinese column names
+                    # Values: 1/2/3 = applied with priority order (1=first choice), blank = not applied
+                    priority_entries: list[tuple[int, str]] = []
                     for chinese_label, sub_type_code in sub_type_labels.items():
-                        if chinese_label in df.columns:
-                            if row.get(chinese_label) in ["Y", "y", "是", "1", 1, True]:
-                                data_row["sub_types"].append(sub_type_code)
+                        if chinese_label in df_columns:
+                            cell = row.get(chinese_label)
+                            if isinstance(cell, (int, float)) and not pd.isna(cell) and int(cell) > 0:
+                                priority_entries.append((int(cell), sub_type_code))
+                            elif isinstance(cell, str) and cell.strip().isdigit() and int(cell.strip()) > 0:
+                                priority_entries.append((int(cell.strip()), sub_type_code))
+
+                    priority_entries.sort(key=lambda x: x[0])
+                    data_row["sub_types"] = [code for _, code in priority_entries]
 
                     # Parse custom fields from Chinese column names
                     for chinese_label, field_name in custom_field_mapping.items():
-                        if chinese_label in df.columns and pd.notna(row.get(chinese_label)):
+                        if chinese_label in df_columns and pd.notna(row.get(chinese_label)):
                             value = row.get(chinese_label)
                             # Convert to appropriate type
                             if isinstance(value, (int, float, bool)):
@@ -229,6 +261,10 @@ class BatchImportService:
                                 data_row["custom_fields"][field_name] = str(value).strip()
                 else:
                     # English column format (backward compatibility)
+                    is_renewal, renewal_year = _parse_renewal_year(
+                        row.get("renewal_year") if "renewal_year" in df_columns else None
+                    )
+
                     data_row = {
                         "student_id": student_id,
                         "student_name": _normalize_identifier(row.get("student_name", "")),
@@ -236,19 +272,28 @@ class BatchImportService:
                         "advisor_name": _normalize_optional(row.get("advisor_name")),
                         "advisor_email": _normalize_optional(row.get("advisor_email")),
                         "advisor_nycu_id": _normalize_optional(row.get("advisor_nycu_id")),
+                        "is_renewal": is_renewal,
+                        "renewal_year": renewal_year,
                         "sub_types": [],
                         "custom_fields": {},
                     }
 
                     # Parse sub_types from English column names (sub_type_*)
-                    for col in df.columns:
+                    priority_entries = []
+                    for col in df_columns:
                         if col.startswith("sub_type_"):
                             sub_type_code = col.replace("sub_type_", "")
-                            if row.get(col) in ["Y", "y", "是", "1", 1, True]:
-                                data_row["sub_types"].append(sub_type_code)
+                            cell = row.get(col)
+                            if isinstance(cell, (int, float)) and not pd.isna(cell) and int(cell) > 0:
+                                priority_entries.append((int(cell), sub_type_code))
+                            elif isinstance(cell, str) and cell.strip().isdigit() and int(cell.strip()) > 0:
+                                priority_entries.append((int(cell.strip()), sub_type_code))
+
+                    priority_entries.sort(key=lambda x: x[0])
+                    data_row["sub_types"] = [code for _, code in priority_entries]
 
                     # Parse custom fields from English column names (custom_*)
-                    for col in df.columns:
+                    for col in df_columns:
                         if col.startswith("custom_"):
                             field_name = col.replace("custom_", "")
                             if pd.notna(row.get(col)):
@@ -408,8 +453,12 @@ class BatchImportService:
                         )
                         api_failed = True
                     break
-                except Exception as exc:  # pylint: disable=broad-except
-                    logger.warning("Student API unexpected error for %s: %s", student_id, exc)
+                except Exception:  # pylint: disable=broad-except
+                    logger.warning(
+                        "Student API unexpected error for %s",
+                        student_id,
+                        exc_info=True,
+                    )
                     add_warning(
                         student_id,
                         "student_api_error",
@@ -579,9 +628,10 @@ class BatchImportService:
                         logger.warning(
                             f"SIS API unavailable for student {student_id}. Creating user with batch import data."
                         )
-                    except Exception as e:
-                        logger.error(
-                            f"Error fetching SIS data for student {student_id}: {e}. Creating user with batch import data."
+                    except Exception:
+                        logger.exception(
+                            "Error fetching SIS data for student %s. Creating user with batch import data.",
+                            student_id,
                         )
 
                     new_user = User(
@@ -644,6 +694,52 @@ class BatchImportService:
                 batch_id=batch_import.id,
             )
 
+        # Convert semester string to Semester enum for configuration lookup
+        semester_enum = None
+        if semester:
+            try:
+                semester_enum = Semester(semester)
+            except ValueError as exc:
+                raise BatchImportError(
+                    message=f"無效的學期值: {semester}",
+                    batch_id=batch_import.id,
+                ) from exc
+
+        # Find scholarship configuration for this academic period
+        config_stmt = select(ScholarshipConfiguration).where(
+            ScholarshipConfiguration.scholarship_type_id == scholarship_type_id,
+            ScholarshipConfiguration.academic_year == academic_year,
+        )
+
+        # Handle semester filtering (None means yearly scholarship)
+        if semester_enum is None or semester_enum == Semester.yearly:
+            config_stmt = config_stmt.where(ScholarshipConfiguration.semester.is_(None))
+        else:
+            config_stmt = config_stmt.where(ScholarshipConfiguration.semester == semester_enum)
+
+        config_result = await self.db.execute(config_stmt)
+        scholarship_config = config_result.scalar_one_or_none()
+
+        if not scholarship_config:
+            period_label = f"{academic_year}學年度"
+            if semester_enum:
+                semester_names = {
+                    Semester.first: "第一學期",
+                    Semester.second: "第二學期",
+                    Semester.yearly: "全學年",
+                }
+                period_label += f" {semester_names.get(semester_enum, semester)}"
+
+            raise BatchImportError(
+                message=f"找不到獎學金配置：{scholarship.name} ({period_label})。請先建立該學期的獎學金配置。",
+                batch_id=batch_import.id,
+            )
+
+        logger.info(
+            f"Found scholarship configuration: {scholarship_config.config_name} "
+            f"(ID: {scholarship_config.id}) for batch import {batch_import.id}"
+        )
+
         # Begin transaction - all operations will be rolled back if any fails
         current_row = 0
         try:
@@ -704,15 +800,16 @@ class BatchImportService:
                     student_data = await self.student_service.get_student_snapshot(
                         student_id, academic_year=str(academic_year), semester=semester
                     )
-                except (NotFoundError, ServiceUnavailableError) as e:
+                except (NotFoundError, ServiceUnavailableError):
                     logger.warning(
-                        f"SIS API unavailable or student not found for {student_id}: {e}. "
-                        "Creating application without student snapshot."
+                        "SIS API unavailable or student not found for %s. Creating application without student snapshot.",
+                        student_id,
+                        exc_info=True,
                     )
-                except Exception as e:
-                    logger.error(
-                        f"Error fetching student snapshot for {student_id}: {e}. "
-                        "Creating application without student snapshot."
+                except Exception:
+                    logger.exception(
+                        "Error fetching student snapshot for %s. Creating application without student snapshot.",
+                        student_id,
                     )
 
                 # Construct submitted_form_data, primarily from batch import, but override dept_code if SIS has it
@@ -728,15 +825,19 @@ class BatchImportService:
                     app_id=app_id,
                     user_id=user.id,
                     scholarship_type_id=scholarship_type_id,
+                    scholarship_configuration_id=scholarship_config.id,  # Link to specific configuration
                     scholarship_name=scholarship.name,
                     amount=None,  # Amount is now per sub-type in ScholarshipSubTypeConfig
                     sub_scholarship_type=(
                         row_data.get("sub_types", [None])[0].lower() if row_data.get("sub_types") else "general"
                     ),  # Lowercase, configuration-driven
                     scholarship_subtype_list=row_data.get("sub_types", []),
+                    sub_type_preferences=row_data.get("sub_types", []) or None,
                     sub_type_selection_mode=scholarship.sub_type_selection_mode,
                     academic_year=academic_year,
                     semester=semester,
+                    is_renewal=row_data.get("is_renewal", False),
+                    renewal_year=row_data.get("renewal_year"),
                     status=ApplicationStatus.under_review.value,
                     imported_by_id=batch_import.importer_id,
                     batch_import_id=batch_import.id,
@@ -772,7 +873,7 @@ class BatchImportService:
             raise BatchImportError(
                 message=f"批次匯入失敗於第 {current_row} 行: {str(e)}",
                 batch_id=batch_import.id,
-            )
+            ) from e
 
         return created_ids, errors
 

@@ -9,15 +9,26 @@ services:
       - redis_staging_data:/data
     networks:
       - scholarship_staging_network
+    # Mirror prod: --requirepass + maxmemory/LRU. Staging needs to
+    # exercise the auth setup so REDIS_URL parsing + healthcheck flags
+    # match what we run in production.
+    command:
+      - "redis-server"
+      - "--requirepass"
+      - "${REDIS_PASSWORD}"
+      - "--maxmemory"
+      - "${REDIS_MAXMEMORY:-256mb}"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   # FastAPI Backend
   backend:
-    image: ghcr.io/jotpalch/scholarship-system-backend:${TAG:-latest}
+    image: ghcr.io/anud18/scholarship-system-backend:${TAG:-latest}
     container_name: scholarship_backend_staging
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     ports:
@@ -25,7 +36,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
       DATABASE_URL_SYNC: ${DATABASE_URL_SYNC}
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       SECRET_KEY: ${SECRET_KEY}
       DEBUG: "true"
       CORS_ORIGINS: ${CORS_ORIGINS}
@@ -35,6 +46,10 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_BUCKET: ${MINIO_BUCKET}
       MINIO_SECURE: "false"
+      # PII Encryption keys (issue #73). JSON map of {version: base64url 32-byte key}.
+      # Populated by the KMS sidecar at deploy time.
+      PII_ENCRYPTION_KEYS: ${PII_ENCRYPTION_KEYS}
+      PII_ENCRYPTION_ACTIVE_VERSION: ${PII_ENCRYPTION_ACTIVE_VERSION:-v1}
       # Mock SSO Configuration for Testing (fallback)
       ENABLE_MOCK_SSO: "false"
       # Portal SSO Configuration (real Portal for testing)
@@ -87,7 +102,7 @@ services:
 
   # Next.js Frontend
   frontend:
-    image: ghcr.io/jotpalch/scholarship-system-frontend:${TAG:-latest}
+    image: ghcr.io/anud18/scholarship-system-frontend:${TAG:-latest}
     container_name: scholarship_frontend_staging
     ports:
       - "3000:3000"
@@ -109,7 +124,7 @@ services:
 
   # Grafana Alloy - Unified telemetry collector
   alloy:
-    image: grafana/alloy:latest
+    image: grafana/alloy:v1.11.0
     container_name: scholarship_alloy_staging_ap
     volumes:
       - ./monitoring/config/alloy/staging-ap-vm.alloy:/etc/alloy/config.alloy:ro
@@ -130,7 +145,7 @@ services:
 
   # Node Exporter - System metrics
   node-exporter:
-    image: prom/node-exporter:latest
+    image: prom/node-exporter:v1.10.1
     container_name: node_exporter_staging_ap
     command:
       - '--path.rootfs=/host'
@@ -152,7 +167,7 @@ services:
 
   # cAdvisor - Container metrics
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:latest
+    image: gcr.io/cadvisor/cadvisor:v0.55.1
     container_name: cadvisor_staging_ap
     privileged: true
     devices:
@@ -168,6 +183,22 @@ services:
     networks:
       - scholarship_staging_network
     restart: unless-stopped
+    # Stability hardening for issue #152. cadvisor on staging was
+    # restart-looping (136 alert cycles between 2026-05-08 and 2026-05-14
+    # — see issue comments) and dragging the staging ContainerDown alert
+    # with it, because when cadvisor goes down the scrape stops and every
+    # container in the env looks "down" to the alert rule. mem_limit lets
+    # Docker kill it cleanly before the host OOM-killer does, and the
+    # healthcheck makes the swarm-side restart trigger fire on first
+    # unhealthy probe (rather than waiting for a SIGSEGV). cadvisor's
+    # /healthz returns 200 once the scraper is responsive.
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     logging:
       driver: "json-file"
       options:
@@ -176,7 +207,7 @@ services:
 
   # Nginx Prometheus Exporter
   nginx-exporter:
-    image: nginx/nginx-prometheus-exporter:latest
+    image: nginx/nginx-prometheus-exporter:1.5.0
     container_name: nginx_exporter_staging_ap
     command:
       - '-nginx.scrape-uri=http://nginx:80/nginx_status'
@@ -195,7 +226,7 @@ services:
 
   # Redis Exporter
   redis-exporter:
-    image: oliver006/redis_exporter:latest
+    image: oliver006/redis_exporter:v1.79.0
     container_name: redis_exporter_staging_ap
     environment:
       REDIS_ADDR: "redis:6379"

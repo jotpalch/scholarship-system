@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.application import ApplicationStatus
 
@@ -112,26 +112,30 @@ class ApplicationFormData(BaseModel):
     fields: Dict[str, DynamicFormField] = Field(
         ...,
         description="動態表單欄位",
-        example={
-            "bank_account": {
-                "field_id": "bank_account",
-                "field_type": "text",
-                "value": "123123",
-                "required": True,
+        examples=[
+            {
+                "bank_account": {
+                    "field_id": "bank_account",
+                    "field_type": "text",
+                    "value": "123123",
+                    "required": True,
+                }
             }
-        },
+        ],
     )
     documents: List[DocumentData] = Field(
         default=[],
         description="文件列表",
-        example=[
-            {
-                "document_id": "bank_account_cover",
-                "document_type": "存摺封面",
-                "file_path": "test.pdf",
-                "original_filename": "test.pdf",
-                "upload_time": "2024-03-19T10:00:00Z",
-            }
+        examples=[
+            [
+                {
+                    "document_id": "bank_account_cover",
+                    "document_type": "存摺封面",
+                    "file_path": "test.pdf",
+                    "original_filename": "test.pdf",
+                    "upload_time": "2024-03-19T10:00:00Z",
+                }
+            ]
         ],
     )
 
@@ -165,16 +169,37 @@ class ApplicationFormData(BaseModel):
 class ApplicationCreate(BaseModel):
     """建立申請"""
 
-    scholarship_type: str = Field(..., description="獎學金類型代碼", example="undergraduate_freshman")
+    scholarship_type: str = Field(..., description="獎學金類型代碼", examples=["undergraduate_freshman"])
     configuration_id: int = Field(
-        ..., description="獎學金配置ID (必須從eligible scholarships取得，確保學生有申請資格)", example=1
+        ..., description="獎學金配置ID (必須從eligible scholarships取得，確保學生有申請資格)", examples=[1]
     )
     scholarship_subtype_list: List[str] = Field(
-        default=[], description="獎學金子類型列表", example=["general", "special"]
+        default=[], description="獎學金子類型列表", examples=[["general", "special"]]
     )
     form_data: ApplicationFormData = Field(..., description="表單資料")
     agree_terms: Optional[bool] = Field(False, description="同意條款")
     is_renewal: Optional[bool] = Field(False, description="是否為續領申請")
+    sub_type_preferences: Optional[List[str]] = Field(None, description="Ordered sub-type preference list")
+
+    @field_validator("sub_type_preferences")
+    @classmethod
+    def validate_sub_type_preferences(cls, v):
+        if v is None:
+            return v
+        if len(v) == 0:
+            return None  # Empty list treated as null
+        if len(v) != len(set(v)):
+            raise ValueError("sub_type_preferences must not contain duplicates")
+        return v
+
+    @model_validator(mode="after")
+    def validate_preferences_match_subtype_list(self):
+        prefs = self.sub_type_preferences
+        subtype_list = self.scholarship_subtype_list
+        if prefs and subtype_list:
+            if set(prefs) != set(subtype_list):
+                raise ValueError("sub_type_preferences must be a permutation of scholarship_subtype_list")
+        return self
 
     model_config = ConfigDict(
         json_encoders={datetime: lambda v: v.isoformat()},
@@ -215,6 +240,18 @@ class ApplicationUpdate(BaseModel):
     status: Optional[str] = Field(None, description="申請狀態")
     agree_terms: Optional[bool] = Field(None, description="同意條款")
     is_renewal: Optional[bool] = Field(None, description="是否為續領申請")
+    sub_type_preferences: Optional[List[str]] = Field(None, description="Ordered sub-type preference list")
+
+    @field_validator("sub_type_preferences")
+    @classmethod
+    def validate_sub_type_preferences(cls, v):
+        if v is None:
+            return v
+        if len(v) == 0:
+            return None
+        if len(v) != len(set(v)):
+            raise ValueError("sub_type_preferences must not contain duplicates")
+        return v
 
     model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
 
@@ -274,8 +311,10 @@ class ApplicationResponse(BaseModel):
     amount: Optional[Decimal] = None  # Scholarship amount
     currency: Optional[str] = "TWD"  # Scholarship currency
     scholarship_subtype_list: Optional[List[str]] = []
+    sub_type_preferences: Optional[List[str]] = Field(None, description="Ordered sub-type preference list")
     status: str
     status_name: Optional[str]
+    review_stage: Optional[str] = None  # 審核階段（用於前端進度顯示）
     is_renewal: bool = Field(False, description="是否為續領申請")
     academic_year: int
     semester: Optional[str] = None
@@ -293,8 +332,11 @@ class ApplicationResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     meta_data: Optional[Dict[str, Any]] = None
+    application_document_url: Optional[str] = None
+    application_document_original_filename: Optional[str] = None
 
     reviews: List[ApplicationReviewResponse] = []
+    professor_review_items: List[Dict[str, Any]] = []  # Per sub-type professor recommendations with comments
 
     # Additional display fields
     student_name: Optional[str] = None
@@ -320,6 +362,7 @@ class ApplicationResponse(BaseModel):
     term_count: Optional[int] = None  # std_termcount / trm_termcount
 
     # === Identity & Status ===
+    student_nationality: Optional[str] = None  # std_nation
     student_identity: Optional[int] = None  # std_identity
     school_identity: Optional[int] = None  # std_schoolid
     gender: Optional[int] = None  # std_sex
@@ -330,6 +373,10 @@ class ApplicationResponse(BaseModel):
     class_ranking_percent: Optional[float] = None  # trm_placingsrate
     dept_ranking: Optional[int] = None  # trm_depplacing
     dept_ranking_percent: Optional[float] = None  # trm_depplacingrate
+
+    # Workflow configuration flags
+    requires_professor_recommendation: bool = False
+    requires_college_review: bool = False
 
     @property
     def is_editable(self) -> bool:
@@ -410,6 +457,8 @@ class ApplicationStatusUpdateResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     meta_data: Optional[Dict[str, Any]] = None
+    application_document_url: Optional[str] = None
+    application_document_original_filename: Optional[str] = None
     reviews: List[ApplicationReviewResponse] = []
 
     # Additional display fields
@@ -436,6 +485,7 @@ class ApplicationStatusUpdateResponse(BaseModel):
     term_count: Optional[int] = None
 
     # === Identity & Status ===
+    student_nationality: Optional[str] = None
     student_identity: Optional[int] = None
     school_identity: Optional[int] = None
     gender: Optional[int] = None
@@ -481,6 +531,7 @@ class ApplicationListResponse(BaseModel):
     scholarship_subtype_list: Optional[List[str]] = []  # 獎學金子類型列表
     status: str
     status_name: Optional[str]
+    review_stage: Optional[str] = None  # 審核階段（用於前端進度顯示）
     is_renewal: bool = Field(False, description="是否為續領申請")
     academic_year: int
     semester: Optional[str] = None
@@ -498,6 +549,8 @@ class ApplicationListResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     meta_data: Optional[Dict[str, Any]] = None
+    application_document_url: Optional[str] = None
+    application_document_original_filename: Optional[str] = None
 
     # Additional display fields
     student_name: Optional[str] = None
@@ -523,6 +576,7 @@ class ApplicationListResponse(BaseModel):
     term_count: Optional[int] = None  # std_termcount / trm_termcount
 
     # === Identity & Status ===
+    student_nationality: Optional[str] = None  # std_nation
     student_identity: Optional[int] = None  # std_identity
     school_identity: Optional[int] = None  # std_schoolid
     gender: Optional[int] = None  # std_sex
@@ -541,6 +595,10 @@ class ApplicationListResponse(BaseModel):
 
     # Scholarship configuration for professor review requirements
     scholarship_configuration: Optional[Dict[str, Any]] = None
+
+    # Workflow configuration flags
+    requires_professor_recommendation: bool = False
+    requires_college_review: bool = False
 
     @property
     def is_editable(self) -> bool:
@@ -614,6 +672,11 @@ class HistoricalApplicationResponse(BaseModel):
     student_id: Optional[str] = None
     student_email: Optional[str] = None
     student_department: Optional[str] = None
+    # #68: nationality + identity from student_data snapshot, surfaced so
+    # admin reviewers can apply scholarship-specific eligibility rules
+    # (NSTC excludes mainland/HK/Macau, MoE caveats, etc.).
+    student_nationality: Optional[str] = None
+    student_identity: Optional[int] = None
 
     # Scholarship information
     scholarship_name: Optional[str] = None

@@ -8,8 +8,17 @@ on:
       - 'monitoring/**'
       - '.github/workflows/deploy-monitoring-stack.yml'
   workflow_dispatch:
+    inputs:
+      reset_grafana_volume:
+        description: "DESTRUCTIVE: nuke grafana_data before deploy (loses manually-saved dashboards, annotations, etc.). Default off."
+        type: boolean
+        required: false
+        default: false
 
 # SECURITY: Limit GITHUB_TOKEN permissions to minimum required
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 permissions:
   contents: read
 
@@ -21,7 +30,35 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+
+      - name: Pre-flight secret check
+        env:
+          REQUIRED_SECRETS: |
+            GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD GRAFANA_ROOT_URL
+            STAGING_DB_HOST STAGING_DB_USER STAGING_DB_SSH_KEY
+            STAGING_MONITORING_SERVER_URL GH_PAT
+          GRAFANA_ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          GRAFANA_ROOT_URL: ${{ secrets.GRAFANA_ROOT_URL }}
+          STAGING_DB_HOST: ${{ secrets.STAGING_DB_HOST }}
+          STAGING_DB_USER: ${{ secrets.STAGING_DB_USER }}
+          STAGING_DB_SSH_KEY: ${{ secrets.STAGING_DB_SSH_KEY }}
+          STAGING_MONITORING_SERVER_URL: ${{ secrets.STAGING_MONITORING_SERVER_URL }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          missing=()
+          for var in $REQUIRED_SECRETS; do
+            if [ -z "${!var}" ]; then
+              missing+=("$var")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            echo "::error::See monitoring/GITHUB_DEPLOYMENT.md → Repo Migration Checklist"
+            exit 1
+          fi
+          echo "✅ All required secrets present"
 
       - name: Create monitoring directories
         run: |
@@ -33,81 +70,266 @@ jobs:
           # Copy monitoring directory to /opt/scholarship/monitoring
           cp -r ./monitoring/* /opt/scholarship/monitoring/
 
-          # Initialize Grafana config from example if it doesn't exist
-          # This allows grafana.ini to be excluded from git while still functioning in deployment
-          if [ ! -f /opt/scholarship/monitoring/config/grafana/grafana.ini ]; then
-            echo "Creating Grafana configuration from example..."
-            cp /opt/scholarship/monitoring/config/grafana/grafana.ini.example \
-               /opt/scholarship/monitoring/config/grafana/grafana.ini
-            echo "✅ Grafana configuration initialized"
-          else
-            echo "✅ Grafana configuration already exists"
-          fi
+          # Always overwrite grafana.ini from the example so updates to the
+          # example propagate. Secrets are injected via GF_SECURITY_* env
+          # vars in compose, not from the ini file itself.
+          cp /opt/scholarship/monitoring/config/grafana/grafana.ini.example \
+             /opt/scholarship/monitoring/config/grafana/grafana.ini
+          echo "✅ Grafana configuration written from example (always overwrites)"
 
       - name: Pull latest monitoring images
         run: |
           cd /opt/scholarship/monitoring
-          docker compose -f docker-compose.monitoring.yml pull
+          # `pull` fails on the locally-built webhook-bridge image since
+          # it has no registry. Pull the third-party images that DO have
+          # one, then build the bridge from source.
+          docker compose -f docker-compose.monitoring.yml pull \
+            --ignore-buildable --ignore-pull-failures || true
+          docker compose -f docker-compose.monitoring.yml build webhook-bridge
 
       - name: Deploy monitoring stack
         run: |
           cd /opt/scholarship/monitoring
 
-          # Export required environment variables from GitHub secrets
+          # Required env vars; unset values fail-fast below
+          export APP_NETWORK_NAME="scholarship_staging_network"
           export GRAFANA_ADMIN_USER="${{ secrets.GRAFANA_ADMIN_USER }}"
           export GRAFANA_ADMIN_PASSWORD="${{ secrets.GRAFANA_ADMIN_PASSWORD }}"
-          export GRAFANA_SECRET_KEY="${{ secrets.GRAFANA_SECRET_KEY }}"
           export GRAFANA_ROOT_URL="${{ secrets.GRAFANA_ROOT_URL }}"
 
-          # Optional alert configuration
-          export ALERT_EMAIL_FROM="${{ secrets.ALERT_EMAIL_FROM }}"
-          export ALERT_SMTP_HOST="${{ secrets.ALERT_SMTP_HOST }}"
-          export ALERT_SMTP_PORT="${{ secrets.ALERT_SMTP_PORT }}"
-          export ALERT_SMTP_USER="${{ secrets.ALERT_SMTP_USER }}"
-          export ALERT_SMTP_PASSWORD="${{ secrets.ALERT_SMTP_PASSWORD }}"
-          export ALERT_SLACK_WEBHOOK="${{ secrets.ALERT_SLACK_WEBHOOK }}"
+          for var in APP_NETWORK_NAME GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD GRAFANA_ROOT_URL; do
+            if [ -z "${!var}" ]; then
+              echo "::error::Required env var $var is unset"
+              exit 1
+            fi
+          done
+
+          # Verify the named external network exists; create if missing
+          docker network inspect "$APP_NETWORK_NAME" >/dev/null 2>&1 || \
+            docker network create "$APP_NETWORK_NAME"
+
+          # Write GH_PAT to a secrets file Grafana can mount via $__file{}
+          sudo mkdir -p /opt/scholarship/secrets
+          sudo chmod 700 /opt/scholarship/secrets
+          echo "${{ secrets.GH_PAT }}" | sudo tee /opt/scholarship/secrets/gh_pat > /dev/null
+          # Multiple containers (Grafana UID 472, webhook-bridge UID 1100)
+          # need to read this file. Setting group "monitoring" with mode 0640
+          # would be cleaner, but creating a host-side group requires extra
+          # plumbing. The file lives behind a 0700 root-owned dir that only
+          # docker-mounted containers see, so 0444 here is acceptable —
+          # the secret isn't world-readable on the host.
+          sudo chown root:root /opt/scholarship/secrets/gh_pat
+          sudo chmod 0444 /opt/scholarship/secrets/gh_pat
+          # Parent dir is mode 700 root-owned — runner user has no traversal
+          # rights, so `[ -s file ]` would always fail with permission denied
+          # instead of telling us the actual size. Use `sudo test` instead.
+          if sudo test ! -s /opt/scholarship/secrets/gh_pat; then
+            echo "::error::GH_PAT file is empty after write"
+            exit 1
+          fi
+          echo "✅ GH_PAT secrets file written"
+
+          # One-shot volume nuke. Provisioning re-seeds Prometheus/Loki
+          # datasources + dashboards on next boot, so this is destructive
+          # only of in-Grafana state (manually-saved dashboards, alerts,
+          # annotations). Use sparingly — ideally once after a clean
+          # provisioning-only migration.
+          if [ "${{ inputs.reset_grafana_volume }}" = "true" ]; then
+            echo "⚠️  reset_grafana_volume=true — wiping grafana_data volume"
+            docker compose -f docker-compose.monitoring.yml down -v
+          fi
 
           # Start/restart monitoring stack
           docker compose -f docker-compose.monitoring.yml up -d
 
-          # Wait for services to be healthy
-          echo "Waiting for services to start..."
-          sleep 60
+      - name: Cleanup leftover Phase-2 datasources
+        env:
+          ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+          ADMIN_PASS: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          set -e
+          # Wait for Grafana to be reachable
+          for i in $(seq 1 24); do
+            if docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health 2>/dev/null; then
+              break
+            fi
+            sleep 5
+          done
+
+          # Phase 2 removed alertmanager from compose, but a previously
+          # provisioned `alertmanager-uid` datasource sticks around in
+          # grafana_data/grafana.db. The API rejects DELETE with 403 on
+          # provisioned datasources (read-only by design), so the only
+          # way to remove it is to drop a deleteDatasources entry into
+          # the provisioning dir and trigger Grafana to reprovision.
+          NET="monitoring_monitoring_network"
+          RESP=$(docker run --rm --network "$NET" curlimages/curl:8.10.1 \
+            -sS -u "$ADMIN_USER:$ADMIN_PASS" \
+            -w '\n__HTTP_CODE__:%{http_code}' \
+            "http://monitoring_grafana:3000/api/datasources/uid/alertmanager-uid")
+          HTTP_CODE=$(echo "$RESP" | grep '^__HTTP_CODE__:' | cut -d: -f2)
+          BODY=$(echo "$RESP" | sed '/^__HTTP_CODE__:/d')
+
+          if [ "$HTTP_CODE" = "404" ]; then
+            echo "✅ no leftover alertmanager-uid datasource — nothing to do"
+            exit 0
+          fi
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Unexpected status reading alertmanager-uid: $HTTP_CODE"
+            echo "$BODY"
+            exit 1
+          fi
+
+          DS_NAME=$(echo "$BODY" | jq -r '.name')
+          echo "Found leftover datasource: name='$DS_NAME' uid=alertmanager-uid"
+
+          # Drop a deleteDatasources file alongside the existing
+          # datasources.yml. SIGHUP didn't trigger a re-provision in
+          # practice, so just restart Grafana — it's <30s and bulletproof.
+          {
+            echo "apiVersion: 1"
+            echo "deleteDatasources:"
+            echo "  - name: ${DS_NAME}"
+            echo "    orgId: 1"
+          } | sudo tee /opt/scholarship/monitoring/config/grafana/provisioning/datasources/cleanup-leftovers.yml > /dev/null
+
+          docker restart monitoring_grafana
+          for i in $(seq 1 24); do
+            if docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health 2>/dev/null; then
+              break
+            fi
+            sleep 5
+          done
+
+          STATUS=$(docker run --rm --network "$NET" curlimages/curl:8.10.1 \
+            -sS -o /dev/null -w "%{http_code}" \
+            -u "$ADMIN_USER:$ADMIN_PASS" \
+            "http://monitoring_grafana:3000/api/datasources/uid/alertmanager-uid" || echo "000")
+          if [ "$STATUS" != "404" ]; then
+            echo "::error::Cleanup did not take effect (uid still returns $STATUS)"
+            exit 1
+          fi
+          echo "✅ leftover datasource '$DS_NAME' removed via provisioning"
+
+      - name: Reload Grafana provisioning
+        env:
+          ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+          ADMIN_PASS: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          # The /api/admin/provisioning reload endpoints work for alerting,
+          # datasources, and plugins, but for dashboards Grafana compares
+          # JSON `version` against the DB row. Once both sides match it
+          # skips updates even when query exprs change in the file. The
+          # only reliable way to land in-place dashboard edits is to
+          # restart the container after triggering the other reloads.
+          # ~30s downtime, acceptable on staging.
+          NET="monitoring_monitoring_network"
+          for path in datasources alerting plugins; do
+            STATUS=$(docker run --rm --network "$NET" curlimages/curl:8.10.1 \
+              -sS -o /dev/null -w "%{http_code}" \
+              -X POST -u "$ADMIN_USER:$ADMIN_PASS" \
+              "http://monitoring_grafana:3000/api/admin/provisioning/${path}/reload" || echo "000")
+            case "$STATUS" in
+              200) echo "✅ reloaded $path" ;;
+              404) echo "(no $path reload endpoint — older Grafana?)" ;;
+              *)   echo "::warning::$path reload returned $STATUS" ;;
+            esac
+          done
+
+          echo "Restarting Grafana to force dashboard reprovision from disk..."
+          docker restart monitoring_grafana
+          for i in $(seq 1 24); do
+            if docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health 2>/dev/null; then
+              break
+            fi
+            sleep 5
+          done
+          echo "✅ Grafana back up after restart"
 
       - name: Health check monitoring services
         run: |
-          echo "Checking service health..."
+          set -e
 
-          # Check if all services are running
-          docker ps --filter "name=monitoring_" --format "table {{.Names}}\t{{.Status}}"
+          # Wait for Grafana to start (replaces hardcoded sleep 60)
+          for i in $(seq 1 24); do
+            if docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health 2>/dev/null; then
+              break
+            fi
+            echo "Waiting for Grafana... ($i/24)"
+            sleep 5
+          done
+          docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health || {
+            echo "::error::Grafana did not start in 120s"; exit 1; }
 
-          # Test Grafana (using docker exec since port 3000 is not exposed to host)
-          if docker exec monitoring_grafana wget --spider -q http://localhost:3000/api/health; then
-            echo "✅ Grafana is healthy"
-          else
-            echo "❌ Grafana health check failed"
+          # 1. Container liveness
+          for service in grafana prometheus loki; do
+            container="monitoring_${service}"
+            if ! docker ps --filter "name=${container}" --filter "status=running" --format '{{.Names}}' | grep -q "${container}"; then
+              echo "::error::${container} is not running"
+              exit 1
+            fi
+          done
+          echo "✅ All monitoring containers running"
+
+          # 2. Datasource health: every datasource must report status:ok
+          AUTH_HDR="Authorization: Basic $(echo -n "${{ secrets.GRAFANA_ADMIN_USER }}:${{ secrets.GRAFANA_ADMIN_PASSWORD }}" | base64)"
+          UIDS=$(docker exec monitoring_grafana wget -qO- \
+            --header "$AUTH_HDR" \
+            "http://localhost:3000/api/datasources" \
+            | jq -r '.[].uid')
+          for uid in $UIDS; do
+            STATUS=$(docker exec monitoring_grafana wget -qO- \
+              --header "$AUTH_HDR" \
+              "http://localhost:3000/api/datasources/uid/$uid/health" \
+              | jq -r '.status // "missing"')
+            if [ "$STATUS" != "OK" ]; then
+              echo "::error::Datasource $uid is not OK (status=$STATUS)"
+              exit 1
+            fi
+          done
+          echo "✅ All datasources healthy"
+
+          # 3. Dashboards reachable. Replaces a brittle log-grep gate that
+          #    used to fail on cosmetic Grafana 12 quirks (e.g. "Cannot
+          #    change resource manager" + transient SQLITE_BUSY during
+          #    cold-start provisioning). Real datasource problems are
+          #    already caught by step 2; the alert-rules gate at step 4
+          #    catches alert provisioning failures. What's left is
+          #    dashboard liveness — query the search API and assert every
+          #    provisioning JSON yielded a dashboard.
+          DASH_COUNT=$(docker exec monitoring_grafana wget -qO- \
+            --header "$AUTH_HDR" \
+            "http://localhost:3000/api/search?type=dash-db" \
+            | jq 'length')
+          # Eight dashboards live in monitoring/config/grafana/provisioning/dashboards/.
+          if [ "${DASH_COUNT:-0}" -lt 8 ]; then
+            echo "::error::Expected ≥8 provisioned dashboards, got $DASH_COUNT"
+            docker logs monitoring_grafana 2>&1 | grep -E 'provisioning.dashboard.*level=error' | tail -20
             exit 1
           fi
+          echo "✅ $DASH_COUNT dashboards provisioned"
 
-          # Test Prometheus
-          if curl -f http://localhost:9090/-/healthy > /dev/null 2>&1; then
-            echo "✅ Prometheus is healthy"
-          else
-            echo "❌ Prometheus health check failed"
+          # 4. Alert rules loaded. The previous filter (execErrState=="Error")
+          #    matched the rule's *config* for what to do when its query
+          #    fails — it's "Error" by default, so it counted every rule.
+          #    Instead, count present rules and assert it matches the
+          #    YAML-shipped total. Cold-boot transient evaluation errors
+          #    are expected on first start (Prometheus targets not scraped
+          #    yet) and shouldn't fail the deploy.
+          RULE_COUNT=$(docker exec monitoring_grafana wget -qO- \
+            --header "$AUTH_HDR" \
+            "http://localhost:3000/api/v1/provisioning/alert-rules" \
+            | jq 'length')
+          # Total alert rules across rules-*.yml: 5 (system) + 4 (container)
+          # + 3 (monitoring) + 2 (database) + 3 (application-logs) = 17.
+          if [ "${RULE_COUNT:-0}" -lt 17 ]; then
+            echo "::error::Expected ≥17 provisioned alert rules, got $RULE_COUNT"
+            docker logs monitoring_grafana 2>&1 | grep -E 'provisioning.alerting.*level=error' | tail -20
             exit 1
           fi
+          echo "✅ $RULE_COUNT alert rules provisioned"
 
-          # Test Loki
-          if curl -f http://localhost:3100/ready > /dev/null 2>&1; then
-            echo "✅ Loki is healthy"
-          else
-            echo "❌ Loki health check failed"
-            exit 1
-          fi
-
-          # Note: AlertManager has been removed from the monitoring stack
-
-          echo "All monitoring services are healthy! (Grafana, Prometheus, Loki)"
+          echo "All monitoring services are healthy"
 
       - name: Deploy Alloy to Staging AP-VM (localhost)
         run: |
@@ -115,10 +337,15 @@ jobs:
           sudo mkdir -p /opt/scholarship/monitoring/config/alloy
           cp ./monitoring/config/alloy/staging-ap-vm.alloy /opt/scholarship/monitoring/config/alloy/
 
-          # Restart Alloy service if it's running
-          cd /opt/scholarship
-          if docker ps -q -f name=alloy > /dev/null 2>&1; then
-            docker compose -f docker-compose.staging.yml restart alloy || true
+          # `docker ps -q -f name=alloy` exits 0 even when nothing matches,
+          # so the previous bare `if` always entered then silently failed
+          # on a missing compose file (|| true). Inspect the output instead.
+          ALLOY_CIDS=$(docker ps -q -f name=alloy)
+          if [ -n "$ALLOY_CIDS" ]; then
+            echo "Restarting Alloy container(s): $ALLOY_CIDS"
+            docker restart $ALLOY_CIDS
+          else
+            echo "::warning::No alloy container running on AP-VM — staging metrics from this host will be missing until the main staging stack deploys it."
           fi
 
   deploy-staging-db-monitoring:
@@ -129,7 +356,34 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+
+      - name: Pre-flight secret check
+        env:
+          REQUIRED_SECRETS: |
+            GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD GRAFANA_ROOT_URL
+            STAGING_DB_HOST STAGING_DB_USER STAGING_DB_SSH_KEY
+            STAGING_MONITORING_SERVER_URL
+          GRAFANA_ADMIN_USER: ${{ secrets.GRAFANA_ADMIN_USER }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          GRAFANA_ROOT_URL: ${{ secrets.GRAFANA_ROOT_URL }}
+          STAGING_DB_HOST: ${{ secrets.STAGING_DB_HOST }}
+          STAGING_DB_USER: ${{ secrets.STAGING_DB_USER }}
+          STAGING_DB_SSH_KEY: ${{ secrets.STAGING_DB_SSH_KEY }}
+          STAGING_MONITORING_SERVER_URL: ${{ secrets.STAGING_MONITORING_SERVER_URL }}
+        run: |
+          missing=()
+          for var in $REQUIRED_SECRETS; do
+            if [ -z "${!var}" ]; then
+              missing+=("$var")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            echo "::error::See monitoring/GITHUB_DEPLOYMENT.md → Repo Migration Checklist"
+            exit 1
+          fi
+          echo "✅ All required secrets present"
 
       - name: Set up SSH key for DB-VM
         run: |
@@ -220,6 +474,30 @@ jobs:
             ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/
           echo "✅ docker-compose.staging-db-monitoring.yml transferred"
 
+      - name: Sync staging-db.yml + recreate MinIO for prom auth=public
+        run: |
+          # MINIO_PROMETHEUS_AUTH_TYPE=public has to land via env var, which
+          # means the minio container needs --force-recreate. The main
+          # staging-db stack isn't deployed by this workflow, and the
+          # existing minio container was created under a different compose
+          # project name, so a plain `docker compose up` hits a name
+          # conflict. Force-remove first (volumes persist), then up.
+          scp -P 8822 -i ~/.ssh/staging_db \
+            ./docker-compose.staging-db.yml \
+            ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/
+          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
+            cd /opt/scholarship
+            if [ -f docker-compose.staging-db.yml ]; then
+              # Idempotent: if container doesn't exist, rm is a no-op.
+              docker rm -f scholarship_minio_staging 2>/dev/null || true
+              # Match the original compose project name so future deploys
+              # don't keep recreating it under a different name.
+              docker compose -p scholarship_staging_db \
+                -f docker-compose.staging-db.yml up -d minio || \
+                echo "::warning::MinIO recreate failed"
+            fi
+          EOF
+
       - name: Deploy monitoring stack to Staging DB-VM
         run: |
           echo "Deploying monitoring services on DB-VM..."
@@ -229,39 +507,78 @@ jobs:
             ./monitoring/config/alloy/staging-db-vm.alloy \
             ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }}:/opt/scholarship/monitoring/config/alloy/
 
-          # Deploy monitoring stack using docker-compose
+          # Deploy monitoring stack using docker-compose. We need
+          # --env-file to actually load .env.staging-db-monitoring;
+          # without it, ${MONITORING_SERVER_URL} ends up empty and Alloy
+          # has nowhere to push metrics.
           ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} << 'EOF'
             cd /opt/scholarship
 
             # Stop existing monitoring services if any
-            docker compose -f docker-compose.staging-db-monitoring.yml down || true
+            docker compose --env-file .env.staging-db-monitoring \
+              -f docker-compose.staging-db-monitoring.yml down || true
 
             # Start monitoring stack
-            docker compose -f docker-compose.staging-db-monitoring.yml up -d
+            docker compose --env-file .env.staging-db-monitoring \
+              -f docker-compose.staging-db-monitoring.yml up -d
 
             echo "✅ Monitoring stack deployed successfully"
 
             # Show running containers
             docker ps --filter "name=staging_db" --format "table {{.Names}}\t{{.Status}}"
+
           EOF
 
       - name: Verify staging metrics
         run: |
-          echo "Waiting for metrics to be collected..."
-          sleep 30
+          set -e
 
-          # Check if staging targets are UP in Prometheus
-          TARGETS_DOWN=$(curl -s http://localhost:9090/api/v1/targets | jq '[.data.activeTargets[] | select(.labels.environment=="staging") | select(.health!="up")] | length')
+          # Staging metrics arrive via Alloy → Prometheus remote_write —
+          # they don't appear in /api/v1/targets. Query up{} instead.
+          # AP-VM exporters (5): node, cadvisor, nginx, redis, backend
+          # DB-VM exporters (2): node, postgres
+          MIN_EXPECTED=7
+          query_count() {
+            curl -s -G "http://localhost:9090/api/v1/query" \
+              --data-urlencode "query=$1" \
+              | jq -r '.data.result[0].value[1] // "0"'
+          }
 
-          if [ "$TARGETS_DOWN" -eq "0" ]; then
-            echo "✅ All staging targets are UP"
-          else
-            echo "⚠️  Warning: $TARGETS_DOWN staging targets are DOWN"
-            echo "Check Prometheus targets at http://localhost:9090/targets"
+          # Poll until we hit the full expected count AND nothing is
+          # currently down. Just-recreated services (e.g. MinIO after a
+          # docker rm/up cycle) can briefly land in up{}==0 before they
+          # finish booting; waiting them out avoids spurious failures.
+          for i in $(seq 1 24); do
+            STAGING_TOTAL=$(query_count 'count(up{environment="staging"}==1)')
+            STAGING_DOWN=$(query_count 'count(up{environment="staging"}==0)')
+            if [ "${STAGING_TOTAL:-0}" -ge "$MIN_EXPECTED" ] && [ "${STAGING_DOWN:-0}" -eq 0 ]; then
+              break
+            fi
+            echo "Have up=1:$STAGING_TOTAL/$MIN_EXPECTED  up=0:$STAGING_DOWN  ($i/24)"
+            sleep 10
+          done
+
+          STAGING_TOTAL=$(query_count 'count(up{environment="staging"}==1)')
+          STAGING_DOWN=$(query_count 'count(up{environment="staging"}==0)')
+
+          if [ "${STAGING_TOTAL:-0}" -lt "$MIN_EXPECTED" ]; then
+            echo "::error::Only $STAGING_TOTAL staging up=1 metrics found; expected at least $MIN_EXPECTED"
+            echo "Per-vm/job breakdown of what we DO see:"
+            curl -s -G "http://localhost:9090/api/v1/query" \
+              --data-urlencode 'query=up{environment="staging"}' \
+              | jq '.data.result[] | {vm: .metric.vm, job: .metric.job, instance: .metric.instance, up: .value[1]}'
+            exit 1
           fi
+          if [ "${STAGING_DOWN:-0}" -gt 0 ]; then
+            echo "::error::$STAGING_DOWN staging targets reporting up=0"
+            curl -s -G "http://localhost:9090/api/v1/query" \
+              --data-urlencode 'query=up{environment="staging"}==0' \
+              | jq '.data.result[].metric'
+            exit 1
+          fi
+          echo "✅ $STAGING_TOTAL staging targets reporting up=1"
 
-          # Show staging logs in Loki
-          echo "Checking Loki logs..."
+          # Loki check (existing; keep)
           if curl -f -H "X-Scope-OrgID: staging" -G "http://localhost:3100/loki/api/v1/query" \
             --data-urlencode 'query={environment="staging"}' \
             --data-urlencode 'limit=1' > /dev/null 2>&1; then
@@ -270,10 +587,35 @@ jobs:
             echo "⚠️  Warning: No staging logs found in Loki yet"
           fi
 
+      - name: DB-VM Alloy diagnostics (on failure)
+        if: failure()
+        env:
+          MONITORING_URL: ${{ secrets.STAGING_MONITORING_SERVER_URL }}
+        run: |
+          echo "--- DB-VM Alloy env ---"
+          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} \
+            "docker inspect scholarship_alloy_staging_db --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E 'MONITORING_SERVER_URL' || echo '(env var missing)'" || true
+
+          echo
+          echo "--- Alloy logs (errors/remote_write/push) ---"
+          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} \
+            "docker logs --tail 200 scholarship_alloy_staging_db 2>&1 | grep -Ei 'error|remote_write|push|fail|context|push_total'" \
+            | tail -50 || true
+
+          echo
+          echo "--- DB-VM → AP-VM:9090 reachability ---"
+          ssh -p 8822 -i ~/.ssh/staging_db ${{ secrets.STAGING_DB_USER }}@${{ secrets.STAGING_DB_HOST }} \
+            "curl -sS -o /dev/null -w 'HTTP %{http_code} — connect=%{time_connect}s total=%{time_total}s\n' ${MONITORING_URL}:9090/-/healthy" \
+            || echo "(reachability check failed; URL=${MONITORING_URL})"
+
       - name: Cleanup SSH keys
         if: always()
         run: |
           rm -f ~/.ssh/staging_db
+
+      - name: Cleanup monitoring image tar files (AP-VM)
+        if: always()
+        run: rm -rf /tmp/monitoring-images
 
       - name: Deployment summary
         if: success()
@@ -288,6 +630,6 @@ jobs:
           echo "  Loki:         http://localhost:3100"
           echo ""
           echo "Note: Grafana is only accessible via HTTPS reverse proxy"
-          echo "Note: AlertManager has been removed from the monitoring stack"
+          echo "Note: Alerts route to GitHub Issues via Grafana unified alerting"
           echo "Staging environment monitoring is active"
           echo ""

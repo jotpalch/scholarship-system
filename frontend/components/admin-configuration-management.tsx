@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { logger } from "@/lib/utils/logger";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,7 +65,10 @@ const api = apiClient;
 
 interface AdminConfigurationManagementProps {
   scholarshipTypes: ScholarshipType[];
-  onScholarshipTypeUpdate?: (id: number, updates: Partial<ScholarshipType>) => void;
+  onScholarshipTypeUpdate?: (
+    id: number,
+    updates: Partial<ScholarshipType>
+  ) => void;
 }
 
 export function AdminConfigurationManagement({
@@ -123,7 +127,7 @@ export function AdminConfigurationManagement({
           setAcademyCodes(codesMap);
         }
       } catch (error) {
-        console.error("載入學院代碼失敗:", error);
+        logger.error("載入學院代碼失敗", { error: error });
         toast.error("載入學院代碼失敗: " + (error as Error).message);
       }
     };
@@ -218,9 +222,9 @@ export function AdminConfigurationManagement({
           ...(inactiveResponse.success ? inactiveResponse.data || [] : []),
         ];
 
-        setConfigurations(allConfigurations);
+        setConfigurations(allConfigurations as ScholarshipConfiguration[]);
       } catch (error) {
-        console.error("載入配置失敗:", error);
+        logger.error("載入配置失敗", { error: error });
         toast.error("載入配置失敗: " + (error as Error).message);
         setConfigurations([]);
         setFilteredConfigurations([]);
@@ -240,7 +244,8 @@ export function AdminConfigurationManagement({
       const processedData = {
         ...formData,
         has_quota_limit: quotaMode !== "none",
-        has_college_quota: quotaMode === "college_based" || quotaMode === "matrix_based",
+        has_college_quota:
+          quotaMode === "college_based" || quotaMode === "matrix_based",
       };
 
       const response = await api.admin.createScholarshipConfiguration(
@@ -252,10 +257,11 @@ export function AdminConfigurationManagement({
         await loadConfigurations(selectedScholarshipType!);
         toast.success("配置建立成功");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.detail ||
+        errShape.response?.data?.message ||
+        errShape.response?.data?.detail ||
         "建立配置失敗";
       toast.error("建立配置失敗: " + errorMessage);
     } finally {
@@ -274,7 +280,8 @@ export function AdminConfigurationManagement({
       const processedData = {
         ...formData,
         has_quota_limit: quotaMode !== "none",
-        has_college_quota: quotaMode === "college_based" || quotaMode === "matrix_based",
+        has_college_quota:
+          quotaMode === "college_based" || quotaMode === "matrix_based",
       };
 
       const response = await api.admin.updateScholarshipConfiguration(
@@ -288,10 +295,11 @@ export function AdminConfigurationManagement({
         await loadConfigurations(selectedScholarshipType!);
         toast.success("配置更新成功");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.detail ||
+        errShape.response?.data?.message ||
+        errShape.response?.data?.detail ||
         "更新配置失敗";
       toast.error("更新配置失敗: " + errorMessage);
     } finally {
@@ -313,10 +321,11 @@ export function AdminConfigurationManagement({
         await loadConfigurations(selectedScholarshipType!);
         toast.success("配置刪除成功");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.detail ||
+        errShape.response?.data?.message ||
+        errShape.response?.data?.detail ||
         "刪除配置失敗";
       toast.error("刪除配置失敗: " + errorMessage);
     } finally {
@@ -346,10 +355,11 @@ export function AdminConfigurationManagement({
         await loadConfigurations(selectedScholarshipType!);
         toast.success("配置複製成功");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.detail ||
+        errShape.response?.data?.message ||
+        errShape.response?.data?.detail ||
         "複製配置失敗";
       toast.error("複製配置失敗: " + errorMessage);
     } finally {
@@ -371,11 +381,14 @@ export function AdminConfigurationManagement({
           prev ? { ...prev, whitelist_enabled: enabled } : prev
         );
         // Update parent component's scholarshipTypes state
-        onScholarshipTypeUpdate?.(selectedScholarshipType.id, { whitelist_enabled: enabled });
+        onScholarshipTypeUpdate?.(selectedScholarshipType.id, {
+          whitelist_enabled: enabled,
+        });
         toast.success(`申請白名單已${enabled ? "啟用" : "停用"}`);
       }
-    } catch (error: any) {
-      const errorMessage = error.message || "切換申請白名單狀態失敗";
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
+      const errorMessage = errShape.message || "切換申請白名單狀態失敗";
       toast.error("操作失敗: " + errorMessage);
     }
   };
@@ -404,15 +417,16 @@ export function AdminConfigurationManagement({
       // Refetch the latest configuration to ensure quotas and other data are up-to-date
       const response = await api.admin.getScholarshipConfiguration(config.id);
       if (response.success && response.data) {
-        setSelectedConfig(response.data);
+        setSelectedConfig(response.data as ScholarshipConfiguration);
         setShowViewDialog(true);
       } else {
         toast.error("無法載入配置詳情");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errShape = error as { response?: { data?: { message?: string; detail?: string } }; message?: string };
       const errorMessage =
-        error.response?.data?.message ||
-        error.response?.data?.detail ||
+        errShape.response?.data?.message ||
+        errShape.response?.data?.detail ||
         "載入配置詳情失敗";
       toast.error(errorMessage);
     }
@@ -432,6 +446,7 @@ export function AdminConfigurationManagement({
       quota_management_mode: config.quota_management_mode || "none",
       total_quota: config.total_quota,
       quotas: config.quotas,
+      prior_quota_years: config.prior_quota_years || {},
       whitelist_student_ids: config.whitelist_student_ids,
       renewal_application_start_date: formatDateTimeLocal(
         config.renewal_application_start_date
@@ -513,7 +528,7 @@ export function AdminConfigurationManagement({
       const date = new Date(dateString);
       // 檢查日期是否有效
       if (isNaN(date.getTime())) {
-        console.warn("Invalid date string:", dateString);
+        logger.warn("Invalid date string:", dateString);
         return "";
       }
 
@@ -534,6 +549,7 @@ export function AdminConfigurationManagement({
     if (!semester) return "全學年";
     if (semester === "first" || semester === "1") return "第一學期";
     if (semester === "second" || semester === "2") return "第二學期";
+    if (semester === "yearly" || semester === "0") return "全年";
     return semester;
   };
 
@@ -780,9 +796,12 @@ export function AdminConfigurationManagement({
       <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
         <DialogContent
           className="max-w-3xl max-h-[90vh]"
-          onInteractOutside={(e) => {
+          onInteractOutside={e => {
             const target = e.target as HTMLElement;
-            if (target.closest('[data-sonner-toast]') || target.closest('[data-radix-toast-viewport]')) {
+            if (
+              target.closest("[data-sonner-toast]") ||
+              target.closest("[data-radix-toast-viewport]")
+            ) {
               e.preventDefault();
             }
           }}
@@ -1207,7 +1226,9 @@ export function AdminConfigurationManagement({
                     </span>
                     <span className="ml-2 font-medium">
                       {selectedConfig?.quota_management_mode &&
-                        getQuotaManagementModeLabel(selectedConfig.quota_management_mode as QuotaManagementMode)}
+                        getQuotaManagementModeLabel(
+                          selectedConfig.quota_management_mode as QuotaManagementMode
+                        )}
                     </span>
                   </div>
                   <div>
@@ -1232,6 +1253,47 @@ export function AdminConfigurationManagement({
                       </div>
                     </div>
                   )}
+
+                {/* Display prior_quota_years if exists */}
+                {selectedConfig?.prior_quota_years &&
+                  Object.keys(selectedConfig.prior_quota_years).length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="text-sm font-medium mb-2">
+                        可使用前年度配額
+                      </h4>
+                      <div className="space-y-2">
+                        {Object.entries(selectedConfig.prior_quota_years).map(
+                          ([subType, years]: [string, unknown]) => (
+                            <div
+                              key={subType}
+                              className="flex items-center gap-2 text-sm"
+                            >
+                              <span className="font-medium min-w-[80px]">
+                                {subType}
+                              </span>
+                              {Array.isArray(years) && years.length > 0 ? (
+                                <div className="flex gap-1">
+                                  {years.map((y: number) => (
+                                    <Badge
+                                      key={y}
+                                      variant="secondary"
+                                      className="text-xs"
+                                    >
+                                      {y} 學年
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  僅限當年度
+                                </span>
+                              )}
+                            </div>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
               </div>
 
               <Separator />
@@ -1242,7 +1304,9 @@ export function AdminConfigurationManagement({
                   0 && (
                   <>
                     <div>
-                      <h3 className="text-sm font-medium mb-3">申請白名單設定</h3>
+                      <h3 className="text-sm font-medium mb-3">
+                        申請白名單設定
+                      </h3>
                       <div className="space-y-2">
                         {Object.entries(
                           selectedConfig.whitelist_student_ids
@@ -1328,9 +1392,12 @@ export function AdminConfigurationManagement({
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent
           className="max-w-2xl max-h-[90vh]"
-          onInteractOutside={(e) => {
+          onInteractOutside={e => {
             const target = e.target as HTMLElement;
-            if (target.closest('[data-sonner-toast]') || target.closest('[data-radix-toast-viewport]')) {
+            if (
+              target.closest("[data-sonner-toast]") ||
+              target.closest("[data-radix-toast-viewport]")
+            ) {
               e.preventDefault();
             }
           }}
@@ -1569,24 +1636,64 @@ export function AdminConfigurationManagement({
                           ? JSON.stringify(formData.quotas, null, 2)
                           : formData.quotas || ""
                       }
-                    onChange={e => {
-                      try {
-                        const parsed = e.target.value
-                          ? JSON.parse(e.target.value)
-                          : {};
-                        setFormData(prev => ({ ...prev, quotas: parsed }));
-                      } catch {
-                        // 如果 JSON 無效，保持字串狀態讓使用者繼續編輯
-                        setFormData(prev => ({
-                          ...prev,
-                          quotas: e.target.value,
-                        }));
+                      onChange={e => {
+                        try {
+                          const parsed = e.target.value
+                            ? JSON.parse(e.target.value)
+                            : {};
+                          setFormData(prev => ({ ...prev, quotas: parsed }));
+                        } catch {
+                          // 如果 JSON 無效，保持字串狀態讓使用者繼續編輯
+                          setFormData(prev => ({
+                            ...prev,
+                            quotas: e.target.value,
+                          }));
+                        }
+                      }}
+                      placeholder='{"sub_type": {"college": quota_number}}'
+                      className="min-h-[100px] font-mono text-sm"
+                    />
+                  </div>
+                )}
+
+                {formData.quota_management_mode === "matrix_based" && (
+                  <div>
+                    <Label>前年度配額設定 (JSON 格式)</Label>
+                    <div className="mt-1 mb-2 text-sm text-muted-foreground">
+                      <p>
+                        設定各子類型可使用的前年度配額，格式：
+                        {`{"nstc": [113, 112], "moe_1w": []}`}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        空陣列 [] 表示僅限當年度配額
+                      </p>
+                    </div>
+                    <Textarea
+                      value={
+                        typeof formData.prior_quota_years === "object"
+                          ? JSON.stringify(formData.prior_quota_years, null, 2)
+                          : formData.prior_quota_years || ""
                       }
-                    }}
-                    placeholder='{"sub_type": {"college": quota_number}}'
-                    className="min-h-[100px] font-mono text-sm"
-                  />
-                </div>
+                      onChange={e => {
+                        try {
+                          const parsed = e.target.value
+                            ? JSON.parse(e.target.value)
+                            : {};
+                          setFormData(prev => ({
+                            ...prev,
+                            prior_quota_years: parsed,
+                          }));
+                        } catch {
+                          setFormData(prev => ({
+                            ...prev,
+                            prior_quota_years: e.target.value,
+                          }));
+                        }
+                      }}
+                      placeholder='{"nstc": [113], "moe_1w": []}'
+                      className="min-h-[80px] font-mono text-sm"
+                    />
+                  </div>
                 )}
 
                 {/* 申請白名單功能控制 */}
@@ -1594,28 +1701,42 @@ export function AdminConfigurationManagement({
                   <Label>申請白名單功能</Label>
                   <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">申請白名單功能</span>
-                      <Badge variant={selectedScholarshipType?.whitelist_enabled ? "default" : "outline"} className="text-xs">
-                        {selectedScholarshipType?.whitelist_enabled ? "已啟用" : "未啟用"}
+                      <span className="text-sm font-medium">
+                        申請白名單功能
+                      </span>
+                      <Badge
+                        variant={
+                          selectedScholarshipType?.whitelist_enabled
+                            ? "default"
+                            : "outline"
+                        }
+                        className="text-xs"
+                      >
+                        {selectedScholarshipType?.whitelist_enabled
+                          ? "已啟用"
+                          : "未啟用"}
                       </Badge>
                     </div>
                     <Switch
-                      checked={selectedScholarshipType?.whitelist_enabled || false}
+                      checked={
+                        selectedScholarshipType?.whitelist_enabled || false
+                      }
                       onCheckedChange={handleToggleWhitelist}
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
                     啟用後，只有申請白名單中的學生才能申請此獎學金
                   </p>
-                  {selectedScholarshipType?.whitelist_enabled && selectedConfig && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowWhitelistDialog(true)}
-                    >
-                      管理申請白名單學生
-                    </Button>
-                  )}
+                  {selectedScholarshipType?.whitelist_enabled &&
+                    selectedConfig && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowWhitelistDialog(true)}
+                      >
+                        管理申請白名單學生
+                      </Button>
+                    )}
                 </div>
 
                 <div>
@@ -1797,9 +1918,12 @@ export function AdminConfigurationManagement({
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent
           className="max-w-2xl max-h-[90vh]"
-          onInteractOutside={(e) => {
+          onInteractOutside={e => {
             const target = e.target as HTMLElement;
-            if (target.closest('[data-sonner-toast]') || target.closest('[data-radix-toast-viewport]')) {
+            if (
+              target.closest("[data-sonner-toast]") ||
+              target.closest("[data-radix-toast-viewport]")
+            ) {
               e.preventDefault();
             }
           }}
@@ -2007,33 +2131,87 @@ export function AdminConfigurationManagement({
                   </div>
                 )}
 
+                {formData.quota_management_mode === "matrix_based" && (
+                  <div>
+                    <Label>前年度配額設定 (JSON 格式)</Label>
+                    <div className="mt-1 mb-2 text-sm text-muted-foreground">
+                      <p>
+                        設定各子類型可使用的前年度配額，格式：
+                        {`{"nstc": [113, 112], "moe_1w": []}`}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        空陣列 [] 表示僅限當年度配額
+                      </p>
+                    </div>
+                    <Textarea
+                      value={
+                        typeof formData.prior_quota_years === "object"
+                          ? JSON.stringify(formData.prior_quota_years, null, 2)
+                          : formData.prior_quota_years || ""
+                      }
+                      onChange={e => {
+                        try {
+                          const parsed = e.target.value
+                            ? JSON.parse(e.target.value)
+                            : {};
+                          setFormData(prev => ({
+                            ...prev,
+                            prior_quota_years: parsed,
+                          }));
+                        } catch {
+                          setFormData(prev => ({
+                            ...prev,
+                            prior_quota_years: e.target.value,
+                          }));
+                        }
+                      }}
+                      placeholder='{"nstc": [113], "moe_1w": []}'
+                      className="min-h-[80px] font-mono text-sm"
+                    />
+                  </div>
+                )}
+
                 {/* 申請白名單功能控制 */}
                 <div className="space-y-3">
                   <Label>申請白名單功能</Label>
                   <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">申請白名單功能</span>
-                      <Badge variant={selectedScholarshipType?.whitelist_enabled ? "default" : "outline"} className="text-xs">
-                        {selectedScholarshipType?.whitelist_enabled ? "已啟用" : "未啟用"}
+                      <span className="text-sm font-medium">
+                        申請白名單功能
+                      </span>
+                      <Badge
+                        variant={
+                          selectedScholarshipType?.whitelist_enabled
+                            ? "default"
+                            : "outline"
+                        }
+                        className="text-xs"
+                      >
+                        {selectedScholarshipType?.whitelist_enabled
+                          ? "已啟用"
+                          : "未啟用"}
                       </Badge>
                     </div>
                     <Switch
-                      checked={selectedScholarshipType?.whitelist_enabled || false}
+                      checked={
+                        selectedScholarshipType?.whitelist_enabled || false
+                      }
                       onCheckedChange={handleToggleWhitelist}
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
                     啟用後，只有申請白名單中的學生才能申請此獎學金
                   </p>
-                  {selectedScholarshipType?.whitelist_enabled && selectedConfig && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowWhitelistDialog(true)}
-                    >
-                      管理申請白名單學生
-                    </Button>
-                  )}
+                  {selectedScholarshipType?.whitelist_enabled &&
+                    selectedConfig && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowWhitelistDialog(true)}
+                      >
+                        管理申請白名單學生
+                      </Button>
+                    )}
                 </div>
 
                 <div>
@@ -2457,9 +2635,12 @@ export function AdminConfigurationManagement({
       {/* Duplicate Configuration Dialog */}
       <Dialog open={showDuplicateDialog} onOpenChange={setShowDuplicateDialog}>
         <DialogContent
-          onInteractOutside={(e) => {
+          onInteractOutside={e => {
             const target = e.target as HTMLElement;
-            if (target.closest('[data-sonner-toast]') || target.closest('[data-radix-toast-viewport]')) {
+            if (
+              target.closest("[data-sonner-toast]") ||
+              target.closest("[data-radix-toast-viewport]")
+            ) {
               e.preventDefault();
             }
           }}
@@ -2589,9 +2770,12 @@ export function AdminConfigurationManagement({
       <Dialog open={showCodeTableDialog} onOpenChange={setShowCodeTableDialog}>
         <DialogContent
           className="max-w-2xl"
-          onInteractOutside={(e) => {
+          onInteractOutside={e => {
             const target = e.target as HTMLElement;
-            if (target.closest('[data-sonner-toast]') || target.closest('[data-radix-toast-viewport]')) {
+            if (
+              target.closest("[data-sonner-toast]") ||
+              target.closest("[data-radix-toast-viewport]")
+            ) {
               e.preventDefault();
             }
           }}
@@ -2653,8 +2837,11 @@ export function AdminConfigurationManagement({
           onClose={() => setShowWhitelistDialog(false)}
           configuration={selectedConfig}
           subTypes={
-            selectedScholarshipType.eligible_sub_types && selectedScholarshipType.eligible_sub_types.length > 0
-              ? selectedScholarshipType.eligible_sub_types.map(st => st.value || st).filter((v): v is string => typeof v === 'string')
+            selectedScholarshipType.eligible_sub_types &&
+            selectedScholarshipType.eligible_sub_types.length > 0
+              ? selectedScholarshipType.eligible_sub_types
+                  .map(st => st.value || st)
+                  .filter((v): v is string => typeof v === "string")
               : ["general"]
           }
         />

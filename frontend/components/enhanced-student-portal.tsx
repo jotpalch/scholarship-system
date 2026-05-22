@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { logger } from "@/lib/utils/logger";
 import {
   Card,
   CardContent,
@@ -30,6 +31,7 @@ import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import { StudentApplicationWizard } from "@/components/student-wizard/StudentApplicationWizard";
 import { DocumentRequestAlert } from "@/components/document-request-alert";
 import type { StudentDocumentRequest } from "@/lib/api/modules/document-requests";
+import { isSelectableScholarship } from "@/lib/scholarship-eligibility";
 import {
   Edit,
   Eye,
@@ -221,11 +223,11 @@ export function EnhancedStudentPortal({
 
   // Debug authentication status
   useEffect(() => {
-    console.log("EnhancedStudentPortal mounted with user:", user);
+    logger.debug("EnhancedStudentPortal mounted with user:", user);
     const token =
       typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
-    console.log("Current auth token exists:", !!token);
-    console.log(
+    logger.debug("Current auth token exists:", !!token);
+    logger.debug(
       "Token preview:",
       token ? token.substring(0, 20) + "..." : "No token"
     );
@@ -252,8 +254,11 @@ export function EnhancedStudentPortal({
   }>({});
 
   // State for document requests
-  const [documentRequests, setDocumentRequests] = useState<StudentDocumentRequest[]>([]);
-  const [isLoadingDocumentRequests, setIsLoadingDocumentRequests] = useState(false);
+  const [documentRequests, setDocumentRequests] = useState<
+    StudentDocumentRequest[]
+  >([]);
+  const [isLoadingDocumentRequests, setIsLoadingDocumentRequests] =
+    useState(false);
 
   // Fetch eligible scholarships on component mount
   useEffect(() => {
@@ -263,28 +268,30 @@ export function EnhancedStudentPortal({
         const response = await api.scholarships.getEligible();
 
         // Debug: Check the raw API response
-        console.log("Debug: Raw API response:", response);
-        console.log("Debug: API response success:", response.success);
-        console.log("Debug: API response data:", response.data);
+        logger.debug("Debug: Raw API response:", response);
+        logger.debug("Debug: API response success:", response.success);
+        logger.debug("Debug: API response data:", response.data);
 
         let scholarshipData: ScholarshipType[] = [];
         if (response.success && response.data) {
           scholarshipData = response.data;
         } else {
-          setScholarshipsError(response.message || "無法獲取獎學金資料");
+          setScholarshipsError(
+            response.message || t("portal.fetch_scholarships_error")
+          );
           setEligibleScholarships([]);
           return;
         }
 
         if (scholarshipData.length === 0) {
-          setScholarshipsError("目前沒有符合資格的獎學金");
+          setScholarshipsError(t("messages.no_eligible_scholarships"));
         } else {
           // Debug: Check the structure of scholarship data
-          console.log(
+          logger.debug(
             "Debug: First scholarship data structure:",
             scholarshipData[0]
           );
-          console.log(
+          logger.debug(
             "Debug: All scholarship configuration_ids:",
             scholarshipData.map(s => ({
               code: s.code,
@@ -301,9 +308,9 @@ export function EnhancedStudentPortal({
           });
         }
       } catch (error) {
-        console.error("Error fetching scholarships:", error); // Debug log
+        logger.error("Error fetching scholarships", { error: error }); // Debug log
         setScholarshipsError(
-          error instanceof Error ? error.message : "發生未知錯誤"
+          error instanceof Error ? error.message : t("messages.unknown_error")
         );
         setEligibleScholarships([]);
       } finally {
@@ -319,16 +326,17 @@ export function EnhancedStudentPortal({
     const fetchDocumentRequests = async () => {
       try {
         setIsLoadingDocumentRequests(true);
-        const response = await api.documentRequests.getMyDocumentRequests("pending");
+        const response =
+          await api.documentRequests.getMyDocumentRequests("pending");
 
         if (response.success && response.data) {
           setDocumentRequests(response.data);
         } else {
-          console.error("Failed to fetch document requests:", response.message);
+          logger.error("Failed to fetch document requests", { responseMessage: response.message });
           setDocumentRequests([]);
         }
       } catch (error) {
-        console.error("Error fetching document requests:", error);
+        logger.error("Error fetching document requests", { error: error });
         setDocumentRequests([]);
       } finally {
         setIsLoadingDocumentRequests(false);
@@ -341,27 +349,24 @@ export function EnhancedStudentPortal({
   // Handler for fulfilling document requests
   const handleFulfillDocumentRequest = async (requestId: number) => {
     try {
-      const response = await api.documentRequests.fulfillDocumentRequest(requestId);
+      const response =
+        await api.documentRequests.fulfillDocumentRequest(requestId);
 
       if (response.success) {
         // Remove fulfilled request from the list
         setDocumentRequests(prev => prev.filter(req => req.id !== requestId));
-        alert(
-          locale === "zh"
-            ? "文件補件已標記為完成"
-            : "Document request marked as fulfilled"
-        );
+        alert(t("portal.document_request.marked_complete"));
       } else {
         alert(
-          response.message ||
-            (locale === "zh" ? "操作失敗" : "Operation failed")
+          response.message || t("portal.document_request.operation_failed")
         );
       }
-    } catch (error: any) {
-      console.error("Failed to fulfill document request:", error);
+    } catch (error: unknown) {
+      logger.error("Failed to fulfill document request", { error: error });
+      const errShape = error as { response?: { data?: { message?: string } } };
       alert(
-        error?.response?.data?.message ||
-          (locale === "zh" ? "標記完成時發生錯誤" : "Error marking as fulfilled")
+        errShape.response?.data?.message ||
+          t("portal.document_request.mark_complete_error")
       );
     }
   };
@@ -407,12 +412,13 @@ export function EnhancedStudentPortal({
             fields: [],
             documents: [],
             isLoading: false,
-            error: response.message || "無法獲取申請資訊",
+            error:
+              response.message || t("portal.fetch_application_info_error"),
           },
         }));
       }
     } catch (error) {
-      console.error(
+      logger.error(
         `Failed to fetch application info for ${scholarshipType}:`,
         error
       );
@@ -423,7 +429,9 @@ export function EnhancedStudentPortal({
           documents: [],
           isLoading: false,
           error:
-            error instanceof Error ? error.message : "獲取申請資訊時發生錯誤",
+            error instanceof Error
+              ? error.message
+              : t("portal.fetch_application_info_exception"),
         },
       }));
     }
@@ -579,7 +587,7 @@ export function EnhancedStudentPortal({
         const progress = Math.round((completedItems / totalRequired) * 100);
         setFormProgress(progress);
       } catch (error) {
-        console.error("Error calculating progress:", error);
+        logger.error("Error calculating progress", { error: error });
         setFormProgress(0);
       }
     };
@@ -601,18 +609,12 @@ export function EnhancedStudentPortal({
 
   const handleSubmitApplication = async () => {
     if (!newApplicationData.scholarship_type) {
-      alert(
-        locale === "zh" ? "請選擇獎學金類型" : "Please select scholarship type"
-      );
+      alert(t("applications.please_select_scholarship"));
       return;
     }
 
     if (!agreeTerms) {
-      alert(
-        locale === "zh"
-          ? "您必須同意申請條款才能提交申請"
-          : "You must agree to the terms and conditions to submit the application"
-      );
+      alert(t("applications.terms_must_agree"));
       return;
     }
 
@@ -620,16 +622,16 @@ export function EnhancedStudentPortal({
       setIsSubmitting(true);
 
       // Debug: Log current state before submission
-      console.log("Debug: handleSubmitApplication called");
-      console.log(
+      logger.debug("Debug: handleSubmitApplication called");
+      logger.debug(
         "Debug: newApplicationData at submission:",
         newApplicationData
       );
-      console.log(
+      logger.debug(
         "Debug: selectedScholarship at submission:",
         selectedScholarship
       );
-      console.log(
+      logger.debug(
         "Debug: configuration_id at submission:",
         newApplicationData.configuration_id
       );
@@ -685,21 +687,21 @@ export function EnhancedStudentPortal({
         },
       };
 
-      console.log("Debug: Final applicationData being sent:", applicationData);
-      console.log(
+      logger.debug("Debug: Final applicationData being sent:", applicationData);
+      logger.debug(
         "Debug: Final configuration_id being sent:",
         applicationData.configuration_id
       );
 
       if (editingApplication) {
         // 編輯模式 - 更新草稿然後提交
-        console.log("Updating application with data:", applicationData);
+        logger.debug("Updating application with data:", applicationData);
         await updateApplication(editingApplication.id, applicationData);
 
         // 上傳新文件
         for (const [docType, files] of Object.entries(dynamicFileData)) {
           for (const file of files) {
-            if (!(file as any).isUploaded) {
+            if (!(file as File & { isUploaded?: boolean }).isUploaded) {
               await uploadDocument(editingApplication.id, file, docType);
             }
           }
@@ -709,7 +711,7 @@ export function EnhancedStudentPortal({
         await submitApplicationApi(editingApplication.id);
       } else {
         // 新建模式 - 先創建草稿，然後提交
-        console.log(
+        logger.debug(
           "Creating application as draft with data:",
           applicationData
         );
@@ -757,20 +759,12 @@ export function EnhancedStudentPortal({
       // 通知父組件切換到「我的申請」tab
       onApplicationSubmitted?.();
 
-      alert(
-        locale === "zh"
-          ? "申請提交成功！"
-          : "Application submitted successfully!"
-      );
+      alert(t("messages.application_success"));
     } catch (error) {
-      console.error("Failed to submit application:", error);
+      logger.error("Failed to submit application", { error: error });
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      alert(
-        locale === "zh"
-          ? `提交失敗: ${errorMessage}`
-          : `Failed to submit application: ${errorMessage}`
-      );
+      alert(`${t("applications.submit_failed")}: ${errorMessage}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -778,9 +772,7 @@ export function EnhancedStudentPortal({
 
   const handleSaveDraft = async () => {
     if (!newApplicationData.scholarship_type) {
-      alert(
-        locale === "zh" ? "請選擇獎學金類型" : "Please select scholarship type"
-      );
+      alert(t("applications.please_select_scholarship"));
       return;
     }
 
@@ -840,41 +832,37 @@ export function EnhancedStudentPortal({
 
       if (editingApplication) {
         // 編輯模式 - 更新現有申請
-        console.log("Updating draft application with data:", applicationData);
+        logger.debug("Updating draft application with data:", applicationData);
         await updateApplication(editingApplication.id, applicationData);
 
         // 上傳新文件
         for (const [docType, files] of Object.entries(dynamicFileData)) {
           for (const file of files) {
-            if (!(file as any).isUploaded) {
+            if (!(file as File & { isUploaded?: boolean }).isUploaded) {
               await uploadDocument(editingApplication.id, file, docType);
             }
           }
         }
 
-        alert(locale === "zh" ? "草稿已更新" : "Draft updated successfully");
+        alert(t("messages.draft_updated"));
       } else {
         // 新建模式 - 創建新草稿
-        console.log("Saving new draft with data:", applicationData);
+        logger.debug("Saving new draft with data:", applicationData);
         const application = await saveApplicationDraft(applicationData);
 
         if (application && application.id) {
           // 上傳文件
           for (const [docType, files] of Object.entries(dynamicFileData)) {
             for (const file of files) {
-              if (!(file as any).isUploaded) {
+              if (!(file as File & { isUploaded?: boolean }).isUploaded) {
                 await uploadDocument(application.id, file, docType);
               }
             }
           }
 
-          alert(
-            locale === "zh"
-              ? "草稿已保存，您可以繼續編輯"
-              : "Draft saved successfully. You can continue editing."
-          );
+          alert(t("messages.draft_saved"));
         } else {
-          alert(locale === "zh" ? "儲存草稿失敗" : "Failed to save draft");
+          alert(t("messages.draft_save_failed"));
           return;
         }
       }
@@ -899,14 +887,10 @@ export function EnhancedStudentPortal({
         setSelectedSubTypes({});
       }
     } catch (error) {
-      console.error("Failed to save draft:", error);
+      logger.error("Failed to save draft", { error: error });
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      alert(
-        locale === "zh"
-          ? `保存失敗: ${errorMessage}`
-          : `Failed to save draft: ${errorMessage}`
-      );
+      alert(`${t("messages.save_failed")}: ${errorMessage}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -916,18 +900,12 @@ export function EnhancedStudentPortal({
     try {
       await withdrawApplication(applicationId);
     } catch (error) {
-      console.error("Failed to withdraw application:", error);
+      logger.error("Failed to withdraw application", { error: error });
     }
   };
 
   const handleDeleteApplication = async (applicationId: number) => {
-    if (
-      !confirm(
-        locale === "zh"
-          ? "確定要刪除此草稿嗎？此操作無法復原。"
-          : "Are you sure you want to delete this draft? This action cannot be undone."
-      )
-    ) {
+    if (!confirm(t("messages.confirm_delete_draft"))) {
       return;
     }
 
@@ -939,14 +917,10 @@ export function EnhancedStudentPortal({
         onClearEditing?.();
       }
 
-      alert(locale === "zh" ? "草稿已成功刪除" : "Draft deleted successfully");
+      alert(t("messages.draft_deleted"));
     } catch (error) {
-      console.error("Failed to delete application:", error);
-      alert(
-        locale === "zh"
-          ? "刪除草稿時發生錯誤"
-          : "Error occurred while deleting draft"
-      );
+      logger.error("Failed to delete application", { error: error });
+      alert(t("messages.delete_error"));
     }
   };
 
@@ -964,7 +938,7 @@ export function EnhancedStudentPortal({
         setSelectedApplicationForDetails(application);
       }
     } catch (error) {
-      console.error("Failed to fetch application details:", error);
+      logger.error("Failed to fetch application details", { error: error });
       // 如果獲取失敗，使用原始的申請資料
       setSelectedApplicationForDetails(application);
     }
@@ -1000,7 +974,6 @@ export function EnhancedStudentPortal({
     setTermsPreviewFile(null);
   };
 
-
   // Handle application completion - switch to applications tab and refresh
   const handleApplicationComplete = () => {
     fetchApplications();
@@ -1011,11 +984,7 @@ export function EnhancedStudentPortal({
 
     // Optionally show a success message
     // You can use a toast library if available
-    alert(
-      locale === "zh"
-        ? "申請提交成功！請在「我的申請」查看進度"
-        : "Application submitted successfully! View progress in 'My Applications'"
-    );
+    alert(t("messages.application_success_with_progress"));
   };
   const handleEditApplication = async (application: Application) => {
     // 通知父組件開始編輯（這會設置 editingApplicationId 和切換 Tab）
@@ -1135,9 +1104,7 @@ export function EnhancedStudentPortal({
           <CardHeader>
             <CardTitle>{t("portal.application_records")}</CardTitle>
             <CardDescription>
-              {locale === "zh"
-                ? "查看您的獎學金申請狀態與進度"
-                : "View your scholarship application status and progress"}
+              {t("portal.applications_subtitle")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1150,18 +1117,17 @@ export function EnhancedStudentPortal({
                 {applicationsError}
               </div>
             ) : applications.length === 0 ? (
-              <div className="text-center py-8" data-testid="applications-empty-state">
+              <div
+                className="text-center py-8"
+                data-testid="applications-empty-state"
+              >
                 <div className="flex flex-col items-center gap-2">
                   <FileText className="h-12 w-12 text-muted-foreground" />
                   <p className="text-lg font-medium text-muted-foreground">
-                    {locale === "zh"
-                      ? "尚無申請記錄"
-                      : "No application records"}
+                    {t("portal.no_applications")}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    {locale === "zh"
-                      ? "您可以點擊「新增申請」開始申請獎學金"
-                      : "Click 'New Application' to start your scholarship application"}
+                    {t("portal.click_new_application_hint")}
                   </p>
                 </div>
               </div>
@@ -1175,7 +1141,7 @@ export function EnhancedStudentPortal({
                           {getScholarshipTypeName(app.scholarship_type)}
                         </h4>
                         <p className="text-sm text-muted-foreground">
-                          {locale === "zh" ? "申請編號" : "Application ID"}:{" "}
+                          {t("applications.application_id")}:{" "}
                           {app.app_id || `APP-${app.id}`}
                         </p>
                       </div>
@@ -1196,7 +1162,7 @@ export function EnhancedStudentPortal({
                       <CardHeader>
                         <CardTitle className="text-base flex items-center gap-2">
                           <Calendar className="h-4 w-4" />
-                          {locale === "zh" ? "審核進度" : "Review Progress"}
+                          {t("portal.review_progress")}
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
@@ -1214,7 +1180,7 @@ export function EnhancedStudentPortal({
                         onClick={() => handleViewDetails(app)}
                       >
                         <Eye className="h-4 w-4 mr-1" />
-                        {locale === "zh" ? "查看詳情" : "View Details"}
+                        {t("applications.view_details")}
                       </Button>
                       {app.status === "draft" && (
                         <>
@@ -1224,7 +1190,7 @@ export function EnhancedStudentPortal({
                             onClick={() => handleEditApplication(app)}
                           >
                             <Edit className="h-4 w-4 mr-1" />
-                            {locale === "zh" ? "編輯" : "Edit"}
+                            {t("form.edit")}
                           </Button>
                           <Button
                             variant="outline"
@@ -1233,7 +1199,7 @@ export function EnhancedStudentPortal({
                             className="text-destructive hover:text-destructive"
                           >
                             <Trash2 className="h-4 w-4 mr-1" />
-                            {locale === "zh" ? "刪除草稿" : "Delete Draft"}
+                            {t("applications.delete_draft")}
                           </Button>
                         </>
                       )}
@@ -1246,27 +1212,34 @@ export function EnhancedStudentPortal({
         </Card>
       )}
 
-      {activeTab === "new-application" && (
-        <StudentApplicationWizard
-          user={user}
-          locale={locale}
-          onApplicationComplete={handleApplicationComplete}
-          editingApplication={editingApplication}
-          initialStep={editingApplication ? 3 : undefined}
-        />
-      )}
+      {activeTab === "new-application" &&
+        (editingApplication ||
+        eligibleScholarships.some(isSelectableScholarship) ? (
+          <StudentApplicationWizard
+            user={user}
+            locale={locale}
+            onApplicationComplete={handleApplicationComplete}
+            editingApplication={editingApplication}
+            initialStep={editingApplication ? 2 : undefined}
+          />
+        ) : (
+          <Card>
+            <CardContent className="p-6 text-center">
+              <AlertTriangle className="h-8 w-8 text-orange-500 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold">
+                {t("messages.no_eligible_scholarships")}
+              </h3>
+            </CardContent>
+          </Card>
+        ))}
 
       {activeTab === "scholarship-list" && (
         <>
           {/* Scholarship Info Cards */}
           {eligibleScholarships.map(scholarship => {
-            const applicationInfo = scholarshipApplicationInfo[scholarship.code];
-            // Check if scholarship has eligible sub-types AND no common errors
-            const hasCommonErrors = scholarship.errors?.some(rule => !rule.sub_type) || false;
-            const isEligible =
-              Array.isArray(scholarship.eligible_sub_types) &&
-              scholarship.eligible_sub_types.length > 0 &&
-              !hasCommonErrors;  // If there are common errors, student is not eligible
+            const applicationInfo =
+              scholarshipApplicationInfo[scholarship.code];
+            const isEligible = isSelectableScholarship(scholarship);
 
             return (
               <Card
@@ -1309,10 +1282,10 @@ export function EnhancedStudentPortal({
 
                   {/* Eligible Programs Section - only show if student is eligible */}
                   {isEligible &&
-                    scholarship.eligible_sub_types &&
-                    scholarship.eligible_sub_types.length > 0 &&
-                    scholarship.eligible_sub_types[0]?.value !== "general" &&
-                    scholarship.eligible_sub_types[0]?.value !== null && (
+                    scholarship.all_sub_type_list &&
+                    scholarship.all_sub_type_list.some(
+                      st => st && st !== "general"
+                    ) && (
                       <div className="mt-3 bg-indigo-50/30 rounded-lg border border-indigo-100/50 divide-y divide-indigo-100/50">
                         <div className="px-3 py-2">
                           <p className="text-sm font-medium text-indigo-900">
@@ -1323,15 +1296,67 @@ export function EnhancedStudentPortal({
                           </p>
                         </div>
                         <div className="px-3 py-2 flex flex-wrap gap-1.5">
-                          {scholarship.eligible_sub_types.map((subType, index) => (
-                            <Badge
-                              key={subType.value || index}
-                              variant="outline"
-                              className="bg-white text-indigo-600 border-indigo-100 shadow-sm"
-                            >
-                              {locale === "zh" ? subType.label : subType.label_en}
-                            </Badge>
-                          ))}
+                          {(scholarship.all_sub_type_list ?? []).map(
+                            subTypeKey => {
+                              const eligibility =
+                                scholarship.subtype_eligibility?.[subTypeKey];
+                              const isSubEligible =
+                                eligibility?.eligible !== false;
+                              const labelKey = `rule_types.${subTypeKey}`;
+                              const labelLookup = getTranslation(
+                                locale,
+                                labelKey
+                              );
+                              const label =
+                                labelLookup === labelKey
+                                  ? subTypeKey
+                                  : labelLookup;
+
+                              if (isSubEligible) {
+                                return (
+                                  <Badge
+                                    key={subTypeKey}
+                                    variant="outline"
+                                    className="bg-white text-indigo-600 border-indigo-100 shadow-sm whitespace-normal text-left"
+                                  >
+                                    ✓ {label}
+                                  </Badge>
+                                );
+                              }
+
+                              const failedTagLabels = (
+                                eligibility?.failed_rules ?? []
+                              )
+                                .map(r => {
+                                  if (!r.tag) return null;
+                                  const tagKey = `eligibility_tags.${r.tag}`;
+                                  const tagLookup = getTranslation(
+                                    locale,
+                                    tagKey
+                                  );
+                                  return tagLookup === tagKey
+                                    ? null
+                                    : tagLookup;
+                                })
+                                .filter((s): s is string => Boolean(s));
+                              const reasonText =
+                                failedTagLabels.length > 0
+                                  ? `${t("applications.missing")}：${failedTagLabels.join(
+                                      "、"
+                                    )}`
+                                  : t("applications.not_eligible_short");
+
+                              return (
+                                <Badge
+                                  key={subTypeKey}
+                                  variant="outline"
+                                  className="bg-gray-100 text-gray-400 border-gray-200 shadow-sm whitespace-normal text-left"
+                                >
+                                  ✗ {label} — {reasonText}
+                                </Badge>
+                              );
+                            }
+                          )}
                         </div>
                       </div>
                     )}
@@ -1357,14 +1382,27 @@ export function EnhancedStudentPortal({
                         <div className="p-3 space-y-4">
                           {/* Get common rules */}
                           {(() => {
-                            const commonPassedRules = scholarship.passed?.filter(rule => !rule.sub_type) || [];
-                            const commonErrorRules = scholarship.errors?.filter(rule => !rule.sub_type) || [];
+                            const commonPassedRules =
+                              scholarship.passed?.filter(
+                                rule => !rule.sub_type
+                              ) || [];
+                            const commonErrorRules =
+                              scholarship.errors?.filter(
+                                rule => !rule.sub_type
+                              ) || [];
 
-                            const hasSubTypes = scholarship.eligible_sub_types &&
-                              scholarship.eligible_sub_types.some(st => st.value && st.value !== "general");
+                            const hasSubTypes =
+                              scholarship.eligible_sub_types &&
+                              scholarship.eligible_sub_types.some(
+                                st => st.value && st.value !== "general"
+                              );
 
                             // If no subtypes (general scholarship), show common rules directly
-                            if (!hasSubTypes && (commonPassedRules.length > 0 || commonErrorRules.length > 0)) {
+                            if (
+                              !hasSubTypes &&
+                              (commonPassedRules.length > 0 ||
+                                commonErrorRules.length > 0)
+                            ) {
                               return (
                                 <div>
                                   <div className="flex flex-wrap gap-1">
@@ -1384,12 +1422,22 @@ export function EnhancedStudentPortal({
                                     {/* Error rules */}
                                     {commonErrorRules.map(rule => {
                                       // Determine color and icon based on status
-                                      const isDataUnavailable = rule.status === 'data_unavailable';
-                                      const bgColor = isDataUnavailable ? 'bg-amber-50' : 'bg-rose-50';
-                                      const textColor = isDataUnavailable ? 'text-amber-600' : 'text-rose-600';
-                                      const borderColor = isDataUnavailable ? 'border-amber-100' : 'border-rose-100';
-                                      const Icon = isDataUnavailable ? AlertCircle : AlertTriangle;
-                                      const displayMessage = rule.system_message || rule.message;
+                                      const isDataUnavailable =
+                                        rule.status === "data_unavailable";
+                                      const bgColor = isDataUnavailable
+                                        ? "bg-amber-50"
+                                        : "bg-rose-50";
+                                      const textColor = isDataUnavailable
+                                        ? "text-amber-600"
+                                        : "text-rose-600";
+                                      const borderColor = isDataUnavailable
+                                        ? "border-amber-100"
+                                        : "border-rose-100";
+                                      const Icon = isDataUnavailable
+                                        ? AlertCircle
+                                        : AlertTriangle;
+                                      const displayMessage =
+                                        rule.system_message || rule.message;
 
                                       return (
                                         <Badge
@@ -1411,74 +1459,126 @@ export function EnhancedStudentPortal({
                               );
                             }
 
-                            // Sub-type specific sections with common rules appended
-                            return scholarship.eligible_sub_types?.map((subTypeInfo) => {
-                              const subType = subTypeInfo.value;
-                              if (!subType || subType === "general") return null;
+                            // Sub-type specific sections with common rules appended.
+                            // Iterate all_sub_type_list so ineligible subtypes are also
+                            // shown; their failed-rule tags will appear in red.
+                            return (scholarship.all_sub_type_list ?? []).map(
+                              subType => {
+                                if (!subType || subType === "general")
+                                  return null;
 
-                              const passedRulesForType = scholarship.passed?.filter(
-                                rule => rule.sub_type === subType
-                              ) || [];
-                              const errorRulesForType = scholarship.errors?.filter(
-                                rule => rule.sub_type === subType
-                              ) || [];
+                                const isSubEligible =
+                                  scholarship.subtype_eligibility?.[subType]
+                                    ?.eligible !== false;
 
-                              // Combine common rules with subtype-specific rules
-                              const allPassedRules = [...commonPassedRules, ...passedRulesForType];
-                              const allErrorRules = [...commonErrorRules, ...errorRulesForType];
+                                const subTypeLabelKey = `rule_types.${subType}`;
+                                const subTypeLabelLookup = getTranslation(
+                                  locale,
+                                  subTypeLabelKey
+                                );
+                                const subTypeLabel =
+                                  subTypeLabelLookup === subTypeLabelKey
+                                    ? subType
+                                    : subTypeLabelLookup;
 
-                              // Only show subtype section if there are any rules for it
-                              if (allPassedRules.length === 0 && allErrorRules.length === 0)
-                                return null;
+                                const passedRulesForType =
+                                  scholarship.passed?.filter(
+                                    rule => rule.sub_type === subType
+                                  ) || [];
+                                const errorRulesForType =
+                                  scholarship.errors?.filter(
+                                    rule => rule.sub_type === subType
+                                  ) || [];
 
-                              return (
-                                <div key={subType}>
-                                  <p className="text-sm font-medium text-gray-800 mb-2">
-                                    {locale === "zh" ? subTypeInfo.label : subTypeInfo.label_en || subTypeInfo.label}
-                                  </p>
-                                  <div className="flex flex-wrap gap-1">
-                                    {/* Passed rules (common + subtype-specific) */}
-                                    {allPassedRules.map(rule => (
-                                      <Badge
-                                        key={rule.rule_id}
-                                        variant="outline"
-                                        className="bg-emerald-50 text-emerald-600 border-emerald-100"
-                                      >
-                                        {getTranslation(
-                                          locale,
-                                          `eligibility_tags.${rule.tag}`
-                                        )}
-                                      </Badge>
-                                    ))}
-                                    {/* Error rules (common + subtype-specific) */}
-                                    {allErrorRules.map(rule => {
-                                      // Determine color and icon based on status
-                                      const isDataUnavailable = rule.status === 'data_unavailable';
-                                      const bgColor = isDataUnavailable ? 'bg-amber-50' : 'bg-rose-50';
-                                      const textColor = isDataUnavailable ? 'text-amber-600' : 'text-rose-600';
-                                      const borderColor = isDataUnavailable ? 'border-amber-100' : 'border-rose-100';
-                                      const Icon = isDataUnavailable ? AlertCircle : AlertTriangle;
-                                      const displayMessage = rule.system_message || rule.message;
+                                // Combine common rules with subtype-specific rules
+                                const allPassedRules = [
+                                  ...commonPassedRules,
+                                  ...passedRulesForType,
+                                ];
+                                const allErrorRules = [
+                                  ...commonErrorRules,
+                                  ...errorRulesForType,
+                                ];
 
-                                      return (
+                                // Only show subtype section if there are any rules for it
+                                if (
+                                  allPassedRules.length === 0 &&
+                                  allErrorRules.length === 0
+                                )
+                                  return null;
+
+                                return (
+                                  <div key={subType}>
+                                    <p
+                                      className={`text-sm font-medium mb-2 ${
+                                        isSubEligible
+                                          ? "text-gray-800"
+                                          : "text-gray-400"
+                                      }`}
+                                    >
+                                      {subTypeLabel}
+                                      {!isSubEligible && (
+                                        <span className="ml-2 text-xs text-gray-400">
+                                          {t(
+                                            "applications.not_eligible_parenthetical"
+                                          )}
+                                        </span>
+                                      )}
+                                    </p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {/* Passed rules (common + subtype-specific) */}
+                                      {allPassedRules.map(rule => (
                                         <Badge
                                           key={rule.rule_id}
                                           variant="outline"
-                                          className={`${bgColor} ${textColor} ${borderColor}`}
-                                          title={displayMessage} // tooltip
+                                          className="bg-emerald-50 text-emerald-600 border-emerald-100"
                                         >
-                                          <Icon className="h-3 w-3 mr-1" />
                                           {getTranslation(
                                             locale,
                                             `eligibility_tags.${rule.tag}`
                                           )}
                                         </Badge>
-                                      );
-                                    })}
+                                      ))}
+                                      {/* Error rules (common + subtype-specific) */}
+                                      {allErrorRules.map(rule => {
+                                        // Determine color and icon based on status
+                                        const isDataUnavailable =
+                                          rule.status === "data_unavailable";
+                                        const bgColor = isDataUnavailable
+                                          ? "bg-amber-50"
+                                          : "bg-rose-50";
+                                        const textColor = isDataUnavailable
+                                          ? "text-amber-600"
+                                          : "text-rose-600";
+                                        const borderColor = isDataUnavailable
+                                          ? "border-amber-100"
+                                          : "border-rose-100";
+                                        const Icon = isDataUnavailable
+                                          ? AlertCircle
+                                          : AlertTriangle;
+                                        const displayMessage =
+                                          rule.system_message || rule.message;
+
+                                        return (
+                                          <Badge
+                                            key={rule.rule_id}
+                                            variant="outline"
+                                            className={`${bgColor} ${textColor} ${borderColor}`}
+                                            title={displayMessage} // tooltip
+                                          >
+                                            <Icon className="h-3 w-3 mr-1" />
+                                            {getTranslation(
+                                              locale,
+                                              `eligibility_tags.${rule.tag}`
+                                            )}
+                                          </Badge>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
-                                </div>
-                              );
-                            });
+                                );
+                              }
+                            );
                           })()}
 
                           {/* Warnings - keep at the end */}
@@ -1486,7 +1586,7 @@ export function EnhancedStudentPortal({
                             scholarship.warnings.length > 0 && (
                               <div>
                                 <p className="text-sm font-medium text-amber-700 mb-2">
-                                  {locale === "zh" ? "注意事項" : "Warnings"}
+                                  {t("applications.warnings")}
                                 </p>
                                 <div className="flex flex-wrap gap-1">
                                   {scholarship.warnings?.map(rule => (
@@ -1546,7 +1646,7 @@ export function EnhancedStudentPortal({
                           <div className="flex items-center gap-2">
                             <Loader2 className="h-4 w-4 animate-spin text-sky-500" />
                             <p className="text-sm font-medium">
-                              {locale === "zh" ? "申請資訊" : "Application Info"}
+                              {t("applications.application_info")}
                             </p>
                           </div>
                           <p className="text-sm text-gray-600 mt-2">
@@ -1608,7 +1708,8 @@ export function EnhancedStudentPortal({
                                     >
                                       {locale === "zh"
                                         ? field.field_label
-                                        : field.field_label_en || field.field_label}
+                                        : field.field_label_en ||
+                                          field.field_label}
                                     </Badge>
                                   ))}
                               </div>
@@ -1635,7 +1736,9 @@ export function EnhancedStudentPortal({
                             <div className="p-3">
                               <div className="flex flex-wrap gap-1.5">
                                 {applicationInfo.documents
-                                  .filter(doc => doc.is_required && doc.is_active)
+                                  .filter(
+                                    doc => doc.is_required && doc.is_active
+                                  )
                                   .map((doc, index) => (
                                     <Badge
                                       key={`${scholarship.id}-req-doc-${doc.id}-${index}`}
@@ -1644,7 +1747,8 @@ export function EnhancedStudentPortal({
                                     >
                                       {locale === "zh"
                                         ? doc.document_name
-                                        : doc.document_name_en || doc.document_name}
+                                        : doc.document_name_en ||
+                                          doc.document_name}
                                     </Badge>
                                   ))}
                               </div>
@@ -1674,7 +1778,9 @@ export function EnhancedStudentPortal({
                             <div className="p-3">
                               <div className="flex flex-wrap gap-1.5">
                                 {applicationInfo.documents
-                                  .filter(doc => !doc.is_required && doc.is_active)
+                                  .filter(
+                                    doc => !doc.is_required && doc.is_active
+                                  )
                                   .map((doc, index) => (
                                     <Badge
                                       key={`${scholarship.id}-opt-doc-${doc.id}-${index}`}
@@ -1683,7 +1789,8 @@ export function EnhancedStudentPortal({
                                     >
                                       {locale === "zh"
                                         ? doc.document_name
-                                        : doc.document_name_en || doc.document_name}
+                                        : doc.document_name_en ||
+                                          doc.document_name}
                                     </Badge>
                                   ))}
                               </div>

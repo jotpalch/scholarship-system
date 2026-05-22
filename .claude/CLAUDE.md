@@ -2,6 +2,23 @@
 
 Please use English for git commit messages.
 
+## Development Environment
+
+**Use `docker compose -f docker-compose.dev.yml` for all local development.**
+
+```bash
+# Start all services
+docker compose -f docker-compose.dev.yml up
+
+# View logs
+docker compose -f docker-compose.dev.yml logs -f
+
+# Restart a specific service
+docker compose -f docker-compose.dev.yml restart backend
+```
+
+This spins up the full stack (backend, frontend, database, MinIO, mock student API) with hot-reload enabled.
+
 ## Core Development Principles
 
 ### 1. Error Handling Standards
@@ -72,7 +89,7 @@ semester = Column(
 export enum Semester {
     FIRST = 'first',
     SECOND = 'second',
-    ANNUAL = 'annual'
+    YEARLY = 'yearly'
 }
 ```
 
@@ -81,11 +98,11 @@ export enum Semester {
 - Match Python enum values exactly
 
 ```sql
-CREATE TYPE semester AS ENUM ('first', 'second', 'annual');
+CREATE TYPE semester AS ENUM ('first', 'second', 'yearly');
 ```
 
 #### Current System Enums
-- **Semester**: `first`, `second`, `annual`
+- **Semester**: `first`, `second`, `yearly`
 - **UserRole**: `student`, `professor`, `college`, `admin`, `super_admin`
 - **ApplicationCycle**: `semester`, `yearly`
 - **QuotaManagementMode**: `none`, `simple`, `college_based`, `matrix_based`
@@ -290,7 +307,7 @@ Examples:
 #### Semester Codes
 - `1`: First Semester (`first`)
 - `2`: Second Semester (`second`)
-- `0`: Annual/Yearly Scholarships (`annual`)
+- `0`: Yearly Scholarships (`yearly`)
 
 #### Implementation Details
 - **Sequence Management**: Each (academic_year, semester) combination has an independent sequence counter

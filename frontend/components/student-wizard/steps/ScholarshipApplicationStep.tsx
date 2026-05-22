@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -24,6 +24,17 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DynamicApplicationForm } from "@/components/dynamic-application-form";
 import { FilePreviewDialog } from "@/components/file-preview-dialog";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { FileUpload } from "@/components/file-upload";
+import {
   Award,
   ChevronLeft,
   Send,
@@ -34,10 +45,27 @@ import {
   Info,
   FileText,
   Eye,
+  User,
+  CreditCard,
+  X,
 } from "lucide-react";
-import api, { ScholarshipType, ApplicationCreate, Application } from "@/lib/api";
+import api, {
+  ScholarshipType,
+  ApplicationCreate,
+  Application,
+} from "@/lib/api";
+import { isSelectableScholarship } from "@/lib/scholarship-eligibility";
 import { clsx } from "@/lib/utils";
 import { useApplications } from "@/hooks/use-applications";
+import { useStudentProfile } from "@/hooks/use-student-profile";
+import {
+  validateAdvisorInfo,
+  validateBankInfo,
+  validateAdvisorEmail,
+  sanitizeAdvisorInfo,
+  sanitizeBankInfo,
+} from "@/lib/validations/user-profile";
+import { toast } from "sonner";
 
 interface ScholarshipApplicationStepProps {
   onBack: () => void;
@@ -46,6 +74,36 @@ interface ScholarshipApplicationStepProps {
   userId: number;
   editingApplication?: Application | null;
 }
+
+// Shape of `submitted_form_data.documents[]` entries restored when loading a
+// previously-saved application draft. Same shape as DocumentPayload used
+// elsewhere; duplicated here because the parent module doesn't export one.
+interface SubmittedDocumentPayload {
+  file_id?: string | number;
+  id?: string | number;
+  filename?: string;
+  original_filename?: string;
+  file_size?: number;
+  mime_type?: string;
+  document_type?: string;
+  file_path?: string;
+  download_url?: string;
+  is_verified?: boolean;
+  upload_time?: string;
+  document_id?: string;
+}
+
+// Fields the backend attaches to an Application row that aren't on the
+// canonical Application type (the application-level attached document — a
+// student-uploaded "main file" separate from the per-field documents).
+interface ApplicationDocumentAttachment {
+  application_document_url?: string;
+  application_document_original_filename?: string;
+}
+
+// Files in dynamicFileData are normalized to UploadedFileLike at restore time
+// (see line ~610), so we narrow the `isUploaded` check via a localized type.
+type FileWithUploadedFlag = File & { isUploaded?: boolean };
 
 export function ScholarshipApplicationStep({
   onBack,
@@ -56,13 +114,65 @@ export function ScholarshipApplicationStep({
 }: ScholarshipApplicationStepProps) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [eligibleScholarships, setEligibleScholarships] = useState<ScholarshipType[]>([]);
-  const [selectedScholarship, setSelectedScholarship] = useState<ScholarshipType | null>(null);
+  const [eligibleScholarships, setEligibleScholarships] = useState<
+    ScholarshipType[]
+  >([]);
+  const [selectedScholarship, setSelectedScholarship] =
+    useState<ScholarshipType | null>(null);
   const [selectedSubTypes, setSelectedSubTypes] = useState<string[]>([]);
-  const [dynamicFormData, setDynamicFormData] = useState<Record<string, any>>({});
-  const [dynamicFileData, setDynamicFileData] = useState<Record<string, File[]>>({});
+  const [subTypePreferences, setSubTypePreferences] = useState<string[]>([]);
+  const [dynamicFormData, setDynamicFormData] = useState<Record<string, any>>(
+    {}
+  );
+  const [dynamicFileData, setDynamicFileData] = useState<
+    Record<string, File[]>
+  >({});
   const [formProgress, setFormProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  // Personal info states
+  const {
+    profile,
+    userInfo,
+    studentInfo,
+    refresh: refreshProfile,
+  } = useStudentProfile();
+  const [advisorName, setAdvisorName] = useState("");
+  const [advisorEmail, setAdvisorEmail] = useState("");
+  const [advisorNycuId, setAdvisorNycuId] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [bankDocumentFiles, setBankDocumentFiles] = useState<File[]>([]);
+  const [existingBankDocument, setExistingBankDocument] = useState<
+    string | null
+  >(null);
+  const [advisorErrors, setAdvisorErrors] = useState<string[]>([]);
+  const [bankErrors, setBankErrors] = useState<string[]>([]);
+  const [emailValidationError, setEmailValidationError] = useState("");
+  const [savingPersonalInfo, setSavingPersonalInfo] = useState(false);
+  const [personalInfoSaved, setPersonalInfoSaved] = useState(false);
+  const [showBankDocPreview, setShowBankDocPreview] = useState(false);
+  const [bankDocPreviewFile, setBankDocPreviewFile] = useState<{
+    url: string;
+    filename: string;
+    type: string;
+  } | null>(null);
+  const [applicationDocumentFiles, setApplicationDocumentFiles] = useState<
+    File[]
+  >([]);
+  const [existingApplicationDocument, setExistingApplicationDocument] =
+    useState<string | null>(null);
+  const [existingApplicationDocumentName, setExistingApplicationDocumentName] =
+    useState<string>("");
+  const savedApplicationIdRef = useRef<number | null>(null);
+  const [showAppDocPreview, setShowAppDocPreview] = useState(false);
+  const [appDocPreviewFile, setAppDocPreviewFile] = useState<{
+    url: string;
+    filename: string;
+    type: string;
+  } | null>(null);
+
+  // Submit preview dialog
+  const [showSubmitPreview, setShowSubmitPreview] = useState(false);
 
   // Terms document states
   const [showTermsPreview, setShowTermsPreview] = useState(false);
@@ -82,16 +192,39 @@ export function ScholarshipApplicationStep({
 
   const t = {
     zh: {
-      title: "申請獎學金",
-      subtitle: "選擇獎學金類型並填寫申請資料",
+      title: "填寫資料與申請獎學金",
+      subtitle: "填寫個人資料、選擇獎學金類型並完成申請",
+      personalInfoTitle: "個人資料",
+      advisorInfo: "指導教授資訊",
+      advisorName: "教授姓名",
+      advisorNamePlaceholder: "請輸入指導教授姓名",
+      advisorEmail: "教授 Email",
+      advisorEmailPlaceholder: "professor@nycu.edu.tw",
+      advisorId: "指導教授本校人事編號",
+      advisorIdPlaceholder: "請輸入指導教授本校人事編號",
+      bankInfo: "郵局帳號資訊",
+      accountNumber: "郵局局號加帳號共 14 碼(限本人)",
+      accountNumberPlaceholder: "請輸入 14 碼郵局帳號",
+      bankDocument: "存摺封面照片",
+      documentUploaded: "已上傳文件",
+      preview: "預覽",
+      deleteBankDoc: "刪除",
+      applicationDocument: "申請文件",
+      applicationDocumentUploaded: "申請文件已上傳",
+      deleteAppDoc: "刪除",
+      fileFormats: "支援格式：JPG, JPEG, PNG, PDF",
+      fileSizeLimit: "檔案大小限制：10MB",
+      savePersonalInfo: "儲存個人資料",
+      personalInfoSaved: "個人資料已儲存",
+      personalInfoSaveFailed: "儲存個人資料失敗",
+      saved: "已儲存",
       selectScholarship: "選擇獎學金",
       selectScholarshipPlaceholder: "請選擇要申請的獎學金",
-      noEligibleScholarships: "目前沒有符合資格的獎學金",
       selectPrograms: "選擇申請項目",
       programsRequired: "請至少選擇一個申請項目",
       formProgress: "表單完成度",
       completeAllRequired: "請完成所有必填項目",
-      saveDraft: "儲存草稿",
+      saveDraft: "暫存草稿（請按「提交申請」才會正式送出）",
       submitApplication: "提交申請",
       backButton: "返回上一步",
       submitting: "提交中...",
@@ -113,18 +246,89 @@ export function ScholarshipApplicationStep({
       viewTerms: "查看申請條款",
       agreeTerms: "我已閱讀並同意申請條款",
       mustAgreeTerms: "請先閱讀並同意申請條款",
+      // Personal info section headings
+      personalInfoSectionTitle: "指導教授資訊與本人郵局帳號資料",
+      personalInfoSectionDescription: "請填寫指導教授資訊與學生本人郵局帳號資料",
+      // Scholarship application section headings
+      applyForScholarship: "申請獎學金",
+      applyForScholarshipDescription: "選擇獎學金類型並填寫申請資料",
+      // Sub-type preference ordering
+      preferenceOrderInstruction: "選擇志願序（請按 ▲▼ 箭頭調整志願序）",
+      // Toast messages
+      documentDeleted: "文件已刪除",
+      deleteFailed: "刪除失敗",
+      applicationDocumentDeleted: "申請文件已刪除",
+      // Submit preview dialog
+      submitPreview: {
+        title: "申請資料預覽",
+        description: "請確認以下資料無誤後再送出申請",
+        studentInfo: "學籍資料",
+        name: "姓名",
+        studentId: "學號",
+        department: "系所",
+        degree: "學位",
+        enrollment: "入學年度學期",
+        personalInfo: "個人資料",
+        advisor: "指導教授",
+        advisorEmail: "教授 Email",
+        advisorNycuId: "指導教授本校人事編號",
+        postOfficeAccount: "郵局局號加帳號共 14 碼",
+        uploadedDocuments: "上傳文件",
+        passbookCover: "存摺封面",
+        applicationDocument: "申請文件",
+        uploaded: "已上傳",
+        notUploaded: "未上傳",
+        pending: "待上傳",
+        previewBtn: "預覽",
+        scholarshipApplication: "申請獎學金",
+        scholarship: "獎學金",
+        programs: "申請項目",
+        preferenceOrder: "志願序",
+        warning: "送出後將無法修改申請內容，請確認資料無誤。",
+        goBack: "返回修改",
+        confirmSubmit: "確認送出",
+      },
+      // Degree map (preview dialog)
+      degreeShort: {
+        博士: "博士",
+        碩士: "碩士",
+        學士: "學士",
+      } as Record<string, string>,
     },
     en: {
-      title: "Apply for Scholarship",
-      subtitle: "Select scholarship type and fill in application details",
+      title: "Fill Info & Apply for Scholarship",
+      subtitle: "Fill personal information, select scholarship type and apply",
+      personalInfoTitle: "Personal Information",
+      advisorInfo: "Advisor Information",
+      advisorName: "Advisor Name",
+      advisorNamePlaceholder: "Enter advisor's name",
+      advisorEmail: "Advisor Email",
+      advisorEmailPlaceholder: "professor@nycu.edu.tw",
+      advisorId: "Advisor NYCU ID",
+      advisorIdPlaceholder: "Enter advisor's NYCU personnel ID",
+      bankInfo: "Post Office Account",
+      accountNumber: "Post Office Account (14 digits)",
+      accountNumberPlaceholder: "Enter 14-digit post office account number",
+      bankDocument: "Passbook Cover Photo",
+      documentUploaded: "Document Uploaded",
+      preview: "Preview",
+      deleteBankDoc: "Delete",
+      applicationDocument: "Application Document",
+      applicationDocumentUploaded: "Application document uploaded",
+      deleteAppDoc: "Delete",
+      fileFormats: "Supported formats: JPG, JPEG, PNG, PDF",
+      fileSizeLimit: "File size limit: 10MB",
+      savePersonalInfo: "Save Personal Info",
+      personalInfoSaved: "Personal info saved",
+      personalInfoSaveFailed: "Failed to save personal info",
+      saved: "Saved",
       selectScholarship: "Select Scholarship",
       selectScholarshipPlaceholder: "Please select a scholarship to apply",
-      noEligibleScholarships: "No eligible scholarships available",
       selectPrograms: "Select Programs",
       programsRequired: "Please select at least one program",
       formProgress: "Form Completion",
       completeAllRequired: "Please complete all required fields",
-      saveDraft: "Save Draft",
+      saveDraft: 'Save Draft (Click "Submit Application" to officially submit)',
       submitApplication: "Submit Application",
       backButton: "Back",
       submitting: "Submitting...",
@@ -136,7 +340,8 @@ export function ScholarshipApplicationStep({
       draftSaved: "Draft saved successfully",
       singleSelection: "Single selection",
       multipleSelection: "Multiple selections allowed",
-      hierarchicalSelection: "Please select items in order (sequential selection required)",
+      hierarchicalSelection:
+        "Please select items in order (sequential selection required)",
       selectPrevious: "Select previous items first",
       eligible: "Eligible",
       notEligible: "Not Eligible",
@@ -146,10 +351,226 @@ export function ScholarshipApplicationStep({
       viewTerms: "View Application Terms",
       agreeTerms: "I have read and agree to the application terms",
       mustAgreeTerms: "Please read and agree to the application terms first",
+      // Personal info section headings
+      personalInfoSectionTitle: "Advisor & Bank Account Information",
+      personalInfoSectionDescription:
+        "Please provide advisor information and bank account details",
+      // Scholarship application section headings
+      applyForScholarship: "Apply for Scholarship",
+      applyForScholarshipDescription:
+        "Select scholarship type and fill in application details",
+      // Sub-type preference ordering
+      preferenceOrderInstruction:
+        "Set Preference Order (use ▲▼ arrows to reorder)",
+      // Toast messages
+      documentDeleted: "Document deleted",
+      deleteFailed: "Delete failed",
+      applicationDocumentDeleted: "Application document deleted",
+      // Submit preview dialog
+      submitPreview: {
+        title: "Application Preview",
+        description:
+          "Please verify the following information before submitting",
+        studentInfo: "Student Information",
+        name: "Name",
+        studentId: "Student ID",
+        department: "Department",
+        degree: "Degree",
+        enrollment: "Enrollment",
+        personalInfo: "Personal Information",
+        advisor: "Advisor",
+        advisorEmail: "Advisor Email",
+        advisorNycuId: "Advisor NYCU ID",
+        postOfficeAccount: "Post Office Account",
+        uploadedDocuments: "Uploaded Documents",
+        passbookCover: "Passbook Cover",
+        applicationDocument: "Application Document",
+        uploaded: "Uploaded",
+        notUploaded: "Not uploaded",
+        pending: "Pending",
+        previewBtn: "Preview",
+        scholarshipApplication: "Scholarship Application",
+        scholarship: "Scholarship",
+        programs: "Programs",
+        preferenceOrder: "Preference Order",
+        warning:
+          "You cannot modify the application after submission. Please verify all information is correct.",
+        goBack: "Go Back",
+        confirmSubmit: "Confirm Submit",
+      },
+      // Degree map (preview dialog)
+      degreeShort: {
+        博士: "PhD",
+        碩士: "Master",
+        學士: "Bachelor",
+      } as Record<string, string>,
     },
   };
 
   const text = t[locale];
+
+  // Populate personal info from profile
+  useEffect(() => {
+    if (profile) {
+      setAdvisorName(profile.advisor_name || "");
+      setAdvisorEmail(profile.advisor_email || "");
+      setAdvisorNycuId(profile.advisor_nycu_id || "");
+      setAccountNumber(profile.account_number || "");
+      setExistingBankDocument(profile.bank_document_photo_url || null);
+      if (
+        profile.advisor_name &&
+        profile.advisor_email &&
+        profile.advisor_nycu_id &&
+        profile.account_number
+      ) {
+        setPersonalInfoSaved(true);
+      }
+    }
+  }, [profile]);
+
+  const handleAdvisorEmailChange = (email: string) => {
+    setAdvisorEmail(email);
+    setEmailValidationError("");
+    setPersonalInfoSaved(false);
+    if (advisorErrors.length > 0) setAdvisorErrors([]);
+    if (email.trim() !== "") {
+      const validation = validateAdvisorEmail(email);
+      if (!validation.isValid)
+        setEmailValidationError(validation.errors[0] || "");
+    }
+  };
+
+  const handleSavePersonalInfo = async () => {
+    const advisorValid = validateAdvisorInfo({
+      advisor_name: advisorName,
+      advisor_email: advisorEmail,
+      advisor_nycu_id: advisorNycuId,
+    });
+    setAdvisorErrors(advisorValid.errors);
+    const bankValid = validateBankInfo({ account_number: accountNumber });
+    setBankErrors(bankValid.errors);
+    if (!advisorValid.isValid || !bankValid.isValid) return;
+
+    setSavingPersonalInfo(true);
+    try {
+      const advisorData = sanitizeAdvisorInfo({
+        advisor_name: advisorName,
+        advisor_email: advisorEmail,
+        advisor_nycu_id: advisorNycuId,
+      });
+      const advisorResp = await api.userProfiles.updateAdvisorInfo({
+        ...advisorData,
+        change_reason: "Updated in scholarship application wizard",
+      });
+      if (!advisorResp.success)
+        throw new Error(advisorResp.message || "Failed to update advisor info");
+
+      const bankData = sanitizeBankInfo({ account_number: accountNumber });
+      const bankResp = await api.userProfiles.updateBankInfo({
+        ...bankData,
+        change_reason: "Updated in scholarship application wizard",
+      });
+      if (!bankResp.success)
+        throw new Error(bankResp.message || "Failed to update bank info");
+
+      if (bankDocumentFiles.length > 0) {
+        const uploadResp = await api.userProfiles.uploadBankDocumentFile(
+          bankDocumentFiles[0]
+        );
+        if (!uploadResp.success)
+          throw new Error(uploadResp.message || "Failed to upload document");
+      }
+
+      await refreshProfile();
+      setPersonalInfoSaved(true);
+      toast.success(text.personalInfoSaved);
+    } catch (err: unknown) {
+      toast.error((err instanceof Error ? err.message : text.personalInfoSaveFailed));
+    } finally {
+      setSavingPersonalInfo(false);
+    }
+  };
+
+  const handlePreviewBankDocument = () => {
+    if (!existingBankDocument) return;
+    const filename =
+      existingBankDocument.split("/").pop()?.split("?")[0] || "bank_document";
+    const token = localStorage.getItem("auth_token") || "";
+    const previewParams = new URLSearchParams({
+      fileId: filename,
+      filename,
+      type: "bank_document",
+      token,
+      userId: String(userId),
+    });
+    const previewUrl = `/api/v1/preview?${previewParams.toString()}`;
+    let fileTypeDisplay = "other";
+    if (filename.toLowerCase().endsWith(".pdf"))
+      fileTypeDisplay = "application/pdf";
+    else if (
+      [".jpg", ".jpeg", ".png"].some(ext =>
+        filename.toLowerCase().endsWith(ext)
+      )
+    )
+      fileTypeDisplay = "image";
+    setBankDocPreviewFile({ url: previewUrl, filename, type: fileTypeDisplay });
+    setShowBankDocPreview(true);
+  };
+
+  const handlePreviewAppDocument = () => {
+    const appId = editingApplication?.id ?? savedApplicationIdRef.current;
+    if (!existingApplicationDocument || !appId) return;
+    const filename =
+      existingApplicationDocumentName ||
+      existingApplicationDocument.split("/").pop()?.split("?")[0] ||
+      "application_document";
+    const token = localStorage.getItem("auth_token") || "";
+    const cacheBuster = encodeURIComponent(filename);
+    const previewUrl = `/api/v1/application-document-proxy?id=${appId}&token=${encodeURIComponent(token)}&v=${cacheBuster}`;
+    let fileTypeDisplay = "other";
+    if (filename.toLowerCase().endsWith(".pdf"))
+      fileTypeDisplay = "application/pdf";
+    else if (
+      [".jpg", ".jpeg", ".png"].some(ext =>
+        filename.toLowerCase().endsWith(ext)
+      )
+    )
+      fileTypeDisplay = "image";
+    setAppDocPreviewFile({ url: previewUrl, filename, type: fileTypeDisplay });
+    setShowAppDocPreview(true);
+  };
+
+  const handleDeleteBankDocument = async () => {
+    try {
+      const response = await api.userProfiles.deleteBankDocument();
+      if (response.success) {
+        toast.success(text.documentDeleted);
+        setExistingBankDocument(null);
+        await refreshProfile();
+      } else {
+        throw new Error(response.message || "Delete failed");
+      }
+    } catch (err: unknown) {
+      toast.error((err instanceof Error ? err.message : text.deleteFailed));
+    }
+  };
+
+  const handleDeleteAppDocument = async () => {
+    const appId = editingApplication?.id ?? savedApplicationIdRef.current;
+    if (!appId) return;
+    try {
+      const response = await api.applications.deleteApplicationDocument(appId);
+      if (response.success) {
+        toast.success(text.applicationDocumentDeleted);
+        setExistingApplicationDocument(null);
+        setExistingApplicationDocumentName("");
+      } else {
+        throw new Error(response.message || "Delete failed");
+      }
+    } catch (err: unknown) {
+      toast.error((err instanceof Error ? err.message : text.deleteFailed));
+    }
+  };
 
   useEffect(() => {
     loadEligibleScholarships();
@@ -158,6 +579,14 @@ export function ScholarshipApplicationStep({
   useEffect(() => {
     calculateProgress();
   }, [selectedScholarship, selectedSubTypes, dynamicFormData, dynamicFileData]);
+
+  useEffect(() => {
+    setSubTypePreferences(prev => {
+      const kept = prev.filter(st => selectedSubTypes.includes(st));
+      const newOnes = selectedSubTypes.filter(st => !prev.includes(st));
+      return [...kept, ...newOnes];
+    });
+  }, [selectedSubTypes]);
 
   // Load editing application data
   useEffect(() => {
@@ -171,29 +600,42 @@ export function ScholarshipApplicationStep({
       }
 
       // Load sub-types
-      if (editingApplication.scholarship_subtype_list && editingApplication.scholarship_subtype_list.length > 0) {
-        const validSubTypes = editingApplication.scholarship_subtype_list.filter(
-          st => st !== "general"
-        );
+      if (
+        editingApplication.scholarship_subtype_list &&
+        editingApplication.scholarship_subtype_list.length > 0
+      ) {
+        const validSubTypes =
+          editingApplication.scholarship_subtype_list.filter(
+            st => st !== "general"
+          );
         setSelectedSubTypes(validSubTypes);
       }
 
       // Load form data
-      const formData = editingApplication.submitted_form_data || editingApplication.form_data || {};
+      const formData =
+        editingApplication.submitted_form_data ||
+        editingApplication.form_data ||
+        {};
       if (formData.fields) {
         const existingFormData: Record<string, any> = {};
-        Object.entries(formData.fields).forEach(([fieldId, fieldData]: [string, any]) => {
-          if (fieldData && typeof fieldData === "object" && "value" in fieldData) {
-            existingFormData[fieldId] = fieldData.value;
+        Object.entries(formData.fields).forEach(
+          ([fieldId, fieldData]: [string, any]) => {
+            if (
+              fieldData &&
+              typeof fieldData === "object" &&
+              "value" in fieldData
+            ) {
+              existingFormData[fieldId] = fieldData.value;
+            }
           }
-        });
+        );
         setDynamicFormData(existingFormData);
       }
 
       // Load file data
       if (formData.documents) {
         const existingFileData: Record<string, File[]> = {};
-        formData.documents.forEach((doc: any) => {
+        formData.documents.forEach((doc: SubmittedDocumentPayload) => {
           if (doc.document_id && doc.original_filename) {
             const fileData = {
               id: doc.file_id || doc.id,
@@ -212,10 +654,20 @@ export function ScholarshipApplicationStep({
               type: doc.mime_type || "application/octet-stream",
               isUploaded: true,
             };
-            existingFileData[doc.document_id] = [fileData as any];
+            existingFileData[doc.document_id] = [fileData as unknown as File];
           }
         });
         setDynamicFileData(existingFileData);
+      }
+
+      // Load application document
+      const editingApp = editingApplication as Application &
+        ApplicationDocumentAttachment;
+      if (editingApp.application_document_url) {
+        setExistingApplicationDocument(editingApp.application_document_url);
+        setExistingApplicationDocumentName(
+          editingApp.application_document_original_filename || ""
+        );
       }
 
       // Set agreed to terms
@@ -231,19 +683,12 @@ export function ScholarshipApplicationStep({
     try {
       const response = await api.scholarships.getEligible();
       if (response.success && response.data) {
-        // Filter to only show eligible scholarships (no common errors)
-        const eligible = response.data.filter((scholarship: ScholarshipType) => {
-          const hasCommonErrors = scholarship.errors?.some(rule => !rule.sub_type) || false;
-          return Array.isArray(scholarship.eligible_sub_types) &&
-            scholarship.eligible_sub_types.length > 0 &&
-            !hasCommonErrors;
-        });
-        setEligibleScholarships(eligible);
+        setEligibleScholarships(response.data.filter(isSelectableScholarship));
       } else {
         setError(response.message || text.loadError);
       }
-    } catch (err: any) {
-      setError(err.message || text.loadError);
+    } catch (err: unknown) {
+      setError((err instanceof Error ? err.message : text.loadError));
     } finally {
       setLoading(false);
     }
@@ -256,20 +701,27 @@ export function ScholarshipApplicationStep({
     }
 
     try {
-      const response = await api.applicationFields.getFormConfig(selectedScholarship.code);
+      const response = await api.applicationFields.getFormConfig(
+        selectedScholarship.code
+      );
       if (!response.success || !response.data) {
         setFormProgress(0);
         return;
       }
 
       const { fields, documents } = response.data;
-      const requiredFields = fields.filter(f => f.is_active && f.is_required);
-      const requiredDocuments = documents.filter(d => d.is_active && d.is_required);
+      const requiredFields = fields.filter(
+        f => f.is_active && f.is_required && !f.is_fixed
+      );
+      const requiredDocuments = documents.filter(
+        d => d.is_active && d.is_required && !d.is_fixed
+      );
 
       let totalRequired = requiredFields.length + requiredDocuments.length;
 
       // Add sub-type selection as required if applicable
-      const hasSpecialSubTypes = selectedScholarship.eligible_sub_types &&
+      const hasSpecialSubTypes =
+        selectedScholarship.eligible_sub_types &&
         selectedScholarship.eligible_sub_types.length > 0 &&
         selectedScholarship.eligible_sub_types[0]?.value !== "general" &&
         selectedScholarship.eligible_sub_types[0]?.value !== null;
@@ -288,12 +740,11 @@ export function ScholarshipApplicationStep({
       // Check required fields
       requiredFields.forEach(field => {
         const fieldValue = dynamicFormData[field.field_name];
-        const isFixed = field.is_fixed === true;
-        const hasPrefillValue = field.prefill_value !== undefined &&
-          field.prefill_value !== null &&
-          field.prefill_value !== "";
-
-        if ((isFixed && hasPrefillValue) || (fieldValue !== undefined && fieldValue !== null && fieldValue !== "")) {
+        if (
+          fieldValue !== undefined &&
+          fieldValue !== null &&
+          fieldValue !== ""
+        ) {
           completedItems++;
         }
       });
@@ -301,9 +752,7 @@ export function ScholarshipApplicationStep({
       // Check required documents
       requiredDocuments.forEach(doc => {
         const docFiles = dynamicFileData[doc.document_name];
-        const isFixedDocument = doc.is_fixed === true;
-
-        if ((isFixedDocument && doc.existing_file_url) || (docFiles && docFiles.length > 0)) {
+        if (docFiles && docFiles.length > 0) {
           completedItems++;
         }
       });
@@ -316,13 +765,15 @@ export function ScholarshipApplicationStep({
       const progress = Math.round((completedItems / totalRequired) * 100);
       setFormProgress(progress);
     } catch (error) {
-      console.error("Error calculating progress:", error);
+      // silently ignore progress calculation errors
       setFormProgress(0);
     }
   };
 
   const handleScholarshipChange = (scholarshipCode: string) => {
-    const scholarship = eligibleScholarships.find(s => s.code === scholarshipCode);
+    const scholarship = eligibleScholarships.find(
+      s => s.code === scholarshipCode
+    );
     setSelectedScholarship(scholarship || null);
     setSelectedSubTypes([]);
     setDynamicFormData({});
@@ -334,12 +785,11 @@ export function ScholarshipApplicationStep({
     if (!selectedScholarship || !selectedScholarship.terms_document_url) return;
 
     // Get token from localStorage for authentication
-    const token = typeof window !== 'undefined'
-      ? localStorage.getItem('auth_token')
-      : null;
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
 
     // Append token as query parameter for iframe authentication
-    const previewUrl = `/api/v1/preview-terms?scholarshipType=${selectedScholarship.code}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+    const previewUrl = `/api/v1/preview-terms?scholarshipType=${selectedScholarship.code}${token ? `&token=${encodeURIComponent(token)}` : ""}`;
 
     setTermsPreviewFile({
       url: previewUrl,
@@ -357,18 +807,24 @@ export function ScholarshipApplicationStep({
   const handleSubTypeSelection = (subTypeValue: string) => {
     if (!selectedScholarship) return;
 
-    const selectionMode = selectedScholarship.sub_type_selection_mode || "multiple";
+    const selectionMode =
+      selectedScholarship.sub_type_selection_mode || "multiple";
     let newSelected: string[] = [];
 
     switch (selectionMode) {
       case "single":
-        newSelected = selectedSubTypes.includes(subTypeValue) ? [] : [subTypeValue];
+        newSelected = selectedSubTypes.includes(subTypeValue)
+          ? []
+          : [subTypeValue];
         break;
       case "hierarchical":
-        const validSubTypes = selectedScholarship.eligible_sub_types?.filter(
-          st => st.value && st.value !== "general"
-        ) || [];
-        const orderedValues = validSubTypes.map(st => st.value!).filter(Boolean);
+        const validSubTypes =
+          selectedScholarship.eligible_sub_types?.filter(
+            st => st.value && st.value !== "general"
+          ) || [];
+        const orderedValues = validSubTypes
+          .map(st => st.value!)
+          .filter(Boolean);
 
         if (selectedSubTypes.includes(subTypeValue)) {
           const indexToRemove = selectedSubTypes.indexOf(subTypeValue);
@@ -394,6 +850,19 @@ export function ScholarshipApplicationStep({
     setSelectedSubTypes(newSelected);
   };
 
+  const handleMovePreference = (index: number, direction: "up" | "down") => {
+    setSubTypePreferences(prev => {
+      const newPrefs = [...prev];
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= newPrefs.length) return prev;
+      [newPrefs[index], newPrefs[targetIndex]] = [
+        newPrefs[targetIndex],
+        newPrefs[index],
+      ];
+      return newPrefs;
+    });
+  };
+
   const handleSaveDraft = async () => {
     if (!selectedScholarship) return;
 
@@ -409,22 +878,27 @@ export function ScholarshipApplicationStep({
         };
       });
 
-      const documents = Object.entries(dynamicFileData).map(([docType, files]) => {
-        const file = files[0];
-        return {
-          document_id: docType,
-          document_type: docType,
-          file_path: file.name,
-          original_filename: file.name,
-          upload_time: new Date().toISOString(),
-        };
-      });
+      const documents = Object.entries(dynamicFileData).map(
+        ([docType, files]) => {
+          const file = files[0];
+          return {
+            document_id: docType,
+            document_type: docType,
+            file_path: file.name,
+            original_filename: file.name,
+            upload_time: new Date().toISOString(),
+          };
+        }
+      );
 
       const applicationData: ApplicationCreate = {
         scholarship_type: selectedScholarship.code,
         configuration_id: selectedScholarship.configuration_id || 0,
-        scholarship_subtype_list: selectedSubTypes.length > 0 ? selectedSubTypes : ["general"],
+        scholarship_subtype_list:
+          selectedSubTypes.length > 0 ? selectedSubTypes : ["general"],
         agree_terms: agreedToTerms,
+        sub_type_preferences:
+          subTypePreferences.length > 0 ? subTypePreferences : undefined,
         form_data: {
           fields: formFields,
           documents: documents,
@@ -438,18 +912,40 @@ export function ScholarshipApplicationStep({
         // Upload new files only
         for (const [docType, files] of Object.entries(dynamicFileData)) {
           for (const file of files) {
-            if (!(file as any).isUploaded) {
+            if (!(file as FileWithUploadedFlag).isUploaded) {
               await uploadDocument(editingApplication.id, file, docType);
             }
           }
         }
 
-        alert(text.draftSaved);
+        // Upload application document if provided
+        if (applicationDocumentFiles.length > 0) {
+          const uploadedFile = applicationDocumentFiles[0];
+          const appDocResp = await api.applications.uploadApplicationDocument(
+            editingApplication.id,
+            uploadedFile
+          );
+          if (appDocResp.success) {
+            setExistingApplicationDocument(
+              appDocResp.data?.application_document_url || null
+            );
+            setExistingApplicationDocumentName(
+              (appDocResp.data as ApplicationDocumentAttachment | undefined)
+                ?.application_document_original_filename ||
+                uploadedFile.name
+            );
+            setApplicationDocumentFiles([]);
+          }
+        }
+
+        toast.success(text.draftSaved);
       } else {
         // Create new draft
         const application = await createApplication(applicationData, true);
 
         if (application && application.id) {
+          savedApplicationIdRef.current = application.id;
+
           // Upload files
           for (const [docType, files] of Object.entries(dynamicFileData)) {
             for (const file of files) {
@@ -457,11 +953,31 @@ export function ScholarshipApplicationStep({
             }
           }
 
-          alert(text.draftSaved);
+          // Upload application document if provided
+          if (applicationDocumentFiles.length > 0) {
+            const uploadedFile = applicationDocumentFiles[0];
+            const appDocResp = await api.applications.uploadApplicationDocument(
+              application.id,
+              uploadedFile
+            );
+            if (appDocResp.success) {
+              setExistingApplicationDocument(
+                appDocResp.data?.application_document_url || null
+              );
+              setExistingApplicationDocumentName(
+                (appDocResp.data as ApplicationDocumentAttachment | undefined)
+                ?.application_document_original_filename ||
+                  uploadedFile.name
+              );
+              setApplicationDocumentFiles([]);
+            }
+          }
+
+          toast.success(text.draftSaved);
         }
       }
-    } catch (error: any) {
-      alert(text.submitError + ": " + error.message);
+    } catch (error: unknown) {
+      toast.error(text.submitError + ": " + (error instanceof Error ? error.message : String(error)));
     } finally {
       setSubmitting(false);
     }
@@ -482,22 +998,27 @@ export function ScholarshipApplicationStep({
         };
       });
 
-      const documents = Object.entries(dynamicFileData).map(([docType, files]) => {
-        const file = files[0];
-        return {
-          document_id: docType,
-          document_type: docType,
-          file_path: file.name,
-          original_filename: file.name,
-          upload_time: new Date().toISOString(),
-        };
-      });
+      const documents = Object.entries(dynamicFileData).map(
+        ([docType, files]) => {
+          const file = files[0];
+          return {
+            document_id: docType,
+            document_type: docType,
+            file_path: file.name,
+            original_filename: file.name,
+            upload_time: new Date().toISOString(),
+          };
+        }
+      );
 
       const applicationData: ApplicationCreate = {
         scholarship_type: selectedScholarship.code,
         configuration_id: selectedScholarship.configuration_id || 0,
-        scholarship_subtype_list: selectedSubTypes.length > 0 ? selectedSubTypes : ["general"],
+        scholarship_subtype_list:
+          selectedSubTypes.length > 0 ? selectedSubTypes : ["general"],
         agree_terms: agreedToTerms,
+        sub_type_preferences:
+          subTypePreferences.length > 0 ? subTypePreferences : undefined,
         form_data: {
           fields: formFields,
           documents: documents,
@@ -514,10 +1035,19 @@ export function ScholarshipApplicationStep({
         // Upload new files only
         for (const [docType, files] of Object.entries(dynamicFileData)) {
           for (const file of files) {
-            if (!(file as any).isUploaded) {
+            if (!(file as FileWithUploadedFlag).isUploaded) {
               await uploadDocument(applicationId, file, docType);
             }
           }
+        }
+
+        // Upload application document if provided
+        if (applicationDocumentFiles.length > 0) {
+          await api.applications.uploadApplicationDocument(
+            editingApplication.id,
+            applicationDocumentFiles[0]
+          );
+          setApplicationDocumentFiles([]);
         }
       } else {
         // Create new application
@@ -527,6 +1057,7 @@ export function ScholarshipApplicationStep({
           throw new Error("Failed to create application");
         }
         applicationId = application.id;
+        savedApplicationIdRef.current = application.id;
 
         // Upload files
         for (const [docType, files] of Object.entries(dynamicFileData)) {
@@ -534,15 +1065,24 @@ export function ScholarshipApplicationStep({
             await uploadDocument(applicationId, file, docType);
           }
         }
+
+        // Upload application document if provided
+        if (applicationDocumentFiles.length > 0) {
+          await api.applications.uploadApplicationDocument(
+            applicationId,
+            applicationDocumentFiles[0]
+          );
+          setApplicationDocumentFiles([]);
+        }
       }
 
       // Submit application
       await submitApplicationApi(applicationId);
 
-      alert(text.submitSuccess);
+      toast.success(text.submitSuccess);
       onComplete();
-    } catch (error: any) {
-      alert(text.submitError + ": " + error.message);
+    } catch (error: unknown) {
+      toast.error(text.submitError + ": " + (error instanceof Error ? error.message : String(error)));
     } finally {
       setSubmitting(false);
     }
@@ -572,13 +1112,222 @@ export function ScholarshipApplicationStep({
   }
 
   const eligibleSubTypes = selectedScholarship?.eligible_sub_types ?? [];
-  const selectionMode = selectedScholarship?.sub_type_selection_mode ?? "multiple";
-  const hasSpecialSubTypes = eligibleSubTypes.length > 0 &&
+  const selectionMode =
+    selectedScholarship?.sub_type_selection_mode ?? "multiple";
+  const hasSpecialSubTypes =
+    eligibleSubTypes.length > 0 &&
     eligibleSubTypes[0]?.value !== "general" &&
     eligibleSubTypes[0]?.value !== null;
 
   return (
     <div className="space-y-6">
+      {/* Personal Information Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-violet-100 rounded-lg">
+              <User className="h-6 w-6 text-violet-600" />
+            </div>
+            <div>
+              <CardTitle className="text-xl font-bold">
+                {text.personalInfoSectionTitle}
+              </CardTitle>
+              <CardDescription className="mt-1">
+                {text.personalInfoSectionDescription}
+              </CardDescription>
+            </div>
+            {personalInfoSaved && (
+              <Badge className="ml-auto bg-green-100 text-green-700 border-green-200">
+                <CheckCircle className="h-3 w-3 mr-1" />
+                {text.saved}
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Advisor Information */}
+          <div>
+            <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+              <User className="h-4 w-4 text-violet-600" />
+              {text.advisorInfo}
+            </h3>
+            {advisorErrors.length > 0 && (
+              <Alert variant="destructive" className="mb-3">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  {advisorErrors.map((e, i) => (
+                    <div key={i}>{e}</div>
+                  ))}
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="advisor_name">
+                  {text.advisorName} <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="advisor_name"
+                  placeholder={text.advisorNamePlaceholder}
+                  value={advisorName}
+                  onChange={e => {
+                    setAdvisorName(e.target.value);
+                    setPersonalInfoSaved(false);
+                    if (advisorErrors.length > 0) setAdvisorErrors([]);
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="advisor_email">
+                  {text.advisorEmail} <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="advisor_email"
+                  type="email"
+                  placeholder={text.advisorEmailPlaceholder}
+                  value={advisorEmail}
+                  onChange={e => handleAdvisorEmailChange(e.target.value)}
+                  className={emailValidationError ? "border-red-500" : ""}
+                />
+                {emailValidationError && (
+                  <div className="text-sm text-red-600 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    {emailValidationError}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="advisor_nycu_id">
+                  {text.advisorId} <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="advisor_nycu_id"
+                  placeholder={text.advisorIdPlaceholder}
+                  value={advisorNycuId}
+                  onChange={e => {
+                    setAdvisorNycuId(e.target.value);
+                    setPersonalInfoSaved(false);
+                    if (advisorErrors.length > 0) setAdvisorErrors([]);
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Bank Information */}
+          <div>
+            <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-green-600" />
+              {text.bankInfo}
+            </h3>
+            {bankErrors.length > 0 && (
+              <Alert variant="destructive" className="mb-3">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  {bankErrors.map((e, i) => (
+                    <div key={i}>{e}</div>
+                  ))}
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="account_number">
+                  {text.accountNumber} <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="account_number"
+                  placeholder={text.accountNumberPlaceholder}
+                  value={accountNumber}
+                  onChange={e => {
+                    setAccountNumber(e.target.value);
+                    setPersonalInfoSaved(false);
+                    if (bankErrors.length > 0) setBankErrors([]);
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{text.bankDocument}</Label>
+                {existingBankDocument && (
+                  <div className="p-3 border rounded-lg bg-green-50 border-green-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-5 h-5 text-green-600" />
+                        <span className="text-sm font-medium text-green-800">
+                          {text.documentUploaded}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handlePreviewBankDocument}
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          {text.preview}
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleDeleteBankDocument}
+                        >
+                          <X className="w-4 h-4 mr-1" />
+                          {text.deleteBankDoc}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <FileUpload
+                  onFilesChange={files => {
+                    setBankDocumentFiles(files);
+                    setPersonalInfoSaved(false);
+                  }}
+                  acceptedTypes={[".jpg", ".jpeg", ".png", ".pdf"]}
+                  maxSize={10 * 1024 * 1024}
+                  maxFiles={1}
+                  initialFiles={bankDocumentFiles}
+                  fileType="bank_document"
+                  locale={locale}
+                />
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p>{text.fileFormats}</p>
+                  <p>{text.fileSizeLimit}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Save Personal Info Button */}
+          <div className="flex justify-end">
+            <Button
+              onClick={handleSavePersonalInfo}
+              disabled={savingPersonalInfo || personalInfoSaved}
+              variant={personalInfoSaved ? "outline" : "default"}
+              className={personalInfoSaved ? "" : "nycu-gradient text-white"}
+            >
+              {savingPersonalInfo ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {text.saving}
+                </>
+              ) : personalInfoSaved ? (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  {text.saved}
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  {text.savePersonalInfo}
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Scholarship Application Section */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
@@ -586,8 +1335,12 @@ export function ScholarshipApplicationStep({
               <Award className="h-6 w-6 text-amber-600" />
             </div>
             <div>
-              <CardTitle className="text-2xl">{text.title}</CardTitle>
-              <CardDescription>{text.subtitle}</CardDescription>
+              <CardTitle className="text-2xl">
+                {text.applyForScholarship}
+              </CardTitle>
+              <CardDescription>
+                {text.applyForScholarshipDescription}
+              </CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -605,17 +1358,13 @@ export function ScholarshipApplicationStep({
                 <SelectValue placeholder={text.selectScholarshipPlaceholder} />
               </SelectTrigger>
               <SelectContent>
-                {eligibleScholarships.length === 0 ? (
-                  <SelectItem value="no-eligible" disabled>
-                    {text.noEligibleScholarships}
+                {eligibleScholarships.map(scholarship => (
+                  <SelectItem key={scholarship.id} value={scholarship.code}>
+                    {locale === "zh"
+                      ? scholarship.name
+                      : scholarship.name_en || scholarship.name}
                   </SelectItem>
-                ) : (
-                  eligibleScholarships.map(scholarship => (
-                    <SelectItem key={scholarship.id} value={scholarship.code}>
-                      {locale === "zh" ? scholarship.name : scholarship.name_en || scholarship.name}
-                    </SelectItem>
-                  ))
-                )}
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -624,12 +1373,15 @@ export function ScholarshipApplicationStep({
           {selectedScholarship && hasSpecialSubTypes && (
             <div className="space-y-2">
               <Label>
-                {text.selectPrograms} <span className="text-red-500">*</span>
+                <span className="font-semibold">1. {text.selectPrograms}</span>{" "}
+                <span className="text-red-500">*</span>
               </Label>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {eligibleSubTypes.map((subType, index) => {
                   const subTypeValue = subType.value;
-                  const isSelected = subTypeValue ? selectedSubTypes.includes(subTypeValue) : false;
+                  const isSelected = subTypeValue
+                    ? selectedSubTypes.includes(subTypeValue)
+                    : false;
 
                   const isSelectable = (() => {
                     if (!subTypeValue) return false;
@@ -652,7 +1404,8 @@ export function ScholarshipApplicationStep({
                         "relative cursor-pointer transition-all duration-200",
                         isSelectable && "hover:border-primary/50",
                         isSelected && "border-primary bg-primary/5",
-                        !isSelectable && "opacity-50 cursor-not-allowed bg-gray-50"
+                        !isSelectable &&
+                          "opacity-50 cursor-not-allowed bg-gray-50"
                       )}
                       onClick={() => {
                         if (isSelectable && subTypeValue) {
@@ -689,6 +1442,60 @@ export function ScholarshipApplicationStep({
                   {text.programsRequired}
                 </p>
               )}
+
+              {/* Sub-type preference ordering */}
+              {selectedSubTypes.length >= 2 && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-semibold mb-2">
+                    <span>2. </span>
+                    <span className="text-red-600">
+                      {text.preferenceOrderInstruction}
+                    </span>
+                  </h4>
+                  <div className="space-y-2">
+                    {subTypePreferences.map((subType, index) => {
+                      const config = eligibleSubTypes.find(
+                        c => c.value === subType
+                      );
+                      return (
+                        <div
+                          key={subType}
+                          className="flex items-center gap-2 p-2 bg-gray-50 rounded"
+                        >
+                          <div className="flex flex-col">
+                            <button
+                              type="button"
+                              disabled={index === 0}
+                              onClick={() => handleMovePreference(index, "up")}
+                              className="p-0.5 text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                            >
+                              ▲
+                            </button>
+                            <button
+                              type="button"
+                              disabled={index === subTypePreferences.length - 1}
+                              onClick={() =>
+                                handleMovePreference(index, "down")
+                              }
+                              className="p-0.5 text-gray-500 hover:text-gray-700 disabled:opacity-30"
+                            >
+                              ▼
+                            </button>
+                          </div>
+                          <span className="text-sm font-medium w-6">
+                            {index + 1}.
+                          </span>
+                          <span className="flex-1 text-sm">
+                            {locale === "zh"
+                              ? config?.label || subType
+                              : config?.label_en || config?.label || subType}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -721,7 +1528,9 @@ export function ScholarshipApplicationStep({
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="font-medium">{text.formProgress}</span>
-                <span className="font-semibold text-nycu-blue-700">{formProgress}%</span>
+                <span className="font-semibold text-nycu-blue-700">
+                  {formProgress}%
+                </span>
               </div>
               <Progress value={formProgress} className="h-2" />
               {formProgress < 100 && (
@@ -764,7 +1573,9 @@ export function ScholarshipApplicationStep({
                 <Checkbox
                   id="agree-terms"
                   checked={agreedToTerms}
-                  onCheckedChange={(checked) => setAgreedToTerms(checked === true)}
+                  onCheckedChange={checked =>
+                    setAgreedToTerms(checked === true)
+                  }
                   className="h-5 w-5"
                 />
                 <Label
@@ -774,6 +1585,55 @@ export function ScholarshipApplicationStep({
                   {text.agreeTerms}
                 </Label>
               </div>
+            </div>
+          )}
+
+          {/* Application Document Upload */}
+          {selectedScholarship && (
+            <div className="pt-4 border-t">
+              <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <FileText className="h-5 w-5 text-nycu-blue-600" />
+                {text.applicationDocument}
+              </h4>
+
+              {existingApplicationDocument ? (
+                <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                  <span className="text-sm text-green-800 flex-1">
+                    {text.applicationDocumentUploaded}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handlePreviewAppDocument}
+                    className="text-nycu-blue-600"
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    {text.preview}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDeleteAppDocument}
+                    className="text-red-600"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    {text.deleteAppDoc}
+                  </Button>
+                </div>
+              ) : (
+                <FileUpload
+                  onFilesChange={setApplicationDocumentFiles}
+                  acceptedTypes={[".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"]}
+                  maxSize={10 * 1024 * 1024}
+                  maxFiles={1}
+                  initialFiles={applicationDocumentFiles}
+                  fileType="application_document"
+                  locale={locale}
+                />
+              )}
+              <p className="text-xs text-gray-500 mt-2">{text.fileFormats}</p>
+              <p className="text-xs text-gray-500">{text.fileSizeLimit}</p>
             </div>
           )}
 
@@ -803,11 +1663,14 @@ export function ScholarshipApplicationStep({
                 )}
               </Button>
               <Button
-                onClick={handleSubmit}
+                onClick={() => setShowSubmitPreview(true)}
                 disabled={
                   submitting ||
+                  !personalInfoSaved ||
                   formProgress < 100 ||
-                  Boolean(selectedScholarship?.terms_document_url && !agreedToTerms)
+                  Boolean(
+                    selectedScholarship?.terms_document_url && !agreedToTerms
+                  )
                 }
                 size="lg"
                 className="nycu-gradient text-white px-8"
@@ -836,6 +1699,343 @@ export function ScholarshipApplicationStep({
         file={termsPreviewFile}
         locale={locale}
       />
+
+      {/* Bank Document Preview Dialog */}
+      <FilePreviewDialog
+        isOpen={showBankDocPreview}
+        onClose={() => setShowBankDocPreview(false)}
+        file={bankDocPreviewFile}
+        locale={locale}
+      />
+
+      {/* Application Document Preview Dialog */}
+      <FilePreviewDialog
+        isOpen={showAppDocPreview}
+        onClose={() => setShowAppDocPreview(false)}
+        file={appDocPreviewFile}
+        locale={locale}
+      />
+
+      {/* Submit Preview Dialog */}
+      <Dialog open={showSubmitPreview} onOpenChange={setShowSubmitPreview}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <Eye className="h-5 w-5" />
+              {text.submitPreview.title}
+            </DialogTitle>
+            <DialogDescription>
+              {text.submitPreview.description}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Student Info */}
+            {userInfo && (
+              <div>
+                <h3 className="text-sm font-semibold text-gray-500 mb-2">
+                  {text.submitPreview.studentInfo}
+                </h3>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm bg-gray-50 rounded-lg p-4">
+                  <div>
+                    <span className="text-gray-500">
+                      {text.submitPreview.name}
+                    </span>
+                    <p className="font-medium">{userInfo.name || "-"}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">
+                      {text.submitPreview.studentId}
+                    </span>
+                    <p className="font-medium">{userInfo.nycu_id || "-"}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">
+                      {text.submitPreview.department}
+                    </span>
+                    <p className="font-medium">{userInfo.dept_name || "-"}</p>
+                  </div>
+                  {studentInfo && (
+                    <>
+                      <div>
+                        <span className="text-gray-500">
+                          {text.submitPreview.degree}
+                        </span>
+                        <p className="font-medium">
+                          {(() => {
+                            const degreeCodeToZh: Record<string, string> = {
+                              "1": "博士",
+                              "2": "碩士",
+                              "3": "學士",
+                            };
+                            const val = String(studentInfo.std_degree || "");
+                            const zhKey = degreeCodeToZh[val];
+                            if (zhKey) {
+                              return text.degreeShort[zhKey] || zhKey;
+                            }
+                            return val || "-";
+                          })()}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">
+                          {text.submitPreview.enrollment}
+                        </span>
+                        <p className="font-medium">
+                          {studentInfo.std_enrollyear
+                            ? locale === "zh"
+                              ? `${studentInfo.std_enrollyear} 學年度第 ${studentInfo.std_enrollterm || "?"} 學期`
+                              : `Year ${studentInfo.std_enrollyear}, Semester ${studentInfo.std_enrollterm || "?"}`
+                            : "-"}
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <Separator />
+
+            {/* Personal Info */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 mb-2">
+                {text.submitPreview.personalInfo}
+              </h3>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm bg-gray-50 rounded-lg p-4">
+                <div>
+                  <span className="text-gray-500">
+                    {text.submitPreview.advisor}
+                  </span>
+                  <p className="font-medium">{advisorName || "-"}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">
+                    {text.submitPreview.advisorEmail}
+                  </span>
+                  <p className="font-medium">{advisorEmail || "-"}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">
+                    {text.submitPreview.advisorNycuId}
+                  </span>
+                  <p className="font-medium">{advisorNycuId || "-"}</p>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-gray-500">
+                    {text.submitPreview.postOfficeAccount}
+                  </span>
+                  <p className="font-medium">{accountNumber || "-"}</p>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Uploaded Documents */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 mb-2">
+                {text.submitPreview.uploadedDocuments}
+              </h3>
+              <div className="space-y-2 text-sm bg-gray-50 rounded-lg p-4">
+                {/* Passbook */}
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">
+                    {text.submitPreview.passbookCover}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {existingBankDocument ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-green-700 font-medium">
+                          {text.submitPreview.uploaded}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handlePreviewBankDocument}
+                          className="h-6 px-2 text-nycu-blue-600"
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          {text.submitPreview.previewBtn}
+                        </Button>
+                      </>
+                    ) : bankDocumentFiles.length > 0 ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-green-700 font-medium">
+                          {locale === "zh"
+                            ? `${text.submitPreview.pending}：${bankDocumentFiles[0].name}`
+                            : `${text.submitPreview.pending}: ${bankDocumentFiles[0].name}`}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-4 w-4 text-amber-500" />
+                        <span className="text-amber-700">
+                          {text.submitPreview.notUploaded}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Application Document */}
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">
+                    {text.submitPreview.applicationDocument}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {existingApplicationDocument ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-green-700 font-medium">
+                          {text.submitPreview.uploaded}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handlePreviewAppDocument}
+                          className="h-6 px-2 text-nycu-blue-600"
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          {text.submitPreview.previewBtn}
+                        </Button>
+                      </>
+                    ) : applicationDocumentFiles.length > 0 ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-green-700 font-medium">
+                          {locale === "zh"
+                            ? `${text.submitPreview.pending}：${applicationDocumentFiles[0].name}`
+                            : `${text.submitPreview.pending}: ${applicationDocumentFiles[0].name}`}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-4 w-4 text-amber-500" />
+                        <span className="text-amber-700">
+                          {text.submitPreview.notUploaded}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Scholarship Info */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 mb-2">
+                {text.submitPreview.scholarshipApplication}
+              </h3>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm bg-gray-50 rounded-lg p-4">
+                <div className="col-span-2">
+                  <span className="text-gray-500">
+                    {text.submitPreview.scholarship}
+                  </span>
+                  <p className="font-medium">
+                    {selectedScholarship
+                      ? locale === "zh"
+                        ? selectedScholarship.name
+                        : selectedScholarship.name_en ||
+                          selectedScholarship.name
+                      : "-"}
+                  </p>
+                </div>
+                {hasSpecialSubTypes && selectedSubTypes.length > 0 && (
+                  <>
+                    <div className="col-span-2">
+                      <span className="text-gray-500">
+                        {text.submitPreview.programs}
+                      </span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {selectedSubTypes.map(st => {
+                          const config = eligibleSubTypes.find(
+                            c => c.value === st
+                          );
+                          return (
+                            <Badge key={st} variant="secondary">
+                              {locale === "zh"
+                                ? config?.label || st
+                                : config?.label_en || config?.label || st}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {subTypePreferences.length >= 2 && (
+                      <div className="col-span-2">
+                        <span className="text-gray-500">
+                          {text.submitPreview.preferenceOrder}
+                        </span>
+                        <div className="mt-1 space-y-1">
+                          {subTypePreferences.map((st, i) => {
+                            const config = eligibleSubTypes.find(
+                              c => c.value === st
+                            );
+                            return (
+                              <div key={st} className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-nycu-blue-700 w-6">
+                                  {i + 1}.
+                                </span>
+                                <span className="text-sm font-medium">
+                                  {locale === "zh"
+                                    ? config?.label || st
+                                    : config?.label_en || config?.label || st}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Warning */}
+          <Alert className="border-amber-200 bg-amber-50">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800 font-medium">
+              {text.submitPreview.warning}
+            </AlertDescription>
+          </Alert>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowSubmitPreview(false)}
+            >
+              {text.submitPreview.goBack}
+            </Button>
+            <Button
+              onClick={() => {
+                setShowSubmitPreview(false);
+                handleSubmit();
+              }}
+              disabled={submitting}
+              className="nycu-gradient text-white"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {text.submitting}
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  {text.submitPreview.confirmSubmit}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

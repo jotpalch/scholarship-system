@@ -32,7 +32,7 @@ export function middleware(request: NextRequest) {
       "default-src 'self'",
       "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // HMR requires unsafe-eval
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
+      "img-src 'self' data: blob: https:",
       "font-src 'self'",
       "connect-src 'self' ws: wss:", // WebSocket for HMR
       "frame-ancestors 'none'",
@@ -43,15 +43,20 @@ export function middleware(request: NextRequest) {
     response.headers.set("Content-Security-Policy", csp);
   } else {
     // Production CSP: Strict with nonce-based script/style loading
+    const portalHost =
+      request.nextUrl.hostname.includes("test") ||
+      request.nextUrl.hostname.includes("staging")
+        ? "https://portal.test.nycu.edu.tw"
+        : "https://portal.nycu.edu.tw";
     const csp = [
       "default-src 'self'",
       `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`, // strict-dynamic for bundled scripts
-      `style-src 'self' 'nonce-${nonce}'`,
-      "img-src 'self' data: blob:",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https:",
       "font-src 'self'",
       "connect-src 'self' https://*.nycu.edu.tw",
       "base-uri 'self'",
-      "form-action 'self' https://portal.nycu.edu.tw",
+      `form-action 'self' ${portalHost}`,
       "frame-ancestors 'none'",
       "object-src 'none'",
       "upgrade-insecure-requests",
@@ -80,7 +85,8 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public folder files
+     * - api/email/preview/ (serves email HTML with its own CSP; middleware nonce would block inline styles)
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot)).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/email/preview/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|eot)).*)",
   ],
 };

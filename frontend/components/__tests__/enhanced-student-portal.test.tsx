@@ -75,6 +75,9 @@ const mockApplication = {
   submitted_at: "2025-01-01T10:00:00Z",
   created_at: "2025-01-01",
   updated_at: "2025-01-01",
+  // Progress timeline conditionalizes professor/college steps on these flags.
+  requires_professor_recommendation: true,
+  requires_college_review: true,
 };
 
 describe("EnhancedStudentPortal", () => {
@@ -199,7 +202,7 @@ describe("EnhancedStudentPortal", () => {
 
     // Wait for applications view to load
     await waitFor(() => {
-      expect(screen.getByText("No application records")).toBeInTheDocument();
+      expect(screen.getByText("No application records yet")).toBeInTheDocument();
     });
     expect(screen.getByText(/Click 'New Application' to start/)).toBeInTheDocument();
   });

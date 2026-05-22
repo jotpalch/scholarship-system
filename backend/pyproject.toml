@@ -101,3 +101,85 @@ skips = ["B101", "B601"]
 exclude_dirs = ["/tests", "/test_", "*_test.py", "/migrations"]
 severity = "medium"
 confidence = "medium"
+
+[project]
+name = "scholarship-system-backend"
+version = "1.0.0"
+description = "Scholarship Management System Backend API"
+requires-python = ">=3.12"
+dependencies = [
+    # FastAPI and web framework
+    "fastapi==0.129.0",
+    "starlette==0.52.1",
+    "uvicorn[standard]==0.38.0",
+    "python-multipart==0.0.27",
+    
+    # Database and ORM
+    "sqlalchemy==2.0.44",
+    "alembic==1.17.2",
+    "asyncpg==0.30.0",
+    "psycopg2-binary==2.9.11",
+    "greenlet>=3.0,<4",  # Required by SQLAlchemy sync engine
+    
+    # Authentication and Security
+    "PyJWT[crypto]==2.12.0",  # Match requirements.txt; closes Dependabot alert #40 (high)
+    "passlib[bcrypt]==1.7.4",
+    "bcrypt==4.2.1",
+    "cryptography==46.0.7",
+    "python-decouple==3.8",
+    
+    # Data validation and serialization
+    "pydantic==2.10.0",
+    "pydantic[email]==2.10.0",
+    "pydantic-settings==2.6.0",
+    "email-validator==2.1.0",
+    
+    # HTTP client and utilities
+    "httpx==0.28.1",
+    "requests==2.33.0",
+    "aiofiles==24.1.0",
+    "python-dateutil==2.8.2",
+    "tenacity==9.1.2",
+    
+    # Caching
+    "redis==7.0.1",
+    
+    # Task scheduling
+    "apscheduler==3.10.4",
+    "croniter==1.4.1",
+    
+    # Email services
+    "fastapi-mail==1.4.1",
+    "jinja2==3.1.6",
+    
+    # File processing and OCR
+    "pillow==12.2.0",
+    "opencv-python==4.12.0.88",
+    "pytesseract==0.3.10",
+    "google-generativeai==0.8.3",
+    "python-magic==0.4.27",
+    
+    # Object Storage
+    "minio==7.2.18",
+    
+    # Excel processing
+    "pandas==2.3.3",
+    "openpyxl==3.1.2",
+
+    # PDF generation
+    "reportlab==4.4.10",
+
+    # Logging and monitoring
+    "structlog==24.4.0",
+    "prometheus-client==0.21.0",
+]
+
+[project.optional-dependencies]
+# Dev dependencies are managed in requirements-dev.txt to keep one source of truth.
+# Install with: uv pip install -r requirements.txt -r requirements-dev.txt
+# (or `make install`)
+dev = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

@@ -1,5 +1,6 @@
 import { Locale } from "@/lib/validators";
 import { api } from "@/lib/api";
+import { logger } from "@/lib/utils/logger";
 import {
   ApplicationStatus,
   ReviewStage,
@@ -8,6 +9,27 @@ import {
   getReviewStageLabel,
   getReviewStageBadgeVariant,
 } from "@/lib/enums";
+
+// Shape of document entries in `submitted_form_data.documents` from
+// the backend. All fields optional because the upstream JSON can come
+// from several sources (form_data, submitted_form_data, SIS upload).
+interface DocumentPayload {
+  file_id?: string | number;
+  id?: string | number;
+  filename?: string;
+  original_filename?: string;
+  file_size?: number;
+  mime_type?: string;
+  document_type?: string;
+  file_type?: string;
+  file_path?: string;
+  download_url?: string;
+  is_verified?: boolean;
+  upload_time?: string;
+  uploaded_at?: string;
+  document_id?: string;
+}
+
 
 export type BadgeVariant = "secondary" | "default" | "outline" | "destructive";
 
@@ -58,9 +80,26 @@ const hasReachedStage = (currentStage: string | undefined, targetStage: string):
   return currentOrder >= targetOrder;
 };
 
+// Structural shape consumed by the helpers below. Matches the canonical
+// Application interface plus the review-stage extensions surfaced by the
+// /applications/{id} backend response.
+type ApplicationTimelineInput = {
+  status: string;
+  review_stage?: string;
+  professor_reviews?: Array<{ reviewed_at?: string }>;
+  application_reviews?: Array<{ review_stage?: string; reviewed_at?: string }>;
+  professor?: { name?: string; nycu_id?: string };
+  requires_professor_recommendation?: boolean;
+  requires_college_review?: boolean;
+  submitted_at?: string;
+  created_at?: string;
+  approved_at?: string;
+  reviewed_at?: string;
+};
+
 // 獲取申請時間軸
 export const getApplicationTimeline = (
-  application: any,
+  application: ApplicationTimelineInput,
   locale: Locale
 ): TimelineStep[] => {
   const status = application.status as ApplicationStatus;
@@ -72,7 +111,8 @@ export const getApplicationTimeline = (
 
   // 獲取學院審核資訊
   const collegeReview = application.application_reviews?.find(
-    (r: any) => r.review_stage === "college_review"
+    (r: { review_stage?: string; reviewed_at?: string }) =>
+      r.review_stage === "college_review"
   );
   const hasCollegeReview = Boolean(collegeReview?.reviewed_at);
 
@@ -109,6 +149,13 @@ export const getApplicationTimeline = (
     return "pending";
   };
 
+  // Workflow configuration flags
+  const requiresProfessor = application.requires_professor_recommendation ?? false;
+  const requiresCollege = application.requires_college_review ?? false;
+
+  // Determine the stage after professor review (skip college if not required)
+  const afterProfessorStage = requiresCollege ? "college_review" : "admin_review";
+
   const steps: TimelineStep[] = [
     // 1. 提交申請
     {
@@ -119,75 +166,75 @@ export const getApplicationTimeline = (
         ? ""
         : formatDate(application.submitted_at || application.created_at, locale),
     },
-
-    // 2. 等待教授審核
-    {
-      id: "wait_professor",
-      title: locale === "zh"
-        ? `等待教授審核${professorName ? ` (${professorName})` : ""}`
-        : `Waiting for Professor Review${professorName ? ` (${professorName})` : ""}`,
-      status: getStepStatus("student_submitted", "professor_review"),
-      date: "",
-    },
-
-    // 3. 教授審核中
-    {
-      id: "professor_reviewing",
-      title: locale === "zh" ? "教授審核中" : "Professor Reviewing",
-      status: getStepStatus("professor_review", "professor_reviewed", hasProfessorReview),
-      date: "",
-    },
-
-    // 4. 教授已送出審核
-    {
-      id: "professor_submitted",
-      title: locale === "zh" ? "教授已送出審核" : "Professor Review Submitted",
-      status: getStepStatus("professor_reviewed", "college_review", hasProfessorReview),
-      date: hasProfessorReview ? formatDate(professorReview.reviewed_at, locale) : "",
-    },
-
-    // 5. 等待學院審核
-    {
-      id: "wait_college",
-      title: locale === "zh" ? "等待學院審核" : "Waiting for College Review",
-      status: getStepStatus("professor_reviewed", "college_review"),
-      date: "",
-    },
-
-    // 6. 學院審核中
-    {
-      id: "college_reviewing",
-      title: locale === "zh" ? "學院審核中" : "College Reviewing",
-      status: getStepStatus("college_review", "college_reviewed", hasCollegeReview),
-      date: "",
-    },
-
-    // 7. 學院已送出審核
-    {
-      id: "college_submitted",
-      title: locale === "zh" ? "學院已送出審核" : "College Review Submitted",
-      status: getStepStatus("college_reviewed", "admin_review", hasCollegeReview),
-      date: hasCollegeReview ? formatDate(collegeReview.reviewed_at, locale) : "",
-    },
-
-    // 8. 最終核定
-    {
-      id: "final_decision",
-      title: locale === "zh" ? "最終核定" : "Final Decision",
-      status:
-        status === "approved"
-          ? "completed"
-          : status === "rejected" || status === "returned" || status === "withdrawn" || status === "cancelled"
-            ? "rejected"
-            : "pending",
-      date:
-        status === "approved"
-          ? formatDate(application.approved_at, locale)
-          : status === "rejected" || status === "returned" || status === "withdrawn" || status === "cancelled"
-            ? formatDate(application.reviewed_at, locale)
-            : "",
-    },
   ];
+
+  // Professor review steps (only if required)
+  if (requiresProfessor) {
+    steps.push(
+      {
+        id: "wait_professor",
+        title: locale === "zh"
+          ? `等待教授審核${professorName ? ` (${professorName})` : ""}`
+          : `Waiting for Professor Review${professorName ? ` (${professorName})` : ""}`,
+        status: getStepStatus("student_submitted", "professor_review"),
+        date: "",
+      },
+      {
+        id: "professor_reviewing",
+        title: locale === "zh" ? "教授審核中" : "Professor Reviewing",
+        status: getStepStatus("professor_review", "professor_reviewed", hasProfessorReview),
+        date: "",
+      },
+      {
+        id: "professor_submitted",
+        title: locale === "zh" ? "教授已送出審核" : "Professor Review Submitted",
+        status: getStepStatus("professor_reviewed", afterProfessorStage, hasProfessorReview),
+        date: hasProfessorReview ? formatDate(professorReview?.reviewed_at, locale) : "",
+      },
+    );
+  }
+
+  // College review steps (only if required)
+  if (requiresCollege) {
+    steps.push(
+      {
+        id: "wait_college",
+        title: locale === "zh" ? "等待學院審核" : "Waiting for College Review",
+        status: getStepStatus("professor_reviewed", "college_review"),
+        date: "",
+      },
+      {
+        id: "college_reviewing",
+        title: locale === "zh" ? "學院審核中" : "College Reviewing",
+        status: getStepStatus("college_review", "college_reviewed", hasCollegeReview),
+        date: "",
+      },
+      {
+        id: "college_submitted",
+        title: locale === "zh" ? "學院已送出審核" : "College Review Submitted",
+        status: getStepStatus("college_reviewed", "admin_review", hasCollegeReview),
+        date: hasCollegeReview ? formatDate(collegeReview?.reviewed_at, locale) : "",
+      },
+    );
+  }
+
+  // Final decision
+  steps.push({
+    id: "final_decision",
+    title: locale === "zh" ? "最終核定" : "Final Decision",
+    status:
+      status === "approved"
+        ? "completed"
+        : status === "rejected" || status === "returned" || status === "withdrawn" || status === "cancelled"
+          ? "rejected"
+          : "pending",
+    date:
+      status === "approved"
+        ? formatDate(application.approved_at, locale)
+        : status === "rejected" || status === "returned" || status === "withdrawn" || status === "cancelled"
+          ? formatDate(application.reviewed_at, locale)
+          : "",
+  });
 
   return steps;
 };
@@ -216,7 +263,7 @@ export const shouldShowReviewStage = (
 
 // 獲取顯示狀態 - 返回狀態和階段的組合資訊
 export const getDisplayStatusInfo = (
-  application: any,
+  application: { status: string; review_stage?: string },
   locale: Locale
 ): {
   showStatus: boolean;
@@ -283,9 +330,45 @@ export const formatFieldName = (fieldName: string, locale: Locale) => {
 };
 
 // 格式化欄位值（從資料庫獲取獎學金類型名稱）
+/**
+ * Render a form-field value as a human-readable string. Used by the
+ * application-form-data-display component to show dynamic-form data
+ * collected from students.
+ *
+ * Why:
+ * - String/number/boolean: use `String(value)` (handles 0, false, etc.).
+ * - null/undefined: return empty string (caller decides placeholder).
+ * - Array: comma-separated stringified items (matches the array-test
+ *   contract from PR #244 and the eye-test of "hobbies: reading, coding").
+ * - Plain object: JSON.stringify so nested data renders as readable JSON
+ *   instead of the default `[object Object]`. (Replaces TODO at
+ *   `application-form-data-display.test.tsx:215`.)
+ *
+ * Truncation is the caller's responsibility — different render paths
+ * use different cap lengths.
+ */
+export const formatDisplayValue = (value: unknown): string => {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => formatDisplayValue(item)).join(", ");
+  }
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+};
+
 export const formatFieldValue = async (
   fieldName: string,
-  value: any,
+  value: unknown,
   locale: Locale
 ) => {
   if (fieldName === "scholarship_type") {
@@ -301,10 +384,10 @@ export const formatFieldValue = async (
         }
       }
     } catch (error) {
-      console.warn(
-        `Failed to fetch scholarship type for code: ${value}`,
-        error
-      );
+      logger.warn("Failed to fetch scholarship type for code", {
+        code: value,
+        error,
+      });
     }
     // API 失敗時直接顯示 code
     return value;
@@ -366,7 +449,7 @@ export const fetchApplicationFiles = async (applicationId: number) => {
       appResponse.data?.submitted_form_data?.documents
     ) {
       // 將 documents 轉換為 ApplicationFile 格式以保持向後兼容
-      return appResponse.data.submitted_form_data.documents.map((doc: any) => ({
+      return appResponse.data.submitted_form_data.documents.map((doc: DocumentPayload) => ({
         id: doc.file_id,
         filename: doc.filename,
         original_filename: doc.original_filename,
@@ -389,7 +472,7 @@ export const fetchApplicationFiles = async (applicationId: number) => {
 
     return [];
   } catch (error) {
-    console.error("Failed to fetch application files:", error);
+    logger.error("Failed to fetch application files", { error });
     return [];
   }
 };

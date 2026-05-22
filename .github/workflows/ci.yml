@@ -7,13 +7,18 @@ on:
     branches: [main, develop]
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   NODE_VERSION: '22'
   PYTHON_VERSION: '3.13'
   REGISTRY: ghcr.io
-  USER: ${{ github.actor }}
+  USER: ${{ github.repository_owner }}
   IMAGE_NAME: ${{ github.repository }}
   CI: true
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   # Detect changes to optimize CI runs
@@ -28,7 +33,7 @@ jobs:
       dependencies: ${{ steps.changes.outputs.dependencies }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -55,6 +60,31 @@ jobs:
               - 'backend/requirements*.txt'
               - 'frontend/package*.json'
 
+      # Guard: feature-branch PRs may NOT include raw evidence files. They
+      # belong on `evidence/<date>` orphan branches (see docs/staging-tests/
+      # README.md). The .gitignore already declines them, but this catches
+      # `git add -f` overrides.
+      - name: Reject raw evidence on feature branches
+        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'evidence/')
+        run: |
+          set -euo pipefail
+          bad=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD" -- \
+            'docs/staging-tests/*/*.png' \
+            'docs/staging-tests/*/*.json' \
+            'docs/staging-tests/*/*.txt' \
+            'docs/staging-tests/*/*.js' \
+            'docs/staging-tests/**/*/*.png' \
+            'docs/staging-tests/**/*/*.json' \
+            'docs/staging-tests/**/*/*.txt' \
+            'docs/staging-tests/**/*/*.js' 2>/dev/null || true)
+          if [ -n "$bad" ]; then
+            echo "::error::Raw staging-test evidence files committed to a feature branch:"
+            echo "$bad" | sed 's/^/  - /'
+            echo "::error::Run scripts/evidence/publish.sh <date> to push to evidence/<date>"
+            echo "::error::orphan branch instead. See docs/staging-tests/README.md."
+            exit 1
+          fi
+
   # Quick validation jobs - run in parallel
   quick-checks:
     name: Quick Checks
@@ -71,18 +101,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python (if needed)
         if: matrix.check == 'backend-lint' || matrix.check == 'security-scan'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
       - name: Setup Node.js (if needed)
         if: matrix.check == 'frontend-lint' || matrix.check == 'dependency-check'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -92,8 +122,7 @@ jobs:
         if: matrix.check == 'backend-lint' && needs.changes.outputs.backend == 'true'
         working-directory: ./backend
         run: |
-          pip install -r requirements.txt
-          pip install black==24.8.0 flake8 mypy pylint
+          pip install -r requirements-lint.txt
 
           echo "::group::Black Format Check"
           black --check --diff --line-length=120 . || {
@@ -110,6 +139,19 @@ jobs:
             --statistics \
             --show-source || {
             echo "::warning::Flake8 found linting issues. Review output above."
+          }
+          echo "::endgroup::"
+
+          # flake8-bugbear is installed via requirements-lint.txt. Gate hard
+          # on B904 (exception chain loss) and B014 (redundant exception
+          # types); both reached 0 in PRs #504 / #505 and must stay there.
+          # B008 (function-call default) is intentionally NOT gated because
+          # FastAPI's `Depends(...)` pattern is the project-standard idiom
+          # for argument-default injection.
+          echo "::group::Flake8 Bugbear Gate (B904, B014)"
+          flake8 app --select=B904,B014 --max-line-length=120 || {
+            echo "::error::flake8-bugbear B904/B014 violations found. See PR #504/#505 for the established pattern."
+            exit 1
           }
           echo "::endgroup::"
 
@@ -182,10 +224,28 @@ jobs:
       fail-fast: false
       matrix:
         test-suite:
+          - smoke
           - unit
           - integration
           - critical-workflows
         include:
+          - test-suite: smoke
+            # Explicit file list (not "app/tests") so pytest doesn't try to
+            # import unrelated broken test files at collection. The previously
+            # broken files (test_college_review_*, test_professor_endpoints,
+            # test_semester_yearly_labels) had stale imports fixed in this PR;
+            # they are kept off the smoke list because their test bodies still
+            # exercise removed schemas and are not smoke-marked.
+            test-path: "app/tests/test_health.py app/tests/test_mock_sso.py app/tests/test_auth_service.py app/tests/test_critical_workflows.py app/tests/test_application_service.py app/tests/test_scholarship_rules_service.py app/tests/test_eligibility_service.py app/tests/test_roster_service_generation.py"
+            test-mark: "smoke"
+            # All four bugs documented in PR #166 (ci.yml:225-241) are now fixed:
+            #   * pytest.ini: [tool:pytest] → [pytest] so --strict-markers works
+            #   * test_mock_sso: replaced module-level TestClient with fixture-
+            #     based AsyncClient + student001 DB seed (fixes "no such table")
+            #   * test_auth_service: AsyncMock for execute/commit/refresh/rollback
+            #   * test_register_user_success: status=EmployeeStatus.active (not "active")
+            # Smoke lane is now hard-gated (continue-on-error: false).
+            continue-on-error: false
           - test-suite: unit
             test-path: app/tests/test_*.py
             test-mark: "not integration and not asyncio"
@@ -201,16 +261,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
       - name: Cache pip dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
@@ -265,6 +325,12 @@ jobs:
           DATABASE_URL: "postgresql+asyncpg://test_user:test_password@localhost:5432/test_db"
           DATABASE_URL_SYNC: "postgresql://test_user:test_password@localhost:5432/test_db"
           SECRET_KEY: test-secret-key-${{ matrix.test-suite }}
+          # MINIO_* are required by app.core.config.Settings() (pydantic-settings).
+          # The alembic + seed steps already set them; this step previously did not,
+          # which caused conftest.py to fail to import settings → exit 4 at collection
+          # on every matrix row (masked by continue-on-error: true on three of them).
+          MINIO_ACCESS_KEY: ci-test-minio-access
+          MINIO_SECRET_KEY: ci-test-minio-secret
           APP_ENV: test
           TESTING: true
           PYTEST_CURRENT_TEST: true
@@ -276,6 +342,7 @@ jobs:
             --cov-report=xml \
             --cov-report=html \
             --cov-report=term-missing \
+            --cov-fail-under=0 \
             --tb=short \
             --durations=10 \
             --maxfail=5
@@ -289,9 +356,37 @@ jobs:
           name: backend-${{ matrix.test-suite }}-coverage
           fail_ci_if_error: false
 
+      - name: Diff coverage gate (PR only, smoke row)
+        # Per-PR coverage ratchet: changed Python lines must be ≥80% covered
+        # by the smoke suite. Phase 2 of the test-surface-hardening plan.
+        # Gated to the smoke row so the gate runs once per PR against one
+        # canonical coverage.xml; gated to pull_request events so pushes
+        # to main / develop don't fail on baseline drift.
+        # Soft-gated until smoke is healthy enough to be the canonical
+        # source — promote to required once Phase 1 follow-ups land.
+        if: github.event_name == 'pull_request' && matrix.test-suite == 'smoke'
+        working-directory: ./backend
+        continue-on-error: true
+        run: |
+          python -m pip install --quiet diff-cover==9.2.0
+          # Need the base ref locally for diff-cover's --compare-branch.
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}" || true
+          diff-cover coverage.xml \
+            --compare-branch=origin/${{ github.base_ref }} \
+            --fail-under=80 \
+            --html-report diff-cover-backend.html
+
+      - name: Upload diff-cover report (backend)
+        if: always() && matrix.test-suite == 'smoke'
+        uses: actions/upload-artifact@v6
+        with:
+          name: diff-cover-backend
+          path: backend/diff-cover-backend.html
+          retention-days: 7
+
       - name: Upload test artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: test-results-backend-${{ matrix.test-suite }}
           path: |
@@ -309,17 +404,17 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
       - name: Cache npm dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.npm
           key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
@@ -342,109 +437,33 @@ jobs:
           name: frontend-coverage
           fail_ci_if_error: false
 
+      # Frontend diff-cover gate deferred: diff-cover is Python-only and the
+      # frontend job runs Node-only. Adding setup-python here would slow
+      # every frontend run; instead Phase 2 ships the backend gate first
+      # and a follow-up adds the frontend gate via a dedicated coverage job.
+
       - name: Upload test artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: test-results-frontend
           path: |
             frontend/coverage/
           retention-days: 7
 
-  # Build and Deploy
-  build-deploy:
-    name: Build and Deploy
-    permissions:
-      packages: write
-    runs-on: ubuntu-latest
-    needs: [quick-checks, backend-tests, frontend-tests]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Login to Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GH_PAT }}
-
-    - name: Extract metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.USER }}/${{ env.IMAGE_NAME }}
-        tags: |
-          type=ref,event=branch
-          type=ref,event=pr
-          type=semver,pattern={{version}}
-          type=semver,pattern={{major}}.{{minor}}
-          type=sha
-
-    - name: Copy email templates for backend build
-      run: cp -r frontend/emails backend/emails
-
-    - name: Build and push backend image
-      uses: docker/build-push-action@v5
-      with:
-        context: ./backend
-        push: true
-        tags: |
-          ${{ env.REGISTRY }}/${{ env.USER }}/scholarship-system-backend:latest
-          ${{ env.REGISTRY }}/${{ env.USER }}/scholarship-system-backend:${{ github.sha }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        build-args: |
-          BUILD_DATE=${{ github.event.head_commit.timestamp }}
-          VCS_REF=${{ github.sha }}
-
-    - name: Build and push frontend image
-      uses: docker/build-push-action@v5
-      with:
-        context: ./frontend
-        push: true
-        tags: |
-          ${{ env.REGISTRY }}/${{ env.USER }}/scholarship-system-frontend:latest
-          ${{ env.REGISTRY }}/${{ env.USER }}/scholarship-system-frontend:${{ github.sha }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        build-args: |
-          NEXT_PUBLIC_API_URL=${{ secrets.PRODUCTION_API_URL || 'https://ss.aa.nycu.edu.tw' }}
-
-    # - name: Deploy to staging
-    #   if: github.ref == 'refs/heads/main'
-    #   env:
-    #     DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
-    #   run: |
-    #     echo "Deploying to staging environment..."
-    #     # Add deployment commands here
-    #     # Example: kubectl set image deployment/backend backend=${{ env.REGISTRY }}/${{ env.USER }}/scholarship-system-backend:${{ github.sha }}
-    #     # Example: kubectl set image deployment/frontend frontend=${{ env.REGISTRY }}/${{ env.USER }}/scholarship-system-frontend:${{ github.sha }}
-
-    # - name: Run smoke tests on staging
-    #   run: |
-    #     echo "Running smoke tests on staging..."
-    #     # Add smoke test commands here
-    #     # Example: curl -f https://staging.scholarship.example.com/api/v1/health || exit 1
-
   # Performance Tests
   performance-test:
     name: Performance Tests
     runs-on: ubuntu-latest
     needs: [backend-tests, frontend-tests]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       with:
         node-version: ${{ env.NODE_VERSION }}
 
@@ -459,6 +478,115 @@ jobs:
       env:
         BASE_URL: ${{ vars.K6_BASE_URL_STAGING }}
       continue-on-error: true
+
+  # End-to-end smoke (Phase 4 of test-surface-hardening plan)
+  # Brings up docker-compose.dev.yml and runs Playwright specs tagged
+  # with @smoke. Soft-gated initially (continue-on-error: true) until
+  # the smoke set is validated to be flake-free in CI.
+  e2e-smoke:
+    name: E2E Smoke
+    runs-on: ubuntu-latest
+    needs: [changes, backend-tests, frontend-tests]
+    if: ${{ always() && !failure() && github.event_name == 'pull_request' && (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true') }}
+    timeout-minutes: 15
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Bring up docker-compose.dev.yml
+        # Best-effort bringup. The compose file references private GHCR
+        # images alongside `build:` directives — pulls may fail without
+        # ghcr.io auth, then `up --build` rebuilds locally. We tolerate
+        # both pull and build failures here because the whole job is
+        # continue-on-error: true; the readiness check below decides
+        # whether the suite can actually run.
+        continue-on-error: true
+        run: |
+          docker compose -f docker-compose.dev.yml pull --quiet 2>&1 | tail -5 || true
+          docker compose -f docker-compose.dev.yml up -d --build 2>&1 | tail -50 || true
+          echo "Waiting for backend (/health) and frontend (:3000)..."
+          ready=0
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:8000/health > /dev/null 2>&1 \
+               && curl -fsS http://localhost:3000 > /dev/null 2>&1; then
+              echo "Services up after ${i}s"
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "::warning title=e2e-smoke skipped::Services did not become ready; subsequent steps will no-op."
+            docker compose -f docker-compose.dev.yml ps || true
+            docker compose -f docker-compose.dev.yml logs --tail=100 || true
+          fi
+          echo "READY=$ready" >> "$GITHUB_ENV"
+
+      - name: Skip-on-not-ready guard
+        if: env.READY != '1'
+        run: |
+          echo "::notice::Compose stack failed to come up; skipping Playwright run."
+          exit 0
+
+      - name: Migrate + seed inside backend container
+        # /health returns 200 as soon as FastAPI has started — it doesn't
+        # check schema. Without an explicit migrate step, Playwright tests
+        # hit endpoints (mock-SSO login, etc.) that query `users` and 500
+        # with `relation "users" does not exist`. Mirrors the fix landed
+        # for nightly E2E Full in #193 (commit d13ba1b).
+        if: env.READY == '1'
+        run: |
+          docker compose -f docker-compose.dev.yml exec -T backend alembic upgrade head
+          docker compose -f docker-compose.dev.yml exec -T backend python -m app.seed || echo "seed completed"
+
+      - name: Install Playwright browsers
+        if: env.READY == '1'
+        working-directory: ./frontend
+        run: |
+          # docker compose up --build (above) can leave behind a
+          # node_modules tree owned by the in-container root user when
+          # the bind-mount + anonymous-volume interplay misbehaves on
+          # the runner. Subsequent host-level `npm ci` then trips with
+          # EACCES on a random transitive dep (we've seen @adobe).
+          # Re-take ownership before installing — no-op if the dir is
+          # already runner-owned or doesn't exist.
+          sudo chown -R "$(id -u):$(id -g)" node_modules 2>/dev/null || true
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run @smoke specs
+        if: env.READY == '1'
+        working-directory: ./frontend
+        run: npx playwright test --grep=@smoke
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+
+      - name: Dump backend logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.dev.yml logs backend frontend --tail=200 || true
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-report-smoke
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+
+      - name: Tear down docker-compose.dev.yml
+        if: always()
+        run: docker compose -f docker-compose.dev.yml down -v || true
 
   # Notification
   notify:

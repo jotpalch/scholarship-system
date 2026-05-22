@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { logger } from "@/lib/utils/logger";
 import dynamic from "next/dynamic";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CollegeManagementProvider, useCollegeManagement } from "@/contexts/college-management-context";
@@ -36,8 +37,8 @@ const RankingManagementPanel = dynamic(
   }
 );
 
-const DistributionPanel = dynamic(
-  () => import("./distribution/DistributionPanel").then(mod => ({ default: mod.DistributionPanel })),
+const ManualDistributionPanel = dynamic(
+  () => import("@/components/admin/manual-distribution/ManualDistributionPanel").then(mod => ({ default: mod.ManualDistributionPanel })),
   {
     loading: () => (
       <div className="flex items-center justify-center py-8">
@@ -91,7 +92,7 @@ function CollegeManagementContent({ user }: { user: User }) {
           setManagedCollege(response.data);
         }
       } catch (error) {
-        console.error("Failed to fetch managed college:", error);
+        logger.error("Failed to fetch managed college", { error: error });
       }
     };
     fetchManagedCollege();
@@ -116,8 +117,21 @@ function CollegeManagementContent({ user }: { user: User }) {
         const firstScholarshipType = availableOptions.scholarship_types[0].code;
         setActiveScholarshipTab(firstScholarshipType);
 
-        // Auto-select current academic year
-        const currentYear = academicConfig.currentYear;
+        // Auto-select an academic year that actually has data. The
+        // client-derived `academicConfig.currentYear` is a calendar guess
+        // (e.g. 民國 115 in 2026) and may not match any active scholarship
+        // configuration — landing on it leaves the user staring at an empty
+        // page with no deadline banner. Prefer the most recent year present
+        // in `availableOptions.academic_years`; fall back to the calendar
+        // guess only if availableOptions is empty.
+        const availableYears = availableOptions.academic_years || [];
+        const calendarYear = academicConfig.currentYear;
+        const currentYear =
+          availableYears.length === 0
+            ? calendarYear
+            : availableYears.includes(calendarYear)
+              ? calendarYear
+              : Math.max(...availableYears);
         setSelectedAcademicYear(currentYear);
 
         // FIXED: Select semester from available options (not blindly from current time)
@@ -305,57 +319,50 @@ function CollegeManagementContent({ user }: { user: User }) {
             value={scholarshipType.code}
             className="space-y-6"
           >
-            {/* 子 Tab - 申請審核、學生排序、獎學金分發 */}
-            <Tabs
-              value={activeTab}
-              onValueChange={setActiveTab}
-              className="w-full"
-            >
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="review" className="flex items-center gap-2">
-                  <GraduationCap className="h-4 w-4" />
-                  {locale === "zh" ? "申請審核" : "Application Review"}
-                </TabsTrigger>
-                <TabsTrigger
-                  value="ranking"
-                  className="flex items-center gap-2"
-                >
-                  <Trophy className="h-4 w-4" />
-                  {locale === "zh" ? "學生排序" : "Student Ranking"}
-                </TabsTrigger>
-                <TabsTrigger
-                  value="distribution"
-                  className="flex items-center gap-2"
-                >
-                  <Award className="h-4 w-4" />
-                  {locale === "zh" ? "獎學金分發" : "Distribution"}
-                </TabsTrigger>
-              </TabsList>
+            {/* admin/super_admin: 直接顯示分發面板，無需子 Tab */}
+            {(user.role === "admin" || user.role === "super_admin") ? (
+              <ManualDistributionPanel
+                user={user}
+                scholarshipType={scholarshipType}
+              />
+            ) : (
+              /* college: 申請審核 + 學生排序 子 Tab */
+              <Tabs
+                value={activeTab}
+                onValueChange={setActiveTab}
+                className="w-full"
+              >
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="review" className="flex items-center gap-2">
+                    <GraduationCap className="h-4 w-4" />
+                    {locale === "zh" ? "申請審核" : "Application Review"}
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="ranking"
+                    className="flex items-center gap-2"
+                  >
+                    <Trophy className="h-4 w-4" />
+                    {locale === "zh" ? "學生排序" : "Student Ranking"}
+                  </TabsTrigger>
+                </TabsList>
 
-              {/* 申請審核標籤頁 */}
-              <TabsContent value="review" className="space-y-6">
-                <ApplicationReviewPanel
-                  user={user}
-                  scholarshipType={scholarshipType}
-                />
-              </TabsContent>
+                {/* 申請審核標籤頁 */}
+                <TabsContent value="review" className="space-y-6">
+                  <ApplicationReviewPanel
+                    user={user}
+                    scholarshipType={scholarshipType}
+                  />
+                </TabsContent>
 
-              {/* 學生排序標籤頁 */}
-              <TabsContent value="ranking" className="space-y-6">
-                <RankingManagementPanel
-                  user={user}
-                  scholarshipType={scholarshipType}
-                />
-              </TabsContent>
-
-              {/* 獎學金分發標籤頁 */}
-              <TabsContent value="distribution" className="space-y-6">
-                <DistributionPanel
-                  user={user}
-                  scholarshipType={scholarshipType}
-                />
-              </TabsContent>
-            </Tabs>
+                {/* 學生排序標籤頁 */}
+                <TabsContent value="ranking" className="space-y-6">
+                  <RankingManagementPanel
+                    user={user}
+                    scholarshipType={scholarshipType}
+                  />
+                </TabsContent>
+              </Tabs>
+            )}
           </TabsContent>
         ))}
       </Tabs>
@@ -365,7 +372,7 @@ function CollegeManagementContent({ user }: { user: User }) {
 
 export function CollegeManagementShell({ user, locale = "zh" }: CollegeDashboardProps) {
   return (
-    <CollegeManagementProvider locale={locale}>
+    <CollegeManagementProvider locale={locale} userRole={user.role}>
       <CollegeManagementContent user={user} />
     </CollegeManagementProvider>
   );

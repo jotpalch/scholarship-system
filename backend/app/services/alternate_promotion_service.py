@@ -131,8 +131,8 @@ class AlternatePromotionService:
                 "checked_count": eligible_result["checked_count"],
             }
 
-        except Exception as e:
-            logger.error(f"Error in find_and_promote_alternate: {e}")
+        except Exception:
+            logger.exception("Error in find_and_promote_alternate")
             return None
 
     def _find_eligible_alternate(
@@ -177,7 +177,8 @@ class AlternatePromotionService:
                         CollegeRankingItem.ranking_id == ranking_id,
                         CollegeRankingItem.backup_allocations.isnot(None),
                         CollegeRankingItem.is_allocated.is_(False),  # Not already allocated
-                        CollegeRankingItem.status != "rejected",  # Not rejected
+                        CollegeRankingItem.status != "rejected",  # Not admin-rejected
+                        CollegeRankingItem.college_rejected.is_(False),  # Not college-N-rejected
                     )
                 )
                 .all()
@@ -270,6 +271,6 @@ class AlternatePromotionService:
             logger.info(f"No eligible alternate found after checking {checked_count} candidates")
             return {"ranking_item": None, "backup_position": None, "checked_count": checked_count}
 
-        except Exception as e:
-            logger.error(f"Error finding eligible alternate: {e}")
+        except Exception:
+            logger.exception("Error finding eligible alternate")
             return None

@@ -3,6 +3,7 @@ Scholarship Configuration Management API endpoints
 Clean, database-driven approach for dynamic scholarship configuration management
 """
 
+import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
+from app.core.cache import invalidate
 from app.core.security import require_admin, require_staff
 from app.db.deps import get_db
 
@@ -31,6 +33,8 @@ from app.schemas.scholarship_configuration import (
     WhitelistStudentInfo,
 )
 from app.services.whitelist_excel_service import whitelist_excel_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -71,7 +75,7 @@ async def get_user_accessible_scholarship_ids(user: User, db: AsyncSession) -> L
 @router.get("/available-semesters")
 async def get_available_semesters(
     scholarship_code: Optional[str] = Query(
-        None, description="Filter periods by specific scholarship code", regex=r"^[a-z_]{1,50}$"
+        None, description="Filter periods by specific scholarship code", pattern=r"^[a-z_]{1,50}$"
     ),
     quota_management_mode: Optional[str] = Query(
         None, description="Filter periods by quota management mode (e.g., 'matrix')"
@@ -177,17 +181,12 @@ async def get_available_semesters(
         )
 
     except Exception as e:
-        import logging
-        import traceback
-
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in get_available_semesters: {type(e).__name__}: {str(e)}", exc_info=True)
-        logger.error(f"Full traceback: {traceback.format_exc()}")
+        logger.error("Error in get_available_semesters: %s: %s", type(e).__name__, e, exc_info=True)
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve available semesters: {str(e)}",
-        )
+            detail="Failed to retrieve available semesters",
+        ) from e
 
 
 @router.get("/matrix-quota-status/{period}")
@@ -203,7 +202,12 @@ async def get_matrix_quota_status(
         if "-" in period:
             academic_year_str, semester_str = period.split("-")
             academic_year = int(academic_year_str)
-            semester = Semester.first if semester_str == "1" else Semester.second
+            # Per APP-ID format: 1=first, 2=second, 0=yearly. The previous
+            # binary check silently misclassified '0' (yearly) as Semester.second.
+            semester_map = {"1": Semester.first, "2": Semester.second, "0": Semester.yearly}
+            semester = semester_map.get(semester_str)
+            if semester is None:
+                raise ValueError(f"Invalid semester code: {semester_str}")
         else:
             academic_year = int(period)
             semester = None
@@ -359,17 +363,14 @@ async def get_matrix_quota_status(
 
         return ApiResponse(success=True, message="Matrix quota status retrieved successfully", data=response_data)
 
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}") from exc
     except Exception as e:
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in get_matrix_quota_status: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error("Error in get_matrix_quota_status: %s: %s", type(e).__name__, e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve matrix quota status: {str(e)}",
-        )
+            detail="Failed to retrieve matrix quota status",
+        ) from e
 
 
 @router.put("/matrix-quota")
@@ -465,6 +466,12 @@ async def update_matrix_quota(
         await db.commit()
         await db.refresh(config)
 
+        # Cache invalidation: matrix quota changes affect refdata + form-config
+        # surfaces. quota:* prefix is owned by PR 2 (quota_service caching).
+        await invalidate("refdata:")
+        await invalidate("formconfig:")
+        await invalidate("quota:")
+
         return ApiResponse(
             success=True,
             message=f"Matrix quota updated: {sub_type} - {college}: {old_quota} → {new_quota}",
@@ -482,13 +489,10 @@ async def update_matrix_quota(
 
     except Exception as e:
         await db.rollback()
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in update_matrix_quota: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error("Error in update_matrix_quota: %s: %s", type(e).__name__, e, exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update matrix quota: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update matrix quota"
+        ) from e
 
 
 @router.get("/colleges")
@@ -504,9 +508,10 @@ async def get_colleges(current_user: User = Depends(require_admin), db: AsyncSes
         return ApiResponse(success=True, message=f"Retrieved {len(colleges)} colleges", data=colleges)
 
     except Exception as e:
+        logger.exception("Failed to retrieve colleges")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve colleges: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve colleges"
+        ) from e
 
 
 @router.get("/scholarship-types")
@@ -568,9 +573,10 @@ async def get_scholarship_types(current_user: User = Depends(require_staff), db:
         return ApiResponse(success=True, message=f"Retrieved {len(type_configs)} scholarship types", data=type_configs)
 
     except Exception as e:
+        logger.exception("Failed to retrieve scholarship types")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve scholarship types: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve scholarship types"
+        ) from e
 
 
 @router.get("/overview/{period}")
@@ -586,7 +592,11 @@ async def get_quota_overview(
         if "-" in period:
             academic_year_str, semester_str = period.split("-")
             academic_year = int(academic_year_str)
-            semester = Semester.first if semester_str == "1" else Semester.second
+            # Per APP-ID format: 1=first, 2=second, 0=yearly.
+            semester_map = {"1": Semester.first, "2": Semester.second, "0": Semester.yearly}
+            semester = semester_map.get(semester_str)
+            if semester is None:
+                raise ValueError(f"Invalid semester code: {semester_str}")
         else:
             academic_year = int(period)
             semester = None
@@ -697,12 +707,13 @@ async def get_quota_overview(
 
         return ApiResponse(success=True, message="Quota overview retrieved successfully", data=overview_data)
 
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid period format: {period}") from exc
     except Exception as e:
+        logger.exception("Failed to retrieve quota overview")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve quota overview: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve quota overview"
+        ) from e
 
 
 # CRUD Endpoints for ScholarshipConfiguration Management
@@ -770,12 +781,17 @@ async def create_scholarship_configuration(
             effective_start_date=config_data.get("effective_start_date"),
             effective_end_date=config_data.get("effective_end_date"),
             version=config_data.get("version", "1.0"),
+            prior_quota_years=config_data.get("prior_quota_years"),
             created_by=current_user.id,
         )
 
         db.add(new_config)
         await db.commit()
         await db.refresh(new_config)
+
+        await invalidate("refdata:")
+        await invalidate("formconfig:")
+        await invalidate("quota:")
 
         return ApiResponse(
             success=True,
@@ -787,9 +803,10 @@ async def create_scholarship_configuration(
         raise
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to create configuration")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create configuration"
+        ) from e
 
 
 @router.get("/configurations/{id}")
@@ -839,6 +856,8 @@ async def get_scholarship_configuration(
             "quota_management_mode": config.quota_management_mode.value if config.quota_management_mode else "none",
             "total_quota": config.total_quota,
             "quotas": config.quotas,
+            "project_numbers": config.project_numbers,
+            "prior_quota_years": config.prior_quota_years,
             "renewal_application_start_date": (
                 config.renewal_application_start_date.isoformat() if config.renewal_application_start_date else None
             ),
@@ -883,9 +902,10 @@ async def get_scholarship_configuration(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("Failed to retrieve configuration")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve configuration"
+        ) from e
 
 
 @router.put("/configurations/{id}")
@@ -1002,11 +1022,27 @@ async def update_scholarship_configuration(
         if "quotas" in config_data:
             config.quotas = config_data["quotas"]
             flag_modified(config, "quotas")
+        if "prior_quota_years" in config_data:
+            pqy = config_data["prior_quota_years"]
+            # Frontend textarea may send as string; parse to dict
+            if isinstance(pqy, str):
+                import json as _json
+
+                try:
+                    pqy = _json.loads(pqy)
+                except (ValueError, TypeError):
+                    pqy = {}
+            config.prior_quota_years = pqy
+            flag_modified(config, "prior_quota_years")
 
         config.updated_by = current_user.id
 
         await db.commit()
         await db.refresh(config)
+
+        await invalidate("refdata:")
+        await invalidate("formconfig:")
+        await invalidate("quota:")
 
         return ApiResponse(
             success=True, message="配置更新成功", data={"id": config.id, "config_code": config.config_code}
@@ -1016,13 +1052,10 @@ async def update_scholarship_configuration(
         raise
     except Exception as e:
         await db.rollback()
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error in update_scholarship_configuration: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error("Error in update_scholarship_configuration: %s: %s", type(e).__name__, e, exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update configuration"
+        ) from e
 
 
 @router.delete("/configurations/{id}")
@@ -1058,6 +1091,10 @@ async def deactivate_scholarship_configuration(
 
         await db.commit()
 
+        await invalidate("refdata:")
+        await invalidate("formconfig:")
+        await invalidate("quota:")
+
         return ApiResponse(
             success=True, message="配置已停用", data={"id": config.id, "config_code": config.config_code}
         )
@@ -1066,9 +1103,10 @@ async def deactivate_scholarship_configuration(
         raise
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to deactivate configuration")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to deactivate configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to deactivate configuration"
+        ) from e
 
 
 @router.post("/configurations/{id}/duplicate")
@@ -1141,6 +1179,10 @@ async def duplicate_scholarship_configuration(
         await db.commit()
         await db.refresh(new_config)
 
+        await invalidate("refdata:")
+        await invalidate("formconfig:")
+        await invalidate("quota:")
+
         return ApiResponse(
             success=True, message="配置複製成功", data={"id": new_config.id, "config_code": new_config.config_code}
         )
@@ -1149,9 +1191,10 @@ async def duplicate_scholarship_configuration(
         raise
     except Exception as e:
         await db.rollback()
+        logger.exception("Failed to duplicate configuration")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to duplicate configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to duplicate configuration"
+        ) from e
 
 
 @router.get("/configurations")
@@ -1189,6 +1232,8 @@ async def list_scholarship_configurations(
                 conditions.append(ScholarshipConfiguration.semester == Semester.first)
             elif semester == "second":
                 conditions.append(ScholarshipConfiguration.semester == Semester.second)
+            elif semester == "yearly":
+                conditions.append(ScholarshipConfiguration.semester == Semester.yearly)
 
         # Execute query
         stmt = (
@@ -1223,6 +1268,8 @@ async def list_scholarship_configurations(
                 "quota_management_mode": config.quota_management_mode.value if config.quota_management_mode else "none",
                 "total_quota": config.total_quota,
                 "quotas": config.quotas,
+                "project_numbers": config.project_numbers,
+                "prior_quota_years": config.prior_quota_years,
                 "is_active": config.is_active,
                 "renewal_application_start_date": (
                     config.renewal_application_start_date.isoformat() if config.renewal_application_start_date else None
@@ -1275,9 +1322,10 @@ async def list_scholarship_configurations(
         return ApiResponse(success=True, message=f"Retrieved {len(config_list)} configurations", data=config_list)
 
     except Exception as e:
+        logger.exception("Failed to list configurations")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to list configurations: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to list configurations"
+        ) from e
 
 
 # Whitelist Management Endpoints
@@ -1389,6 +1437,9 @@ async def batch_add_whitelist(
 
     await db.commit()
 
+    # Whitelist mutations affect eligibility-driven reference UI.
+    await invalidate("refdata:")
+
     return ApiResponse(
         success=True,
         message=f"成功新增 {added_count} 位學生到白名單",
@@ -1432,6 +1483,8 @@ async def batch_remove_whitelist(
     config.updated_by = current_user.id
 
     await db.commit()
+
+    await invalidate("refdata:")
 
     return ApiResponse(success=True, message=f"成功移除 {removed_count} 位學生", data={"removed_count": removed_count})
 
@@ -1497,6 +1550,7 @@ async def import_whitelist_excel(
         flag_modified(config, "whitelist_student_ids")
         config.updated_by = current_user.id
         await db.commit()
+        await invalidate("refdata:")
 
     return ApiResponse(
         success=True,

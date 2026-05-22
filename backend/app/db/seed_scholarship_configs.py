@@ -70,6 +70,102 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             "effective_end_date": now + timedelta(days=90),
             "version": "1.0",
         },
+        # 學士班新生獎學金配置 (114-2)
+        {
+            "scholarship_type_id": undergrad_scholarship.id,
+            "config_code": "undergraduate_freshman_114_2",
+            "config_name": "學士班新生獎學金 114學年第二學期",
+            "academic_year": 114,
+            "semester": Semester.second,
+            "description": "114學年度第二學期學士班新生獎學金配置",
+            "description_en": "Undergraduate Freshman Scholarship Configuration for 114-2",
+            "has_quota_limit": False,
+            "has_college_quota": False,
+            "quota_management_mode": QuotaManagementMode.simple,
+            "total_quota": 50,
+            "amount": 10000,
+            "currency": "TWD",
+            "application_start_date": now - timedelta(days=30),
+            "application_end_date": now + timedelta(days=30),
+            "is_active": True,
+            "effective_start_date": now - timedelta(days=60),
+            "effective_end_date": now + timedelta(days=90),
+            "version": "1.0",
+        },
+        # 博士生獎學金配置 (112學年) - 前年度剩餘配額
+        {
+            "scholarship_type_id": phd_scholarship.id,
+            "config_code": "phd_112",
+            "config_name": "博士生獎學金 112學年",
+            "academic_year": 112,
+            "semester": None,  # 學年制
+            "description": "112學年度博士生獎學金配置（剩餘配額）",
+            "description_en": "PhD Scholarship Configuration for Academic Year 112 (Remaining Quota)",
+            "has_quota_limit": True,
+            "has_college_quota": True,
+            "quota_management_mode": QuotaManagementMode.matrix_based,
+            "total_quota": 15,
+            "quotas": {
+                "nstc": {
+                    "E": 2,
+                    "C": 1,
+                    "I": 1,
+                    "S": 1,
+                    "B": 1,
+                    "O": 1,
+                    "D": 1,
+                    "1": 1,
+                    "6": 1,
+                    "7": 1,
+                    "M": 1,
+                    "A": 1,
+                    "K": 1,
+                },
+            },
+            "amount": 40000,
+            "currency": "TWD",
+            "is_active": False,
+            "effective_start_date": now - timedelta(days=840),
+            "effective_end_date": now - timedelta(days=480),
+            "version": "1.0",
+        },
+        # 博士生獎學金配置 (113學年) - 前年度剩餘配額 (for prior-year quota testing)
+        {
+            "scholarship_type_id": phd_scholarship.id,
+            "config_code": "phd_113",
+            "config_name": "博士生獎學金 113學年",
+            "academic_year": 113,
+            "semester": None,  # 學年制
+            "description": "113學年度博士生獎學金配置（剩餘配額）",
+            "description_en": "PhD Scholarship Configuration for Academic Year 113 (Remaining Quota)",
+            "has_quota_limit": True,
+            "has_college_quota": True,
+            "quota_management_mode": QuotaManagementMode.matrix_based,
+            "total_quota": 30,
+            "quotas": {
+                "nstc": {
+                    "E": 3,
+                    "C": 2,
+                    "I": 2,
+                    "S": 1,
+                    "B": 1,
+                    "O": 1,
+                    "D": 1,
+                    "1": 1,
+                    "6": 1,
+                    "7": 1,
+                    "M": 1,
+                    "A": 1,
+                    "K": 1,
+                },
+            },
+            "amount": 40000,
+            "currency": "TWD",
+            "is_active": False,
+            "effective_start_date": now - timedelta(days=480),
+            "effective_end_date": now - timedelta(days=120),
+            "version": "1.0",
+        },
         # 博士生獎學金配置 (114學年) - Matrix Quota
         {
             "scholarship_type_id": phd_scholarship.id,
@@ -113,6 +209,17 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
                     "M": 4,
                     "A": 3,
                     "K": 1,
+                },
+            },
+            "prior_quota_years": {"nstc": [113, 112], "moe_1w": []},
+            "project_numbers": {
+                "nstc": {
+                    "114": "114R000001",
+                    "113": "113R000001",
+                    "112": "112R000001",
+                },
+                "moe_1w": {
+                    "114": "114E000001",
                 },
             },
             "amount": 40000,
@@ -175,6 +282,15 @@ async def seed_scholarship_configurations(session: AsyncSession) -> None:
             config = ScholarshipConfiguration(**config_data)
             session.add(config)
             logger.info(f"Created configuration: {config_data['config_code']}")
+        else:
+            # Update prior_quota_years on existing configs if provided in seed data
+            if "prior_quota_years" in config_data and existing.prior_quota_years != config_data["prior_quota_years"]:
+                existing.prior_quota_years = config_data["prior_quota_years"]
+                logger.info(f"Updated prior_quota_years for: {config_data['config_code']}")
+            # Update project_numbers on existing configs if provided in seed data
+            if "project_numbers" in config_data and existing.project_numbers != config_data["project_numbers"]:
+                existing.project_numbers = config_data["project_numbers"]
+                logger.info(f"Updated project_numbers for: {config_data['config_code']}")
 
     await session.commit()
     logger.info("Scholarship configurations initialized successfully!")
@@ -915,7 +1031,7 @@ async def seed_email_automation_rules(session: AsyncSession) -> None:
             "trigger_event": TriggerEvent.application_submitted,
             "template_key": "application_submitted_student",
             "delay_hours": 0,
-            "is_active": False,
+            "is_active": True,
             "condition_query": """
                 SELECT email FROM (
                     SELECT applications.student_data->>'com_email' as email
@@ -942,14 +1058,15 @@ async def seed_email_automation_rules(session: AsyncSession) -> None:
             "trigger_event": TriggerEvent.application_submitted,
             "template_key": "professor_review_notification",
             "delay_hours": 0,
-            "is_active": False,
+            "is_active": True,
             "condition_query": """
-                SELECT user_profiles.advisor_email as email
-                FROM applications
-                JOIN user_profiles ON applications.user_id = user_profiles.user_id
-                WHERE applications.id = {application_id}
-                AND user_profiles.advisor_email IS NOT NULL
-                AND user_profiles.advisor_email != ''
+                SELECT COALESCE(u.email, up.advisor_email) AS email
+                FROM applications a
+                LEFT JOIN users u ON u.id = a.professor_id
+                LEFT JOIN user_profiles up ON up.user_id = a.user_id
+                WHERE a.id = {application_id}
+                AND COALESCE(u.email, up.advisor_email) IS NOT NULL
+                AND COALESCE(u.email, up.advisor_email) != ''
             """,
         },
         {

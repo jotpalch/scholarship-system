@@ -1,9 +1,11 @@
+import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import require_admin
+from app.core.security import get_current_user, require_admin
 from app.db.deps import get_db
 from app.models.system_setting import ConfigCategory, ConfigDataType
 from app.models.user import User
@@ -16,6 +18,7 @@ from app.schemas.system_setting import (
 from app.services.config_management_service import ConfigurationService
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("")
@@ -75,9 +78,200 @@ async def get_all_configurations(
             "trace_id": None,
         }
     except Exception as e:
+        logger.exception("Failed to retrieve configurations")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configurations: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve configurations"
+        ) from e
+
+
+_ALLOWED_DOC_KEYS = {"regulations_url", "sample_document_url"}
+
+
+@router.get("/public-docs")
+async def get_public_docs(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return object_names for 獎學金要點 and 申請文件範例檔.
+    Accessible by any authenticated user.
+    """
+    from sqlalchemy import select
+
+    from app.models.system_setting import SystemSetting
+
+    keys = list(_ALLOWED_DOC_KEYS) + [f"{k}_filename" for k in _ALLOWED_DOC_KEYS]
+    stmt = select(SystemSetting).where(SystemSetting.key.in_(keys))
+    result = await db.execute(stmt)
+    rows = result.scalars().all()
+    data = {row.key: row.value for row in rows}
+    return {"success": True, "message": "OK", "data": data}
+
+
+@router.post("/upload/{doc_key}")
+async def upload_system_doc(
+    doc_key: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Upload a global system document (獎學金要點 or 申請文件範例檔). Admin only.
+    Stores object_name in system_settings under the given key.
+    """
+    import io
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from app.core.path_security import validate_upload_file
+    from app.models.system_setting import ConfigCategory, ConfigDataType, SystemSetting
+    from app.services.minio_service import minio_service
+
+    if doc_key not in _ALLOWED_DOC_KEYS:
+        raise HTTPException(status_code=400, detail=f"Invalid doc_key. Allowed: {_ALLOWED_DOC_KEYS}")
+
+    allowed_extensions = [".pdf", ".doc", ".docx"]
+    file_content = await file.read()
+    validate_upload_file(
+        filename=file.filename,
+        allowed_extensions=allowed_extensions,
+        max_size_mb=10,
+        file_size=len(file_content),
+        allow_unicode=True,
+    )
+
+    ext = ""
+    if file.filename:
+        for e in allowed_extensions:
+            if file.filename.lower().endswith(e):
+                ext = e
+                break
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    object_name = f"system-docs/{doc_key}_{timestamp}{ext}"
+
+    minio_service.client.put_object(
+        bucket_name=minio_service.default_bucket,
+        object_name=object_name,
+        data=io.BytesIO(file_content),
+        length=len(file_content),
+        content_type=file.content_type or "application/octet-stream",
+    )
+
+    original_filename = file.filename or ""
+    filename_key = f"{doc_key}_filename"
+
+    # Upsert object_name and original filename
+    stmt = select(SystemSetting).where(SystemSetting.key.in_([doc_key, filename_key]))
+    result = await db.execute(stmt)
+    existing = {row.key: row for row in result.scalars().all()}
+    previous_object = existing[doc_key].value if doc_key in existing else None
+
+    def _upsert(key: str, value: str, description: str) -> None:
+        row = existing.get(key)
+        if row:
+            row.value = value
+            row.last_modified_by = current_user.id
+        else:
+            db.add(
+                SystemSetting(
+                    key=key,
+                    value=value,
+                    category=ConfigCategory.file_storage,
+                    data_type=ConfigDataType.string,
+                    description=description,
+                    is_sensitive=False,
+                    is_readonly=False,
+                    allow_empty=True,
+                    last_modified_by=current_user.id,
+                )
+            )
+
+    main_desc = "獎學金要點" if doc_key == "regulations_url" else "申請文件範例檔"
+    _upsert(doc_key, object_name, main_desc)
+    _upsert(filename_key, original_filename, f"{main_desc} 原始檔名")
+
+    await db.commit()
+
+    if previous_object and previous_object != object_name:
+        try:
+            minio_service.client.remove_object(minio_service.default_bucket, previous_object)
+        except Exception:
+            logger.warning(
+                "Failed to remove orphaned MinIO system doc %s",
+                previous_object,
+                exc_info=True,
+            )
+
+    return {
+        "success": True,
+        "message": "上傳成功",
+        "data": {
+            "key": doc_key,
+            "object_name": object_name,
+            "original_filename": original_filename,
+        },
+    }
+
+
+@router.get("/file/{doc_key}")
+async def get_system_doc_file(
+    doc_key: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Proxy a global system document from MinIO. Any authenticated user."""
+    import io
+
+    from sqlalchemy import select
+
+    from app.models.system_setting import SystemSetting
+    from app.services.minio_service import minio_service
+
+    if doc_key not in _ALLOWED_DOC_KEYS:
+        raise HTTPException(status_code=400, detail="Invalid doc_key")
+
+    filename_key = f"{doc_key}_filename"
+    stmt = select(SystemSetting).where(SystemSetting.key.in_([doc_key, filename_key]))
+    result = await db.execute(stmt)
+    settings_map = {row.key: row.value for row in result.scalars().all()}
+
+    object_name = settings_map.get(doc_key)
+    if not object_name:
+        raise HTTPException(status_code=404, detail="文件尚未上傳")
+
+    try:
+        response = minio_service.client.get_object(
+            bucket_name=minio_service.default_bucket,
+            object_name=object_name,
         )
+        file_content = response.read()
+    except Exception as e:
+        logger.exception("無法取得文件")
+        raise HTTPException(status_code=500, detail="無法取得文件") from e
+
+    content_type = "application/pdf"
+    if object_name.endswith(".doc"):
+        content_type = "application/msword"
+    elif object_name.endswith(".docx"):
+        content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+    from urllib.parse import quote
+
+    download_name = settings_map.get(filename_key) or object_name.split("/")[-1]
+    encoded_name = quote(download_name, safe="")
+
+    return StreamingResponse(
+        io.BytesIO(file_content),
+        media_type=content_type,
+        headers={
+            "Content-Disposition": f"inline; filename*=UTF-8''{encoded_name}",
+            "Content-Length": str(len(file_content)),
+            "Accept-Ranges": "bytes",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.get("/{id}")
@@ -135,9 +329,10 @@ async def get_configuration(
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("Failed to retrieve configuration")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve configuration"
+        ) from e
 
 
 @router.post("")
@@ -187,6 +382,25 @@ async def create_configuration(
             "updated_at": new_configuration.updated_at,
         }
 
+        logger.info(
+            "system-configuration created: key=%s category=%s data_type=%s by user_id=%s",
+            new_configuration.key,
+            new_configuration.category,
+            new_configuration.data_type,
+            current_user.id,
+            extra={
+                "actor_user_id": current_user.id,
+                "actor_role": (
+                    current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+                ),
+                "config_key": new_configuration.key,
+                "config_category": str(new_configuration.category),
+                "config_data_type": str(new_configuration.data_type),
+                "is_sensitive": new_configuration.is_sensitive,
+                "value_len": len(new_configuration.value) if new_configuration.value else 0,
+            },
+        )
+
         return {
             "success": True,
             "message": "Configuration created successfully",
@@ -195,9 +409,14 @@ async def create_configuration(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to create configuration: {str(e)}"
+        logger.exception(
+            "system-configuration create failed: key=%s",
+            configuration.key,
+            extra={"actor_user_id": current_user.id, "config_key": configuration.key},
         )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create configuration"
+        ) from e
 
 
 @router.put("/{id}")
@@ -255,6 +474,22 @@ async def update_configuration(
             "updated_at": updated_configuration.updated_at,
         }
 
+        logger.info(
+            "system-configuration updated: key=%s by user_id=%s",
+            updated_configuration.key,
+            current_user.id,
+            extra={
+                "actor_user_id": current_user.id,
+                "actor_role": (
+                    current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+                ),
+                "config_key": updated_configuration.key,
+                "is_sensitive": updated_configuration.is_sensitive,
+                "previous_value_len": len(existing.value) if existing.value else 0,
+                "new_value_len": (len(updated_configuration.value) if updated_configuration.value else 0),
+            },
+        )
+
         return {
             "success": True,
             "message": "Configuration updated successfully",
@@ -263,9 +498,14 @@ async def update_configuration(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to update configuration: {str(e)}"
+        logger.exception(
+            "system-configuration update failed: key=%s",
+            id,
+            extra={"actor_user_id": current_user.id, "config_key": id},
         )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update configuration"
+        ) from e
 
 
 @router.delete("/{id}")
@@ -285,19 +525,43 @@ async def delete_configuration(
                 status_code=status.HTTP_404_NOT_FOUND, detail=f"Configuration with key '{id}' not found"
             )
 
+        # Capture pre-delete attrs so the audit row survives the row removal.
+        deleted_key = existing.key
+        deleted_category = str(existing.category)
+
         success = await config_service.delete_configuration(id, current_user.id)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete configuration"
             )
 
+        logger.info(
+            "system-configuration deleted: key=%s category=%s by user_id=%s",
+            deleted_key,
+            deleted_category,
+            current_user.id,
+            extra={
+                "actor_user_id": current_user.id,
+                "actor_role": (
+                    current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+                ),
+                "config_key": deleted_key,
+                "config_category": deleted_category,
+            },
+        )
+
         return {"message": "Configuration deleted successfully"}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete configuration: {str(e)}"
+        logger.exception(
+            "system-configuration delete failed: key=%s",
+            id,
+            extra={"actor_user_id": current_user.id, "config_key": id},
         )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete configuration"
+        ) from e
 
 
 @router.post("/validate")
@@ -326,9 +590,10 @@ async def validate_configuration(
             "data": response_data.model_dump() if hasattr(response_data, "model_dump") else response_data.dict(),
         }
     except Exception as e:
+        logger.exception("Failed to validate configuration")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to validate configuration: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to validate configuration"
+        ) from e
 
 
 @router.get("/categories")
@@ -416,6 +681,7 @@ async def get_configuration_audit_logs(
             "trace_id": None,
         }
     except Exception as e:
+        logger.exception("Failed to retrieve audit logs")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to retrieve audit logs: {str(e)}"
-        )
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve audit logs"
+        ) from e

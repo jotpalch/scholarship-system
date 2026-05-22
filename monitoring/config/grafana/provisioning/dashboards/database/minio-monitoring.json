@@ -15,7 +15,7 @@
       }
     ]
   },
-  "editable": true,
+  "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": null,
@@ -392,7 +392,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "rate(minio_s3_requests_total{environment=\"$environment\", vm=\"db-vm\"}[5m])",
+          "expr": "rate(minio_s3_requests_incoming_total{environment=\"$environment\", vm=\"db-vm\"}[5m])",
           "legendFormat": "{{api}}",
           "refId": "A"
         }
@@ -498,7 +498,7 @@
             "type": "prometheus",
             "uid": "prometheus-uid"
           },
-          "expr": "rate(minio_s3_requests_errors_total{environment=\"$environment\", vm=\"db-vm\"}[5m])",
+          "expr": "sum(rate(minio_s3_requests_rejected_auth_total{environment=\"$environment\", vm=\"db-vm\"}[5m]) + rate(minio_s3_requests_rejected_header_total{environment=\"$environment\", vm=\"db-vm\"}[5m]) + rate(minio_s3_requests_rejected_invalid_total{environment=\"$environment\", vm=\"db-vm\"}[5m]) + rate(minio_s3_requests_rejected_timestamp_total{environment=\"$environment\", vm=\"db-vm\"}[5m])) or vector(0)",
           "legendFormat": "{{api}} - errors",
           "refId": "A"
         }
@@ -757,7 +757,8 @@
           "uid": "prometheus-uid"
         },
         "definition": "label_values(up, environment)",
-        "refresh": 1
+        "refresh": 1,
+        "regex": "/^(?!monitoring).*$/"
       }
     ]
   },
@@ -769,6 +770,6 @@
   "timezone": "browser",
   "title": "MinIO Monitoring",
   "uid": "minio-monitoring",
-  "version": 1,
+  "version": 9,
   "weekStart": ""
 }

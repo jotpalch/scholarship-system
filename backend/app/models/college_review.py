@@ -144,12 +144,27 @@ class CollegeRankingItem(Base):
     # Status tracking
     status = Column(String(20), default="ranked")  # 'ranked', 'allocated', 'rejected', 'waitlisted'
 
+    # College-level rejection flag (independent of `status`).
+    # Set when college imports rank "N" for a student. Student remains in normal
+    # allocation flow (status stays 'ranked'); admin can still allocate if desired.
+    # Distinct from status='rejected' which excludes from alternate-promotion.
+    college_rejected = Column(Boolean, default=False, nullable=False, server_default="false")
+
     # Matrix distribution fields
     allocated_sub_type = Column(String(50), nullable=True)  # Sub-type code allocated to (e.g., 'nstc', 'moe_1w')
+    allocation_year = Column(
+        Integer, nullable=True
+    )  # Which academic year's quota was used (e.g., 113 for prior-year supplement)
     backup_position = Column(Integer, nullable=True)  # Backup position (NULL for admitted, 1, 2, 3... for backup)
     backup_allocations = Column(
-        JSONB, nullable=True
+        get_json_type(), nullable=True
     )  # Array of backup allocations: [{sub_type, backup_position, college, allocation_reason}, ...]
+
+    # Received months tracking
+    received_months = Column(Integer, nullable=True)  # Number of months already received
+    # "imported" when admin uploads an Excel; NULL otherwise (system-computed
+    # values are derived on read via received_months_service, not persisted).
+    received_months_source = Column(String(20), nullable=True)
 
     # Time tracking
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -225,6 +240,43 @@ class QuotaDistribution(Base):
         if not self.distribution_summary:
             return None
         return self.distribution_summary.get(sub_type)
+
+
+class ManualDistributionHistory(Base):
+    """
+    Historical record of manual distribution allocations
+
+    Tracks all changes to manual allocations, enabling undo/redo functionality
+    and maintaining an audit trail of distribution changes.
+    """
+
+    __tablename__ = "manual_distribution_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    scholarship_type_id = Column(Integer, ForeignKey("scholarship_types.id"), nullable=False)
+    academic_year = Column(Integer, nullable=False)
+    semester = Column(String(20), nullable=False)
+
+    # Snapshot of allocations at this point in time
+    # Format: {ranking_item_id: {sub_type: "nstc", allocation_year: 114, ...}, ...}
+    allocations_snapshot = Column(get_json_type(), nullable=False)
+
+    # Metadata
+    operation_type = Column(String(50), nullable=False)  # 'save', 'finalize', 'revert'
+    change_summary = Column(Text)  # Human-readable summary of changes
+    total_allocated = Column(Integer)  # Count of allocated students
+
+    # Time and user tracking
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_by = Column(Integer, ForeignKey("users.id"))
+
+    # Relationships
+    user = relationship("User", lazy="select", foreign_keys=[created_by])
+
+    def __repr__(self):
+        return (
+            f"<ManualDistributionHistory(id={self.id}, type_id={self.scholarship_type_id}, year={self.academic_year})>"
+        )
 
 
 # PostgreSQL-optimized indexes for college ranking tables

@@ -5,7 +5,7 @@ Handles real JWT token verification with Portal JWT server
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 import httpx
@@ -101,15 +101,15 @@ class PortalSSOService:
                     logger.error(f"Invalid portal response format: {portal_data}")
                     raise AuthenticationError("Invalid portal response format")
 
-        except httpx.TimeoutException:
+        except httpx.TimeoutException as exc:
             logger.error("Portal JWT verification timeout")
-            raise AuthenticationError("Portal verification timeout")
+            raise AuthenticationError("Portal verification timeout") from exc
         except httpx.RequestError as e:
-            logger.error(f"Portal JWT verification request error: {e}")
-            raise AuthenticationError("Portal verification failed")
-        except json.JSONDecodeError:
+            logger.exception("Portal JWT verification request error")
+            raise AuthenticationError("Portal verification failed") from e
+        except json.JSONDecodeError as exc:
             logger.error("Portal JWT verification returned invalid JSON")
-            raise AuthenticationError("Invalid portal response")
+            raise AuthenticationError("Invalid portal response") from exc
 
     def _validate_portal_response(self, data: Dict) -> bool:
         """Validate portal response contains required fields"""
@@ -142,8 +142,8 @@ class PortalSSOService:
                 logger.info(f"User {nycu_id} not found in Student API")
                 return False, None
 
-        except Exception as e:
-            logger.error(f"Error verifying student status for {nycu_id}: {str(e)}")
+        except Exception:
+            logger.exception(f"Error verifying student status for {nycu_id}")
             return False, None
 
     def _get_test_portal_data(self) -> Dict:
@@ -231,7 +231,7 @@ class PortalSSOService:
         )
 
         # Update last login time
-        user.last_login_at = datetime.utcnow()
+        user.last_login_at = datetime.now(timezone.utc)
         await self.db.commit()
 
         # Generate system tokens with debug data

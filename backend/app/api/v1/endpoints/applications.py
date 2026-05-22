@@ -2,10 +2,12 @@
 Application management API endpoints
 """
 
+import enum
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, Request, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, Request, Response, UploadFile, status
+from sqlalchemy import inspect as sa_inspect
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +32,24 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _serialize_result(result):
+    """Serialize a Pydantic model, dict, or SQLAlchemy model to dict."""
+    if isinstance(result, dict):
+        return result
+    if hasattr(result, "model_dump"):
+        return result.model_dump()
+    if hasattr(result, "dict"):
+        return result.dict()
+    # SQLAlchemy model fallback — extract column values only (no relationship loading)
+    try:
+        mapper = sa_inspect(type(result))
+        return {
+            c.key: (v.value if isinstance(v := getattr(result, c.key), enum.Enum) else v) for c in mapper.column_attrs
+        }
+    except Exception as exc:
+        raise TypeError(f"Cannot serialize {type(result).__name__}: {exc}") from exc
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_application(
     application_data: ApplicationCreate,
@@ -37,6 +57,7 @@ async def create_application(
     current_user: User = Depends(require_student),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
+    response: Response = None,
 ):
     """Create a new scholarship application (draft or submitted)"""
     logger.debug(f"Received application creation request from user: {current_user.id}, is_draft: {is_draft}")
@@ -73,7 +94,6 @@ async def create_application(
                 detail={
                     "message": "Scholarship type is required",
                     "error_code": "MISSING_SCHOLARSHIP_TYPE",
-                    "received_data": application_data.dict(exclude_none=True),
                 },
             )
 
@@ -86,7 +106,6 @@ async def create_application(
                 detail={
                     "message": "Form data is required",
                     "error_code": "MISSING_FORM_DATA",
-                    "received_data": application_data.dict(exclude_none=True),
                 },
             )
 
@@ -96,17 +115,14 @@ async def create_application(
             application_data.form_data.dict()
             logger.debug("Form data validated successfully")
         except Exception as e:
-            logger.error(f"Form data validation failed: {str(e)}")
-            # Do not log raw form data as it may contain sensitive information
+            logger.exception("Form data validation failed")
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={
                     "message": "Invalid form data structure",
                     "error_code": "INVALID_FORM_DATA",
-                    "error": str(e),
-                    "received_form_data": str(application_data.form_data),
                 },
-            )
+            ) from e
 
         # Get scholarship configuration to extract scholarship_type_id, academic_year, semester
         logger.debug(f"Fetching scholarship configuration: {application_data.configuration_id}")
@@ -137,10 +153,10 @@ async def create_application(
 
         # 排除已撤回/拒絕/取消/刪除的申請
         excluded_statuses = [
-            ApplicationStatus.withdrawn.value,
-            ApplicationStatus.rejected.value,
-            ApplicationStatus.cancelled.value,
-            ApplicationStatus.deleted.value,  # 允許刪除後重新申請
+            ApplicationStatus.withdrawn,
+            ApplicationStatus.rejected,
+            ApplicationStatus.cancelled,
+            ApplicationStatus.deleted,
         ]
 
         # 查詢是否已有申請 - using values from scholarship configuration
@@ -157,11 +173,39 @@ async def create_application(
         existing_application = duplicate_result.scalar_one_or_none()
 
         if existing_application:
+            existing_status = existing_application.status
+            existing_status_str = existing_status.value if hasattr(existing_status, "value") else existing_status
+
+            # If existing application is a draft, return it so frontend can continue
+            if existing_status == ApplicationStatus.draft:
+                logger.info(
+                    f"Returning existing draft application: user_id={current_user.id}, "
+                    f"app_id={existing_application.app_id}"
+                )
+                if response:
+                    response.status_code = 200
+                return {
+                    "success": True,
+                    "message": "已返回現有草稿",
+                    "data": {
+                        "id": existing_application.id,
+                        "app_id": existing_application.app_id,
+                        "status": existing_status_str,
+                        "scholarship_type_id": existing_application.scholarship_type_id,
+                        "academic_year": existing_application.academic_year,
+                        "semester": (
+                            existing_application.semester.value
+                            if hasattr(existing_application.semester, "value")
+                            else existing_application.semester
+                        ),
+                    },
+                }
+
             logger.warning(
                 f"Duplicate application detected: user_id={current_user.id}, "
                 f"scholarship_type_id={scholarship_config.scholarship_type_id}, "
                 f"existing_app_id={existing_application.app_id}, "
-                f"status={existing_application.status}"
+                f"status={existing_status}"
             )
             return {
                 "success": False,
@@ -170,7 +214,7 @@ async def create_application(
                     "error_code": "DUPLICATE_APPLICATION",
                     "existing_application_id": existing_application.id,
                     "existing_app_id": existing_application.app_id,
-                    "existing_status": existing_application.status,
+                    "existing_status": existing_status_str,
                     "scholarship_name": existing_application.scholarship_name,
                 },
             }
@@ -210,7 +254,7 @@ async def create_application(
         }
 
     except ValidationError as e:
-        logger.error(f"Validation error: {str(e)}")
+        logger.exception("Validation error")
         if hasattr(e, "errors"):
             logger.debug(f"Validation error details: {[error.get('loc', []) for error in e.errors()]}")
         raise HTTPException(
@@ -219,38 +263,30 @@ async def create_application(
                 "message": "Validation error",
                 "error_code": "VALIDATION_ERROR",
                 "errors": e.errors() if hasattr(e, "errors") else str(e),
-                "received_data": application_data.dict(exclude_none=True),
             },
-        )
+        ) from e
     except HTTPException:
         # Re-raise HTTPException directly as they are already properly formatted
         raise
     except IntegrityError as e:
-        logger.error(f"Database integrity error during application creation: {str(e)}")
-        # Check for specific constraint violations if needed, e.g., unique constraint
+        logger.exception("Database integrity error during application creation")
         if "duplicate key value violates unique constraint" in str(e):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
                     "message": "Duplicate entry: An application with these details already exists.",
                     "error_code": "DUPLICATE_ENTRY",
-                    "detail": str(e),
                 },
-            )
+            ) from e
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "message": "A database integrity error occurred.",
                 "error_code": "DATABASE_INTEGRITY_ERROR",
-                "detail": str(e),
             },
-        )
+        ) from e
     except Exception as e:
-        logger.error(f"Unexpected error during application creation: {str(e)}")
-        import traceback
-
-        error_trace = traceback.format_exc()
-        logger.debug(f"Full traceback: {error_trace}")
+        logger.exception("Unexpected error during application creation")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
@@ -258,7 +294,7 @@ async def create_application(
                 "error_code": "UNEXPECTED_ERROR",
                 "error_type": type(e).__name__,
             },
-        )
+        ) from e
 
 
 @router.get("")
@@ -273,7 +309,7 @@ async def get_my_applications(
     return {
         "success": True,
         "message": "查詢成功",
-        "data": [item.dict() if hasattr(item, "dict") else item.model_dump() for item in result],
+        "data": [_serialize_result(item) for item in result],
     }
 
 
@@ -285,7 +321,7 @@ async def get_dashboard_stats(current_user: User = Depends(require_student), db:
     return {
         "success": True,
         "message": "查詢成功",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": _serialize_result(result),
     }
 
 
@@ -312,7 +348,7 @@ async def get_application(
     return {
         "success": True,
         "message": "查詢成功",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": _serialize_result(result),
     }
 
 
@@ -347,7 +383,7 @@ async def update_application(
     return {
         "success": True,
         "message": "更新成功",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": _serialize_result(result),
     }
 
 
@@ -374,7 +410,7 @@ async def submit_application(
     return {
         "success": True,
         "message": "申請已提交",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": _serialize_result(result),
     }
 
 
@@ -424,8 +460,8 @@ async def delete_application(
                 else deleted_app.model_dump() if hasattr(deleted_app, "model_dump") else {"id": id}
             ),
         }
-    except Exception as e:
-        logger.error(f"Error deleting application {id}: {str(e)}")
+    except Exception:
+        logger.exception(f"Error deleting application {id}")
         raise
 
 
@@ -452,7 +488,7 @@ async def withdraw_application(
     return {
         "success": True,
         "message": "申請已撤回",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": _serialize_result(result),
     }
 
 
@@ -504,7 +540,7 @@ async def restore_application(
                 else status.HTTP_404_NOT_FOUND if isinstance(e, NotFoundError) else status.HTTP_403_FORBIDDEN
             ),
             detail=str(e),
-        )
+        ) from e
 
 
 @router.get("/{id}/files")
@@ -612,7 +648,7 @@ async def get_applications_for_review(
     return {
         "success": True,
         "message": "查詢成功",
-        "data": [item.dict() if hasattr(item, "dict") else item.model_dump() for item in result],
+        "data": [_serialize_result(item) for item in result],
     }
 
 
@@ -646,16 +682,6 @@ async def update_application_status(
     # Update status
     result = await service.update_application_status(id, current_user, status_update)
 
-    # Check and execute auto-redistribution if status changed to approved/rejected
-    redistribution_info = {"auto_redistributed": False}
-    if status_update.status in ["approved", "rejected"]:
-        from app.services.college_review_service import CollegeReviewService
-
-        review_service = CollegeReviewService(db)
-        redistribution_info = await review_service.auto_redistribute_after_status_change(
-            application_id=id, executor_id=current_user.id
-        )
-
     # Log audit trail for status update
     audit_service = ApplicationAuditService(db)
     await audit_service.log_status_update(
@@ -668,15 +694,11 @@ async def update_application_status(
         request=request,
     )
 
-    # Prepare result data with redistribution info
     result_dict = result.model_dump() if hasattr(result, "model_dump") else result.dict()
     return {
         "success": True,
         "message": "狀態已更新",
-        "data": {
-            **result_dict,
-            "redistribution_info": redistribution_info,
-        },
+        "data": result_dict,
     }
 
 
@@ -715,7 +737,7 @@ async def submit_professor_review(
     return {
         "success": True,
         "message": "審查已提交",
-        "data": result.dict() if hasattr(result, "dict") else result.model_dump(),
+        "data": _serialize_result(result),
     }
 
 
@@ -745,7 +767,7 @@ async def get_college_applications_for_review(
     return {
         "success": True,
         "message": "查詢成功",
-        "data": [item.dict() if hasattr(item, "dict") else item.model_dump() for item in result],
+        "data": [_serialize_result(item) for item in result],
     }
 
 
@@ -802,7 +824,7 @@ async def update_student_data(
                 else status.HTTP_404_NOT_FOUND if isinstance(e, NotFoundError) else status.HTTP_403_FORBIDDEN
             ),
             detail=str(e),
-        )
+        ) from e
 
 
 @router.get("/{id}/student-data")
@@ -860,8 +882,8 @@ async def get_application_audit_trail(
     service = ApplicationService(db)
     try:
         await service.get_application_by_id(id, current_user)
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found") from exc
 
     # Get audit trail
     audit_service = ApplicationAuditService(db)
@@ -895,3 +917,222 @@ async def get_application_audit_trail(
         "message": f"Retrieved {len(formatted_logs)} audit log entries",
         "data": formatted_logs,
     }
+
+
+@router.post("/{application_id}/application-document")
+async def upload_application_document(
+    application_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_student),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload 申請文件 for a specific application (student only, must own the application)."""
+    import io
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from app.core.path_security import validate_upload_file
+    from app.models.application import Application
+    from app.services.minio_service import minio_service
+
+    # Fetch and authorize
+    stmt = select(Application).where(
+        Application.id == application_id,
+        Application.user_id == current_user.id,
+        Application.deleted_at.is_(None),
+    )
+    result = await db.execute(stmt)
+    application = result.scalar_one_or_none()
+    if not application:
+        raise HTTPException(status_code=404, detail="申請單不存在或無權限")
+
+    if not application.is_editable:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="申請已送出，無法修改申請文件",
+        )
+
+    allowed_extensions = [".pdf", ".jpg", ".jpeg", ".png", ".doc", ".docx"]
+    file_content = await file.read()
+    validate_upload_file(
+        filename=file.filename,
+        allowed_extensions=allowed_extensions,
+        max_size_mb=10,
+        file_size=len(file_content),
+        allow_unicode=True,
+    )
+
+    ext = ""
+    if file.filename:
+        for e in allowed_extensions:
+            if file.filename.lower().endswith(e):
+                ext = e
+                break
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    object_name = f"application-documents/{application_id}_{timestamp}{ext}"
+
+    minio_service.client.put_object(
+        bucket_name=minio_service.default_bucket,
+        object_name=object_name,
+        data=io.BytesIO(file_content),
+        length=len(file_content),
+        content_type=file.content_type or "application/octet-stream",
+    )
+
+    previous_object = application.application_document_url
+    application.application_document_url = object_name
+    application.application_document_original_filename = file.filename or ""
+    await db.commit()
+
+    if previous_object and previous_object != object_name:
+        try:
+            minio_service.client.remove_object(minio_service.default_bucket, previous_object)
+        except Exception:
+            logger.warning(
+                "Failed to remove orphaned MinIO object %s for application %s",
+                previous_object,
+                application_id,
+                exc_info=True,
+            )
+
+    return {
+        "success": True,
+        "message": "申請文件上傳成功",
+        "data": {
+            "application_document_url": object_name,
+            "application_document_original_filename": application.application_document_original_filename,
+        },
+    }
+
+
+@router.get("/{application_id}/application-document")
+async def get_application_document_file(
+    application_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream the 申請文件 from MinIO. Owner or staff can access."""
+    import io
+
+    from fastapi.responses import StreamingResponse
+    from sqlalchemy import select
+
+    from app.models.application import Application
+    from app.services.minio_service import minio_service
+
+    stmt = select(Application).where(
+        Application.id == application_id,
+        Application.deleted_at.is_(None),
+    )
+    result = await db.execute(stmt)
+    application = result.scalar_one_or_none()
+    if not application:
+        raise HTTPException(status_code=404, detail="申請單不存在")
+
+    # Authorization: owner OR staff/admin/professor/college
+    from app.models.user import UserRole
+
+    is_owner = application.user_id == current_user.id
+    is_staff = current_user.role in (
+        UserRole.admin,
+        UserRole.super_admin,
+        UserRole.professor,
+        UserRole.college,
+    )
+    if not is_owner and not is_staff:
+        raise HTTPException(status_code=403, detail="無權限")
+
+    if not application.application_document_url:
+        raise HTTPException(status_code=404, detail="申請文件不存在")
+
+    object_name = application.application_document_url
+
+    try:
+        response = minio_service.client.get_object(
+            bucket_name=minio_service.default_bucket,
+            object_name=object_name,
+        )
+        file_content = response.read()
+    except Exception as e:
+        logger.exception(
+            "Failed to fetch application document from MinIO",
+            extra={"application_id": application.id, "object_name": object_name},
+        )
+        raise HTTPException(status_code=500, detail="無法取得文件") from e
+
+    content_type = "application/octet-stream"
+    lower = object_name.lower()
+    if lower.endswith(".pdf"):
+        content_type = "application/pdf"
+    elif lower.endswith(".png"):
+        content_type = "image/png"
+    elif lower.endswith(".jpg") or lower.endswith(".jpeg"):
+        content_type = "image/jpeg"
+    elif lower.endswith(".doc"):
+        content_type = "application/msword"
+    elif lower.endswith(".docx"):
+        content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+    from urllib.parse import quote
+
+    download_name = application.application_document_original_filename or object_name.split("/")[-1]
+    encoded_name = quote(download_name, safe="")
+    return StreamingResponse(
+        io.BytesIO(file_content),
+        media_type=content_type,
+        headers={
+            "Content-Disposition": f"inline; filename*=UTF-8''{encoded_name}",
+            "Content-Length": str(len(file_content)),
+            "Accept-Ranges": "bytes",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.delete("/{application_id}/application-document")
+async def delete_application_document(
+    application_id: int,
+    current_user: User = Depends(require_student),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete 申請文件 for a specific application."""
+    from sqlalchemy import select
+
+    from app.models.application import Application
+    from app.services.minio_service import minio_service
+
+    stmt = select(Application).where(
+        Application.id == application_id,
+        Application.user_id == current_user.id,
+        Application.deleted_at.is_(None),
+    )
+    result = await db.execute(stmt)
+    application = result.scalar_one_or_none()
+    if not application:
+        raise HTTPException(status_code=404, detail="申請單不存在或無權限")
+
+    if not application.is_editable:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="申請已送出，無法刪除申請文件",
+        )
+
+    previous_object = application.application_document_url
+    application.application_document_url = None
+    application.application_document_original_filename = None
+    await db.commit()
+
+    if previous_object:
+        try:
+            minio_service.client.remove_object(minio_service.default_bucket, previous_object)
+        except Exception:
+            logger.warning(
+                "Failed to remove MinIO object %s after delete for application %s",
+                previous_object,
+                application_id,
+                exc_info=True,
+            )
+
+    return {"success": True, "message": "申請文件已刪除", "data": None}

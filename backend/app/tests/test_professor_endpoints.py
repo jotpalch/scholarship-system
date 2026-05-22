@@ -17,7 +17,9 @@ from app.api.v1.endpoints.professor import (
     submit_professor_review,
 )
 from app.models.user import User, UserRole
-from app.schemas.application import ApplicationListResponse, ProfessorReviewCreate, ProfessorReviewItemCreate
+
+# ProfessorReviewCreate/ItemCreate removed; unified review schema now in app.schemas.review
+from app.schemas.application import ApplicationListResponse
 from app.schemas.common import PaginatedResponse
 
 
@@ -234,24 +236,12 @@ class TestProfessorReviewEndpoints:
         request.client.host = "127.0.0.1"
         return request
 
-    @pytest.fixture
-    def sample_review_create(self):
-        """Sample review creation data"""
-        return ProfessorReviewCreate(
-            recommendation="Student demonstrates excellent academic performance",
-            items=[
-                ProfessorReviewItemCreate(
-                    sub_type_code="nstc",
-                    is_recommended=True,
-                    comments="Highly recommended for NSTC scholarship",
-                ),
-                ProfessorReviewItemCreate(
-                    sub_type_code="moe_1w",
-                    is_recommended=False,
-                    comments="Does not meet MOE requirements",
-                ),
-            ],
-        )
+    # NOTE: `sample_review_create` fixture removed alongside the
+    # ProfessorReviewCreate / ProfessorReviewItemCreate schemas during the
+    # unified-review-schema refactor (see app.schemas.review). The
+    # `test_create_professor_review_success` test that consumed it has
+    # already been removed; the fixture itself was the only remaining F821
+    # reference.
 
     @pytest.mark.asyncio
     async def test_get_professor_review_success(self, mock_professor, mock_db_session, mock_request):
@@ -351,7 +341,7 @@ class TestProfessorReviewEndpoints:
             mock_service.submit_professor_review.assert_called_once_with(
                 application_id=10,
                 professor_id=1,
-                review_data=sample_review_create.dict(),
+                review_data=sample_review_create.model_dump(),
             )
 
     @pytest.mark.asyncio

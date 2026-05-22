@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
+import { logger } from "@/lib/utils/logger";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -60,7 +61,7 @@ interface User {
   raw_data?: {
     chinese_name?: string;
     english_name?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -129,7 +130,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
       const response = await apiClient.admin.getHistoricalApplications(filters);
 
       if (response.success && response.data) {
-        const applications = response.data.items || [];
+        const applications = (response.data.items || []) as HistoricalApplication[];
         setHistoricalApplications(applications);
 
         setHistoricalApplicationsPagination({
@@ -143,11 +144,12 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
         const errorMsg = response.message || "獲取歷史申請失敗";
         setHistoricalApplicationsError(errorMsg);
       }
-    } catch (error: any) {
-      console.error("獲取歷史申請資料失敗:", error);
+    } catch (error: unknown) {
+      logger.error("獲取歷史申請資料失敗", { error: error });
+      const errShape = error as { message?: string; response?: { data?: { message?: string } } };
       const errorMsg =
-        error?.message ||
-        error?.response?.data?.message ||
+        errShape.message ||
+        errShape.response?.data?.message ||
         "網路錯誤或伺服器未回應";
       setHistoricalApplicationsError(errorMsg);
     } finally {
@@ -179,7 +181,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
         });
 
         if (response.success && response.data) {
-          const pageApplications = response.data.items || [];
+          const pageApplications = (response.data.items || []) as HistoricalApplication[];
           allApplications = [...allApplications, ...pageApplications];
 
           // 檢查是否還有更多數據
@@ -209,7 +211,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
         setActiveHistoricalTab("all"); // 保持全部為默認
       }
     } catch (error) {
-      console.error("獲取歷史申請 tab 資料失敗:", error);
+      logger.error("獲取歷史申請 tab 資料失敗", { error: error });
     }
   }, [user, activeHistoricalTab]);
 
@@ -437,6 +439,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                         <TableRow>
                           <TableHead>申請編號</TableHead>
                           <TableHead>學生資訊</TableHead>
+                          <TableHead>國籍/身分</TableHead>
                           <TableHead>獎學金類型</TableHead>
                           <TableHead>學年度/學期</TableHead>
                           <TableHead>狀態</TableHead>
@@ -449,7 +452,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                         {historicalApplications.length === 0 ? (
                           <TableRow>
                             <TableCell
-                              colSpan={8}
+                              colSpan={9}
                               className="text-center py-8 text-gray-500"
                             >
                               沒有找到符合條件的申請記錄
@@ -475,6 +478,26 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                     </div>
                                   )}
                                 </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="text-sm">
+                                  {application.student_nationality || "-"}
+                                </div>
+                                {application.student_identity != null && (
+                                  <div className="text-xs text-gray-500">
+                                    {(() => {
+                                      const idMap: Record<number, string> = {
+                                        1: "本國生",
+                                        2: "僑生",
+                                        3: "外籍生",
+                                        4: "陸生",
+                                        5: "港澳生",
+                                        6: "外籍交換生",
+                                      };
+                                      return idMap[application.student_identity!] || `身分別 ${application.student_identity}`;
+                                    })()}
+                                  </div>
+                                )}
                               </TableCell>
                               <TableCell>
                                 <div>
@@ -505,7 +528,9 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                                     <div className="text-xs text-gray-500">
                                       {application.semester === "first"
                                         ? "第一學期"
-                                        : "第二學期"}
+                                        : application.semester === "second"
+                                          ? "第二學期"
+                                          : "全年"}
                                     </div>
                                   )}
                                 </div>
@@ -752,6 +777,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                       <TableRow>
                         <TableHead>申請編號</TableHead>
                         <TableHead>學生資訊</TableHead>
+                        <TableHead>國籍/身分</TableHead>
                         <TableHead>學年度/學期</TableHead>
                         <TableHead>狀態</TableHead>
                         <TableHead>申請時間</TableHead>
@@ -764,7 +790,7 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                       0 ? (
                         <TableRow>
                           <TableCell
-                            colSpan={7}
+                            colSpan={8}
                             className="text-center py-8 text-gray-500"
                           >
                             沒有找到 {scholarshipType} 的申請記錄
@@ -794,12 +820,34 @@ export function HistoryPanel({ user }: HistoryPanelProps) {
                               </TableCell>
                               <TableCell>
                                 <div className="text-sm">
+                                  {application.student_nationality || "-"}
+                                </div>
+                                {application.student_identity != null && (
+                                  <div className="text-xs text-gray-500">
+                                    {(() => {
+                                      const idMap: Record<number, string> = {
+                                        1: "本國生",
+                                        2: "僑生",
+                                        3: "外籍生",
+                                        4: "陸生",
+                                        5: "港澳生",
+                                        6: "外籍交換生",
+                                      };
+                                      return idMap[application.student_identity!] || `身分別 ${application.student_identity}`;
+                                    })()}
+                                  </div>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <div className="text-sm">
                                   {application.academic_year}學年度
                                   {application.semester && (
                                     <div className="text-xs text-gray-500">
                                       {application.semester === "first"
                                         ? "第一學期"
-                                        : "第二學期"}
+                                        : application.semester === "second"
+                                          ? "第二學期"
+                                          : "全年"}
                                     </div>
                                   )}
                                 </div>

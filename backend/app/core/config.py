@@ -7,7 +7,7 @@ import os
 from typing import List, Optional
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -99,6 +99,13 @@ class Settings(BaseSettings):
     enable_metrics: bool = True  # Enable/disable Prometheus metrics collection
     metrics_include_endpoint_labels: bool = True  # Include detailed endpoint labels
     metrics_include_business_metrics: bool = True  # Include business-specific metrics
+
+    # PII encryption (issue #73)
+    # JSON map of {version: base64url 32-byte key}, e.g. '{"v1": "..."}'.
+    # In production this is populated by a KMS sidecar at boot; in development
+    # an empty value triggers a deterministic dev key in pii_crypto.py.
+    pii_encryption_keys: str = ""
+    pii_encryption_active_version: str = "v1"
 
     # Mock SSO for development
     enable_mock_sso: bool = True
@@ -226,7 +233,16 @@ class Settings(BaseSettings):
     @classmethod
     def create_upload_directory(cls, v: str) -> str:
         """Ensure upload directory exists"""
-        os.makedirs(v, exist_ok=True)
+        import sys
+
+        # Skip directory creation during Alembic migrations or when directory is not writable
+        try:
+            if "alembic" not in sys.argv:
+                os.makedirs(v, exist_ok=True)
+        except OSError:
+            # If we can't create the directory, just skip it
+            # This happens during Alembic migrations when running as non-root user
+            pass
         return v
 
     @property
@@ -259,14 +275,20 @@ class Settings(BaseSettings):
     @classmethod
     def create_roster_template_directory(cls, v: str) -> str:
         """Ensure roster template directory exists"""
-        os.makedirs(v, exist_ok=True)
+        try:
+            os.makedirs(v, exist_ok=True)
+        except OSError:
+            pass
         return v
 
     @field_validator("roster_export_dir", mode="before")
     @classmethod
     def create_roster_export_directory(cls, v: str) -> str:
         """Ensure roster export directory exists"""
-        os.makedirs(v, exist_ok=True)
+        try:
+            os.makedirs(v, exist_ok=True)
+        except OSError:
+            pass
         return v
 
     @property
@@ -284,9 +306,7 @@ class Settings(BaseSettings):
         """Check if we're in a testing environment"""
         return bool(os.getenv("PYTEST_CURRENT_TEST") or os.getenv("CI") or os.getenv("TESTING"))
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
 
 # Global settings instance
