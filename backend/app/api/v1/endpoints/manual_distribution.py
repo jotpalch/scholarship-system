@@ -154,6 +154,39 @@ async def get_quota_status(
     }
 
 
+@router.get("/state")
+async def get_distribution_state(
+    scholarship_type_id: int = Query(...),
+    academic_year: int = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_admin_user),
+):
+    """Return the full state needed by the manual distribution panel UI.
+
+    Aggregates three views in one round trip:
+      * ``renewal_allocations`` — approved renewals grouped by
+        ``(sub_type, renewal_year)``, each marked ``has_challenge`` if a
+        downstream challenge targets it.
+      * ``available_quotas`` — per ``(sub_type, allocation_year)``: total /
+        used / remaining where ``used`` comes from approved renewals.
+      * ``candidates`` — non-renewal applicants in ranking order, with
+        ``is_challenge`` and a ``challenged_renewal`` block when present.
+
+    See ``ManualDistributionService.compute_distribution_state`` for details.
+    """
+    service = ManualDistributionService(db)
+    try:
+        state = await service.compute_distribution_state(scholarship_type_id, academic_year)
+    except ValueError as e:
+        # _get_active_config raises ValueError when no active config exists.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    return {
+        "success": True,
+        "message": "OK",
+        "data": state,
+    }
+
+
 @router.get("/auto-allocate-preview")
 async def auto_allocate_preview(
     scholarship_type_id: int = Query(...),
@@ -178,6 +211,33 @@ async def auto_allocate_preview(
     except Exception as e:
         logger.error("Error generating auto-allocation preview: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to generate auto-allocation preview") from e
+
+
+@router.post("/preview-distribution")
+async def preview_distribution(
+    request: AllocateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_admin_user),
+):
+    """Dry-run: compute the release_chain for the proposed allocations.
+
+    For each proposed allocation whose application is a challenge, returns
+    the renewal that would be cancelled and the next pure-new waitlist
+    candidate who would inherit the freed slot. Nothing is persisted.
+
+    Used by the admin Manual Distribution panel to surface release-chain
+    impact before commit (spec Section 14.2).
+    """
+    service = ManualDistributionService(db)
+    try:
+        preview = await service.preview_release_chain([a.model_dump() for a in request.allocations])
+        return {
+            "success": True,
+            "message": "Preview computed",
+            "data": preview,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post("/allocate")

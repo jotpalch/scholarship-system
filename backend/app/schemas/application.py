@@ -311,11 +311,25 @@ class ApplicationResponse(BaseModel):
     amount: Optional[Decimal] = None  # Scholarship amount
     currency: Optional[str] = "TWD"  # Scholarship currency
     scholarship_subtype_list: Optional[List[str]] = []
+    sub_scholarship_type: Optional[str] = Field(
+        None,
+        description="本申請的代表性 sub_type（單一字串；若為續領則承襲自前一申請）",
+    )
     sub_type_preferences: Optional[List[str]] = Field(None, description="Ordered sub-type preference list")
     status: str
     status_name: Optional[str]
     review_stage: Optional[str] = None  # 審核階段（用於前端進度顯示）
     is_renewal: bool = Field(False, description="是否為續領申請")
+    renewal_year: Optional[int] = Field(None, description="續領年份 (民國年，如 113)；批次匯入指定，或承接自前一申請")
+    previous_application_id: Optional[int] = Field(None, description="承接的前一份核可申請 ID（續領申請填）")
+    challenges_application_id: Optional[int] = Field(
+        None,
+        description="挑戰的目標續領申請 ID（挑戰申請填）— 一旦挑戰核可，被挑戰之續領自動取消",
+    )
+    cancelled_due_to_application_id: Optional[int] = Field(
+        None,
+        description="因哪份挑戰申請而被取消（被取代之續領申請填）",
+    )
     academic_year: int
     semester: Optional[str] = None
     student_data: Dict[str, Any]
@@ -440,9 +454,23 @@ class ApplicationStatusUpdateResponse(BaseModel):
     amount: Optional[Decimal] = None
     currency: Optional[str] = "TWD"
     scholarship_subtype_list: Optional[List[str]] = []
+    sub_scholarship_type: Optional[str] = Field(
+        None,
+        description="本申請的代表性 sub_type（單一字串；若為續領則承襲自前一申請）",
+    )
     status: str
     status_name: Optional[str]
     is_renewal: bool = Field(False, description="是否為續領申請")
+    renewal_year: Optional[int] = Field(None, description="續領年份 (民國年，如 113)；批次匯入指定，或承接自前一申請")
+    previous_application_id: Optional[int] = Field(None, description="承接的前一份核可申請 ID（續領申請填）")
+    challenges_application_id: Optional[int] = Field(
+        None,
+        description="挑戰的目標續領申請 ID（挑戰申請填）— 一旦挑戰核可，被挑戰之續領自動取消",
+    )
+    cancelled_due_to_application_id: Optional[int] = Field(
+        None,
+        description="因哪份挑戰申請而被取消（被取代之續領申請填）",
+    )
     academic_year: int
     semester: Optional[str] = None
     student_data: Dict[str, Any]
@@ -528,11 +556,25 @@ class ApplicationListResponse(BaseModel):
     scholarship_name: Optional[str] = None  # Full scholarship configuration name
     amount: Optional[Decimal] = None  # Scholarship amount
     currency: Optional[str] = "TWD"  # Scholarship currency
-    scholarship_subtype_list: Optional[List[str]] = []  # 獎學金子類型列表
+    scholarship_subtype_list: Optional[List[str]] = []
+    sub_scholarship_type: Optional[str] = Field(
+        None,
+        description="本申請的代表性 sub_type（單一字串；若為續領則承襲自前一申請）",
+    )  # 獎學金子類型列表
     status: str
     status_name: Optional[str]
     review_stage: Optional[str] = None  # 審核階段（用於前端進度顯示）
     is_renewal: bool = Field(False, description="是否為續領申請")
+    renewal_year: Optional[int] = Field(None, description="續領年份 (民國年，如 113)；批次匯入指定，或承接自前一申請")
+    previous_application_id: Optional[int] = Field(None, description="承接的前一份核可申請 ID（續領申請填）")
+    challenges_application_id: Optional[int] = Field(
+        None,
+        description="挑戰的目標續領申請 ID（挑戰申請填）— 一旦挑戰核可，被挑戰之續領自動取消",
+    )
+    cancelled_due_to_application_id: Optional[int] = Field(
+        None,
+        description="因哪份挑戰申請而被取消（被取代之續領申請填）",
+    )
     academic_year: int
     semester: Optional[str] = None
     student_data: Dict[str, Any]
@@ -655,6 +697,18 @@ class BulkApproveRequest(BaseModel):
     application_ids: List[int] = Field(..., min_length=1, description="Application IDs to approve")
     comments: Optional[str] = Field(None, description="Optional approval notes")
     send_notifications: bool = Field(True, description="Whether to notify applicants")
+
+
+class RevokeRequest(BaseModel):
+    """Request body for revoking a scholarship allocation."""
+
+    reason: str = Field(..., min_length=1, max_length=500, description="Reason for revocation")
+
+
+class SuspendRequest(BaseModel):
+    """Request body for suspending a scholarship allocation."""
+
+    reason: str = Field(..., min_length=1, max_length=500, description="Reason for suspension")
 
 
 class HistoricalApplicationResponse(BaseModel):

@@ -839,7 +839,15 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Application Status
+         * @description Update application status (staff only)
+         *
+         *     This endpoint updates an application's status and automatically triggers redistribution
+         *     if the status changes to 'approved' or 'rejected'. The response includes information
+         *     about any auto-redistribution that was performed.
+         */
+        patch: operations["update_application_status_api_v1_applications__id__status_patch"];
         trace?: never;
     };
     "/api/v1/applications/{id}/review": {
@@ -3336,6 +3344,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scholarship-configurations/configurations/{id}/supplementary-import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Toggle Configuration Supplementary Import
+         * @description Admin toggle: open or close supplementary import for a scholarship configuration.
+         *
+         *     Applies to all colleges' rankings under this (scholarship_type, academic_year, semester).
+         */
+        patch: operations["toggle_configuration_supplementary_import_api_v1_scholarship_configurations_configurations__id__supplementary_import_patch"];
+        trace?: never;
+    };
     "/api/v1/scholarship-configurations/configurations/{id}/duplicate": {
         parameters: {
             query?: never;
@@ -4550,6 +4580,30 @@ export interface paths {
         get: operations["export_ranking_excel_api_v1_college_review_rankings__ranking_id__export_excel_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/college-review/rankings/{ranking_id}/supplementary-import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Supplementary Import
+         * @description College upload: import new students via 學生資料彙整表 Excel after distribution.
+         *
+         *     The supplementary-import flag is read from the matching ScholarshipConfiguration
+         *     (one flag per scholarship_type/academic_year/semester) — admin toggles it from
+         *     系統管理 → 獎學金配置.
+         */
+        post: operations["supplementary_import_api_v1_college_review_rankings__ranking_id__supplementary_import_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6279,6 +6333,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payment-rosters/{roster_id}/revoked-suspended": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Revoked Suspended
+         * @description List students still embedded in this roster whose allocation was
+         *     later revoked or suspended.
+         */
+        get: operations["get_revoked_suspended_api_v1_payment_rosters__roster_id__revoked_suspended_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payment-rosters/{roster_id}/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Locked Roster Item
+         * @description Hard-delete a single item from a LOCKED roster. Roster stays LOCKED;
+         *     excel_stale is set to True; audit log written.
+         */
+        delete: operations["remove_locked_roster_item_api_v1_payment_rosters__roster_id__items__item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/roster-schedules": {
         parameters: {
             query?: never;
@@ -6670,6 +6766,180 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/renewals/eligible": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Eligible Renewals
+         * @description Return the user's prior-year approved applications that may be renewed.
+         *
+         *     "May be renewed" means the current-year `ScholarshipConfiguration` for the
+         *     same scholarship_type has its `renewal_application_*` window open.
+         */
+        get: operations["list_eligible_renewals_api_v1_renewals_eligible_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renewals/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Renewal Application
+         * @description Create a renewal application from a prior approved application.
+         *
+         *     Validations:
+         *       1. Previous application exists.
+         *       2. It belongs to the current user.
+         *       3. Its status is `approved`.
+         *       4. The current-year ScholarshipConfiguration has an active renewal window.
+         *       5. No existing renewal application for the same (user, type, year, semester).
+         */
+        post: operations["create_renewal_application_api_v1_renewals__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renewals/challenge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Challenge Application
+         * @description Create a challenge application from an approved renewal.
+         *
+         *     Validations:
+         *       1. Renewal application exists.
+         *       2. It belongs to the current user.
+         *       3. It is in fact a renewal (`is_renewal=True`).
+         *       4. Its status is `approved`.
+         *       5. `target_sub_type` differs from renewal's `sub_scholarship_type`.
+         *       6. The renewal-year ScholarshipConfiguration has an active general
+         *          application window.
+         *       7. `target_sub_type` exists in `ScholarshipConfiguration.quotas`.
+         *       8. No existing challenge application for the same renewal.
+         */
+        post: operations["create_challenge_application_api_v1_renewals_challenge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renewals/{scholarship_type_id}/auto-distribute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trigger Renewal Auto Distribution
+         * @description Admin-triggered: auto-approve renewal applications past their review stage.
+         *
+         *     Renewals skip the college_ranking phase by design — once they have cleared
+         *     the required reviews (professor +/- college, per `ScholarshipConfiguration`),
+         *     this endpoint flips them from `under_review` to `approved` with
+         *     `review_stage = quota_distributed`.
+         *
+         *     Args:
+         *         scholarship_type_id: Path — scholarship type to process.
+         *         academic_year:        Query — ROC academic year (e.g. 114).
+         *
+         *     Returns:
+         *         ApiResponse with data = {approved_count, approved_ids}.
+         */
+        post: operations["trigger_renewal_auto_distribution_api_v1_renewals__scholarship_type_id__auto_distribute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renewals/distribution-result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Renewal Distribution Result
+         * @description Return renewal distribution grouped by (sub_type, renewal_year).
+         *
+         *     Admin-only. For the given `(scholarship_type_id, academic_year)`:
+         *       - Approved renewals are bucketed into `groups` keyed by
+         *         `(sub_scholarship_type, renewal_year)`. Each application carries
+         *         a `has_challenge` flag indicating whether a downstream challenge
+         *         application (Application_C, `is_renewal=False` with
+         *         `challenges_application_id` set) points at it.
+         *       - Rejected renewals are returned in a flat `rejected` list.
+         *       - A `summary` block totals approved + rejected counts.
+         *
+         *     Other statuses (draft, under_review, etc.) are intentionally ignored;
+         *     this endpoint reports a *finalised* distribution view.
+         */
+        get: operations["get_renewal_distribution_result_api_v1_renewals_distribution_result_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renewals/audit/renewal-violations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit Renewal Violations
+         * @description Admin audit: list approved challenges whose renewal isn't cancelled_by_challenge.
+         *
+         *     Implements the spec §12 invariant check. Empty `data` means the system
+         *     is consistent. A non-empty list points at data drift that needs manual
+         *     investigation — typically a renewal that wasn't transitioned during
+         *     `execute_general_distribution`.
+         *
+         *     Returns:
+         *         ApiResponse with `data` = list of
+         *         ``{challenge_id, renewal_id, actual_renewal_status}`` dicts.
+         */
+        get: operations["audit_renewal_violations_api_v1_renewals_audit_renewal_violations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/manual-distribution/available-combinations": {
         parameters: {
             query?: never;
@@ -6730,6 +7000,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/manual-distribution/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Distribution State
+         * @description Return the full state needed by the manual distribution panel UI.
+         *
+         *     Aggregates three views in one round trip:
+         *       * ``renewal_allocations`` — approved renewals grouped by
+         *         ``(sub_type, renewal_year)``, each marked ``has_challenge`` if a
+         *         downstream challenge targets it.
+         *       * ``available_quotas`` — per ``(sub_type, allocation_year)``: total /
+         *         used / remaining where ``used`` comes from approved renewals.
+         *       * ``candidates`` — non-renewal applicants in ranking order, with
+         *         ``is_challenge`` and a ``challenged_renewal`` block when present.
+         *
+         *     See ``ManualDistributionService.compute_distribution_state`` for details.
+         */
+        get: operations["get_distribution_state_api_v1_manual_distribution_state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/manual-distribution/auto-allocate-preview": {
         parameters: {
             query?: never;
@@ -6744,6 +7045,33 @@ export interface paths {
         get: operations["auto_allocate_preview_api_v1_manual_distribution_auto_allocate_preview_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/manual-distribution/preview-distribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Distribution
+         * @description Dry-run: compute the release_chain for the proposed allocations.
+         *
+         *     For each proposed allocation whose application is a challenge, returns
+         *     the renewal that would be cancelled and the next pure-new waitlist
+         *     candidate who would inherit the freed slot. Nothing is persisted.
+         *
+         *     Used by the admin Manual Distribution panel to surface release-chain
+         *     impact before commit (spec Section 14.2).
+         */
+        post: operations["preview_distribution_api_v1_manual_distribution_preview_distribution_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7470,6 +7798,11 @@ export interface components {
              * @default []
              */
             scholarship_subtype_list: string[] | null;
+            /**
+             * Sub Scholarship Type
+             * @description 本申請的代表性 sub_type（單一字串；若為續領則承襲自前一申請）
+             */
+            sub_scholarship_type?: string | null;
             /** Status */
             status: string;
             /** Status Name */
@@ -7480,6 +7813,26 @@ export interface components {
              * @default false
              */
             is_renewal: boolean;
+            /**
+             * Renewal Year
+             * @description 續領年份 (民國年，如 113)；批次匯入指定，或承接自前一申請
+             */
+            renewal_year?: number | null;
+            /**
+             * Previous Application Id
+             * @description 承接的前一份核可申請 ID（續領申請填）
+             */
+            previous_application_id?: number | null;
+            /**
+             * Challenges Application Id
+             * @description 挑戰的目標續領申請 ID（挑戰申請填）— 一旦挑戰核可，被挑戰之續領自動取消
+             */
+            challenges_application_id?: number | null;
+            /**
+             * Cancelled Due To Application Id
+             * @description 因哪份挑戰申請而被取消（被取代之續領申請填）
+             */
+            cancelled_due_to_application_id?: number | null;
             /** Academic Year */
             academic_year: number;
             /** Semester */
@@ -7839,6 +8192,14 @@ export interface components {
             /** Sub Type */
             sub_type: string;
         };
+        /** Body_supplementary_import_api_v1_college_review_rankings__ranking_id__supplementary_import_post */
+        Body_supplementary_import_api_v1_college_review_rankings__ranking_id__supplementary_import_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
         /** Body_update_matrix_quota_api_v1_scholarship_configurations_matrix_quota_put */
         Body_update_matrix_quota_api_v1_scholarship_configurations_matrix_quota_put: {
             /** Sub Type */
@@ -8128,6 +8489,24 @@ export interface components {
              * @description Validation regex
              */
             validation_regex?: string | null;
+        };
+        /**
+         * CreateChallengeRequest
+         * @description Body for POST /api/v1/renewals/challenge — create challenge from an approved renewal.
+         */
+        CreateChallengeRequest: {
+            /** Renewal Application Id */
+            renewal_application_id: number;
+            /** Target Sub Type */
+            target_sub_type: string;
+        };
+        /**
+         * CreateRenewalRequest
+         * @description Body for POST /api/v1/renewals/ — create renewal from a prior approved app.
+         */
+        CreateRenewalRequest: {
+            /** Previous Application Id */
+            previous_application_id: number;
         };
         /** DeleteApplicationRequest */
         DeleteApplicationRequest: {
@@ -8764,6 +9143,14 @@ export interface components {
              * @description Roster code (if roster exists)
              */
             roster_code?: string | null;
+        };
+        /**
+         * RemoveLockedItemRequest
+         * @description Body for DELETE /payment-rosters/{roster_id}/items/{item_id}
+         */
+        RemoveLockedItemRequest: {
+            /** Reason */
+            reason?: string | null;
         };
         /** RestoreRequest */
         RestoreRequest: {
@@ -9664,6 +10051,11 @@ export interface components {
              * @description 指導教授所屬系所
              */
             supervisor_department?: string | null;
+        };
+        /** SupplementaryImportToggle */
+        SupplementaryImportToggle: {
+            /** Allow */
+            allow: boolean;
         };
         /**
          * SystemSettingCreate
@@ -11334,6 +11726,42 @@ export interface operations {
         };
     };
     update_application_status_api_v1_applications__id__status_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Application ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationStatusUpdate"];
+            };
+        };
+        responses: {
+            /** @description Application status updated successfully */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationStatusUpdateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_application_status_api_v1_applications__id__status_patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -15790,6 +16218,41 @@ export interface operations {
             };
         };
     };
+    toggle_configuration_supplementary_import_api_v1_scholarship_configurations_configurations__id__supplementary_import_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SupplementaryImportToggle"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     duplicate_scholarship_configuration_api_v1_scholarship_configurations_configurations__id__duplicate_post: {
         parameters: {
             query?: never;
@@ -17879,6 +18342,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    supplementary_import_api_v1_college_review_rankings__ranking_id__supplementary_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ranking_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_supplementary_import_api_v1_college_review_rankings__ranking_id__supplementary_import_post"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -20256,6 +20754,73 @@ export interface operations {
             };
         };
     };
+    get_revoked_suspended_api_v1_payment_rosters__roster_id__revoked_suspended_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_locked_roster_item_api_v1_payment_rosters__roster_id__items__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                roster_id: number;
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoveLockedItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_roster_schedules_api_v1_roster_schedules_get: {
         parameters: {
             query?: {
@@ -20960,6 +21525,177 @@ export interface operations {
             };
         };
     };
+    list_eligible_renewals_api_v1_renewals_eligible_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    create_renewal_application_api_v1_renewals__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRenewalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_challenge_application_api_v1_renewals_challenge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateChallengeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trigger_renewal_auto_distribution_api_v1_renewals__scholarship_type_id__auto_distribute_post: {
+        parameters: {
+            query: {
+                academic_year: number;
+            };
+            header?: never;
+            path: {
+                scholarship_type_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_renewal_distribution_result_api_v1_renewals_distribution_result_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    audit_renewal_violations_api_v1_renewals_audit_renewal_violations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     get_admin_available_combinations_api_v1_manual_distribution_available_combinations_get: {
         parameters: {
             query?: never;
@@ -21047,6 +21783,38 @@ export interface operations {
             };
         };
     };
+    get_distribution_state_api_v1_manual_distribution_state_get: {
+        parameters: {
+            query: {
+                scholarship_type_id: number;
+                academic_year: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     auto_allocate_preview_api_v1_manual_distribution_auto_allocate_preview_get: {
         parameters: {
             query: {
@@ -21059,6 +21827,39 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_distribution_api_v1_manual_distribution_preview_distribution_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AllocateRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

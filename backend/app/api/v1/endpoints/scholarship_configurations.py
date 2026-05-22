@@ -6,6 +6,7 @@ Clean, database-driven approach for dynamic scholarship configuration management
 import logging
 from typing import Any, Dict, List, Optional
 
+from pydantic import BaseModel
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_
@@ -751,6 +752,8 @@ async def create_scholarship_configuration(
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="此學年度/學期已存在配置")
 
         # Create new configuration
+        from app.utils.date_utils import parse_date_field
+
         new_config = ScholarshipConfiguration(
             scholarship_type_id=scholarship_type_id,
             academic_year=config_data["academic_year"],
@@ -762,24 +765,24 @@ async def create_scholarship_configuration(
             amount=config_data["amount"],
             currency=config_data.get("currency", "TWD"),
             whitelist_student_ids=config_data.get("whitelist_student_ids", {}),
-            renewal_application_start_date=config_data.get("renewal_application_start_date"),
-            renewal_application_end_date=config_data.get("renewal_application_end_date"),
-            application_start_date=config_data.get("application_start_date"),
-            application_end_date=config_data.get("application_end_date"),
-            renewal_professor_review_start=config_data.get("renewal_professor_review_start"),
-            renewal_professor_review_end=config_data.get("renewal_professor_review_end"),
-            renewal_college_review_start=config_data.get("renewal_college_review_start"),
-            renewal_college_review_end=config_data.get("renewal_college_review_end"),
+            renewal_application_start_date=parse_date_field(config_data.get("renewal_application_start_date")),
+            renewal_application_end_date=parse_date_field(config_data.get("renewal_application_end_date")),
+            application_start_date=parse_date_field(config_data.get("application_start_date")),
+            application_end_date=parse_date_field(config_data.get("application_end_date")),
+            renewal_professor_review_start=parse_date_field(config_data.get("renewal_professor_review_start")),
+            renewal_professor_review_end=parse_date_field(config_data.get("renewal_professor_review_end")),
+            renewal_college_review_start=parse_date_field(config_data.get("renewal_college_review_start")),
+            renewal_college_review_end=parse_date_field(config_data.get("renewal_college_review_end")),
             requires_professor_recommendation=config_data.get("requires_professor_recommendation", False),
-            professor_review_start=config_data.get("professor_review_start"),
-            professor_review_end=config_data.get("professor_review_end"),
+            professor_review_start=parse_date_field(config_data.get("professor_review_start")),
+            professor_review_end=parse_date_field(config_data.get("professor_review_end")),
             requires_college_review=config_data.get("requires_college_review", False),
-            college_review_start=config_data.get("college_review_start"),
-            college_review_end=config_data.get("college_review_end"),
-            review_deadline=config_data.get("review_deadline"),
+            college_review_start=parse_date_field(config_data.get("college_review_start")),
+            college_review_end=parse_date_field(config_data.get("college_review_end")),
+            review_deadline=parse_date_field(config_data.get("review_deadline")),
             is_active=config_data.get("is_active", True),
-            effective_start_date=config_data.get("effective_start_date"),
-            effective_end_date=config_data.get("effective_end_date"),
+            effective_start_date=parse_date_field(config_data.get("effective_start_date")),
+            effective_end_date=parse_date_field(config_data.get("effective_end_date")),
             version=config_data.get("version", "1.0"),
             prior_quota_years=config_data.get("prior_quota_years"),
             created_by=current_user.id,
@@ -890,6 +893,7 @@ async def get_scholarship_configuration(
             "college_review_end": config.college_review_end.isoformat() if config.college_review_end else None,
             "review_deadline": config.review_deadline.isoformat() if config.review_deadline else None,
             "is_active": config.is_active,
+            "allow_supplementary_import": config.allow_supplementary_import,
             "effective_start_date": config.effective_start_date.isoformat() if config.effective_start_date else None,
             "effective_end_date": config.effective_end_date.isoformat() if config.effective_end_date else None,
             "version": config.version,
@@ -986,6 +990,12 @@ async def update_scholarship_configuration(
         if "review_deadline" in config_data:
             config.review_deadline = parse_date_field(config_data["review_deadline"])
 
+        # Supplementary import toggle (admin opens this per-configuration after
+        # distribution has been finalized; flag gates all colleges' rankings
+        # under this configuration).
+        if "allow_supplementary_import" in config_data:
+            config.allow_supplementary_import = bool(config_data["allow_supplementary_import"])
+
         # Update status and effective dates
         if "is_active" in config_data:
             config.is_active = config_data["is_active"]
@@ -1056,6 +1066,46 @@ async def update_scholarship_configuration(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update configuration"
         ) from e
+
+
+class SupplementaryImportToggle(BaseModel):
+    allow: bool
+
+
+@router.patch("/configurations/{id}/supplementary-import")
+async def toggle_configuration_supplementary_import(
+    id: int,
+    body: SupplementaryImportToggle,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin toggle: open or close supplementary import for a scholarship configuration.
+
+    Applies to all colleges' rankings under this (scholarship_type, academic_year, semester).
+    """
+    accessible_scholarship_ids = await get_user_accessible_scholarship_ids(current_user, db)
+
+    stmt = select(ScholarshipConfiguration).where(
+        and_(
+            ScholarshipConfiguration.id == id,
+            ScholarshipConfiguration.scholarship_type_id.in_(accessible_scholarship_ids),
+        )
+    )
+    result = await db.execute(stmt)
+    config = result.scalar_one_or_none()
+
+    if not config:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="配置不存在或您沒有存取權限")
+
+    config.allow_supplementary_import = body.allow
+    config.updated_by = current_user.id
+    await db.commit()
+
+    return ApiResponse(
+        success=True,
+        message=f"Supplementary import {'enabled' if body.allow else 'disabled'}",
+        data={"id": config.id, "allow_supplementary_import": body.allow},
+    )
 
 
 @router.delete("/configurations/{id}")
@@ -1271,6 +1321,7 @@ async def list_scholarship_configurations(
                 "project_numbers": config.project_numbers,
                 "prior_quota_years": config.prior_quota_years,
                 "is_active": config.is_active,
+                "allow_supplementary_import": config.allow_supplementary_import,
                 "renewal_application_start_date": (
                     config.renewal_application_start_date.isoformat() if config.renewal_application_start_date else None
                 ),
