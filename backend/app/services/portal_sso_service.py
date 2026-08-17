@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.core.exceptions import AuthenticationError
 from app.models.user import EmployeeStatus, User, UserRole, UserType
 from app.services.auth_service import AuthService
+from app.services.professor_assignment_service import backfill_professor_assignments
 from app.services.student_service import StudentService
 
 logger = logging.getLogger(__name__)
@@ -317,6 +318,7 @@ class PortalSSOService:
 
             user.raw_data = raw_data
             logger.info(f"Updated existing user {nycu_id}")
+            await self._backfill_professor_assignments(user)
             return user
 
         # Create new user
@@ -344,7 +346,24 @@ class PortalSSOService:
         await self.db.refresh(new_user)
 
         logger.info(f"Created new user from Portal SSO: {nycu_id} ({name}) with role {user_role.value}")
+        await self._backfill_professor_assignments(new_user)
         return new_user
+
+    async def _backfill_professor_assignments(self, user: User) -> None:
+        """Claim applications submitted before this professor's first login.
+
+        `professor_id` is matched from the student's advisor NYCU ID at
+        submission time, which cannot resolve while the professor has no
+        `users` row. Login is the moment that row appears, so retry here.
+        Never fail a login over it.
+        """
+        if user.role != UserRole.professor:
+            return
+
+        try:
+            await backfill_professor_assignments(self.db, user)
+        except Exception as e:  # pragma: no cover - defensive
+            logger.error(f"Failed to backfill professor assignments for {user.nycu_id}: {e}")
 
     def _map_user_type_to_role(self, user_type: str) -> UserRole:
         """Map Portal userType to system UserRole"""

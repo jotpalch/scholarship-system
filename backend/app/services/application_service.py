@@ -36,6 +36,7 @@ from app.services.eligibility_service import EligibilityService
 from app.services.email_automation_service import email_automation_service
 from app.services.email_service import EmailService
 from app.services.minio_service import minio_service
+from app.services.professor_assignment_service import assign_professor_from_profile
 from app.services.student_service import StudentService
 
 func: Any = sa_func
@@ -1268,22 +1269,10 @@ class ApplicationService:
         user_profile_result = await self.db.execute(user_profile_stmt)
         advisor_profile = user_profile_result.scalar_one_or_none()
 
-        # 自動分配指導教授：根據 UserProfile 的 advisor_nycu_id 查找教授帳號
-        if not application.professor_id and advisor_profile:
-
-            if advisor_profile and advisor_profile.advisor_nycu_id:
-                professor_stmt = select(User).where(
-                    User.nycu_id == advisor_profile.advisor_nycu_id,
-                    User.role == UserRole.professor,
-                )
-                professor_result = await self.db.execute(professor_stmt)
-                professor = professor_result.scalar_one_or_none()
-                if professor:
-                    application.professor_id = professor.id
-                    logger.info(
-                        f"Auto-assigned professor {professor.id} ({professor.name}) "
-                        f"to application {application.app_id}"
-                    )
+        # 自動分配指導教授：根據 UserProfile 的 advisor_nycu_id 查找教授帳號。
+        # 教授尚未登入過（無 users 資料列）時會留 professor_id=NULL，改由教授
+        # 首次登入時的 backfill 補上。
+        await assign_professor_from_profile(self.db, application, advisor_profile)
 
         await self.db.commit()
         await self._invalidate_app_caches()
